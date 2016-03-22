@@ -1,0 +1,181 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch08s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>8.2.&#160;後備緩存-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch08.html" title="第&#160;8&#160;章&#160;分配內存">
+<link rel="prev" href="ch08.html" title="第&#160;8&#160;章&#160;分配內存">
+<link rel="next" href="ch08s03.html" title="8.3.&#160;get_free_page 和其友">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">8.2.&#160;後備緩存</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch08.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;8&#160;章&#160;分配內存</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch08s03.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="LookasideCaches.sect"></a>8.2.&#160;後備緩存</h2></div></div></div>
+<p>一個設備驅動常常以反覆分配許多相同大小的對象而結束. 如果內核已經維護了一套相同大小對象的內存池, 為什麼不增加一些特殊的內存池給這些高容量的對象? 實際上, 內核確實實現了一個設施來創建這類內存池, 它常常被稱為一個後備緩存. 設備驅動常常不展示這類的內存行為, 它們證明使用一個後備緩存是對的, 但是, 有例外; 在 Linux 2.6 中 USB 和 SCSI 驅動使用緩存.</p>
+<p>Linux 內核的緩存管理者有時稱為" slab 分配器". 因此, 它的功能和類型在 &lt;linux/slab.h&gt; 中聲明. slab 分配器實現有一個 kmem_cache_t 類型的緩存; 使用一個對 kmem_cache_create 的調用來創建它們:</p>
+<pre class="programlisting">
+kmem_cache_t *kmem_cache_create(const char *name, size_t size,
+ size_t offset,
+ unsigned long flags,
+ void (*constructor)(void *, kmem_cache_t *,
+ unsigned long flags), void (*destructor)(void *, kmem_cache_t *, unsigned long flags)); 
+</pre>
+<p>這個函數創建一個新的可以駐留任意數目全部同樣大小的內存區的緩存對像, 大小由 size 參數指定. name 參數和這個緩存關聯並且作為一個在追蹤問題時有用的管理信息; 通常, 它被設置為被緩存的結構類型的名子. 這個緩存保留一個指向 name 的指針, 而不是拷貝它, 因此驅動應當傳遞一個指向在靜態存儲中的名子的指針(常常這個名子只是一個文字字串). 這個名子不能包含空格.</p>
+<p>offset 是頁內的第一個對象的偏移; 它可被用來確保一個對被分配的對象的特殊對齊, 但是你最可能會使用 0 來請求缺省值. flags 控制如何進行分配並且是下列標誌的一個位掩碼:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>SLAB_NO_REAP </span></span></dt>
+<dd><p>設置這個標誌保護緩存在系統查找內存時被削減. 設置這個標誌通常是個壞主意; 重要的是避免不必要地限制內存分配器的行動自由.</p></dd>
+<dt><span class="term"><span>SLAB_HWCACHE_ALIGN </span></span></dt>
+<dd><p>這個標誌需要每個數據對像被對齊到一個緩存行; 實際對齊依賴主機平台的緩存分佈. 這個選項可以是一個好的選擇, 如果在 SMP 機器上你的緩存包含頻繁存取的項. 但是, 用來獲得緩存行對齊的填充可以浪費可觀的內存量.</p></dd>
+<dt><span class="term"><span>SLAB_CACHE_DMA </span></span></dt>
+<dd><p>這個標誌要求每個數據對像在 DMA 內存區分配.</p></dd>
+</dl></div>
+<p>還有一套標誌用來調試緩存分配; 詳情見 mm/slab.c. 但是, 常常地, 在用來開發的系統中, 這些標誌通過一個內核配置選項被全局性地設置</p>
+<p>函數的 constructor 和 destructor 參數是可選函數( 但是可能沒有 destructor, 如果沒有 constructor ); 前者可以用來初始化新分配的對象, 後者可以用來"清理"對像在它們的內存被作為一個整體釋放回給系統之前.</p>
+<p>構造函數和析構函數會有用, 但是有幾個限制你必須記住. 一個構造函數在分配一系列對象的內存時被調用; 因為內存可能持有幾個對像, 構造函數可能被多次調用. 你不能假設構造函數作為分配一個對象的一個立即的結果而被調用. 同樣地, 析構函數可能在以後某個未知的時間中調用, 不是立刻在一個對像被釋放後. 析構函數和構造函數可能或不可能被允許睡眠, 根據它們是否被傳遞 SLAB_CTOR_ATOMIC 標誌(這裡 CTOR 是 constructor 的縮寫).</p>
+<p>為方便, 一個程序員可以使用相同的函數給析構函數和構造函數; slab 分配器常常傳遞 SLAB_CTOR_CONSTRUCTOR 標誌當被調用者是一個構造函數.</p>
+<p>一旦一個對象的緩存被創建, 你可以通過調用 kmem_cache_alloc 從它分配對像.</p>
+<pre class="programlisting">
+void *kmem_cache_alloc(kmem_cache_t *cache, int flags);
+</pre>
+<p>這裡, cache 參數是你之前已經創建的緩存; flags 是你會傳遞給 kmalloc 的相同, 並且被參考如果 kmem_cache_alloc 需要出去並分配更多內存.</p>
+<p>為釋放一個對像, 使用 kmem_cache_free:</p>
+<pre class="programlisting">
+ void kmem_cache_free(kmem_cache_t *cache, const void *obj); 
+</pre>
+<p>當驅動代碼用完這個緩存, 典型地當模塊被卸載, 它應當如下釋放它的緩存:</p>
+<pre class="programlisting">
+ int kmem_cache_destroy(kmem_cache_t *cache); 
+</pre>
+<p>這個銷毀操作只在從這個緩存中分配的所有的對象都已返回給它時才成功. 因此, 一個模塊應當檢查從 kmem_cache_destroy 的返回值; 一個失敗指示某類在模塊中的內存洩漏(因為某些對像已被丟失.)</p>
+<p>使用後備緩存的一方面益處是內核維護緩衝使用的統計. 這些統計可從 /proc/slabinfo 獲得.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AscullBasedontheSlabCachesscullc.sect"></a>8.2.1.&#160;一個基於 Slab 緩存的 scull: scullc</h3></div></div></div>
+<p>是時候給個例子了. scullc 是一個簡化的 scull 模塊的版本, 它只實現空設備 -- 永久的內存區. 不像 scull, 它使用 kmalloc, scullc 使用內存緩存. 量子的大小可在編譯時和加載時修改, 但是不是在運行時 -- 這可能需要創建一個新內存區, 並且我們不想處理這些不必要的細節.</p>
+<p>scullc 使用一個完整的例子, 可用來試驗 slab 分配器. 它區別於 scull 只在幾行代碼. 首先, 我們必須聲明我們自己的 slab 緩存:</p>
+<pre class="programlisting">
+/* declare one cache pointer: use it for all devices */
+kmem_cache_t *scullc_cache;
+</pre>
+<p>slab 緩存的創建以這樣的方式處理( 在模塊加載時 ):</p>
+<pre class="programlisting">
+/* scullc_init: create a cache for our quanta */
+scullc_cache = kmem_cache_create("scullc", scullc_quantum,
+                                 0, SLAB_HWCACHE_ALIGN, NULL, NULL); /* no ctor/dtor */
+
+if (!scullc_cache)
+{
+        scullc_cleanup();
+        return -ENOMEM;
+
+}
+</pre>
+<p>這是它如何分配內存量子:</p>
+<pre class="programlisting">
+/* Allocate a quantum using the memory cache */
+if (!dptr-&gt;data[s_pos])
+{
+        dptr-&gt;data[s_pos] = kmem_cache_alloc(scullc_cache, GFP_KERNEL);
+        if (!dptr-&gt;data[s_pos])
+
+                goto nomem;
+        memset(dptr-&gt;data[s_pos], 0, scullc_quantum);
+}
+</pre>
+<p>還有這些代碼行釋放內存:</p>
+<pre class="programlisting">
+for (i = 0; i &lt; qset; i++)
+        if (dptr-&gt;data[i])
+                kmem_cache_free(scullc_cache, dptr-&gt;data[i]);
+</pre>
+<p>最後, 在模塊卸載時, 我們不得不返回緩存給系統:</p>
+<pre class="programlisting">
+/* scullc_cleanup: release the cache of our quanta */
+if (scullc_cache)
+        kmem_cache_destroy(scullc_cache);
+</pre>
+<p>從 scull 到 scullc 的主要不同是稍稍的速度提升以及更好的內存使用. 因為量子從一個恰好是合適大小的內存片的池中分配, 它們在內存中的排列是盡可能的密集, 與 scull 量子的相反, 它帶來一個不可預測的內存碎片.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="MemoryPools.sect"></a>8.2.2.&#160;內存池</h3></div></div></div>
+<p>在內核中有不少地方內存分配不允許失敗. 作為一個在這些情況下確保分配的方式, 內核開發者創建了一個已知為內存池(或者是 "mempool" )的抽像. 一個內存池真實地只是一類後備緩存, 它盡力一直保持一個空閒內存列表給緊急時使用.</p>
+<p>一個內存池有一個類型 mempool_t ( 在 &lt;linux/mempool.h&gt; 中定義); 你可以使用 mempool_create 創建一個:</p>
+<pre class="programlisting">
+mempool_t *mempool_create(int min_nr,
+ mempool_alloc_t *alloc_fn,
+ mempool_free_t *free_fn,
+ void *pool_data); 
+</pre>
+<p>min_nr 參數是內存池應當一直保留的最小數量的分配的對象. 實際的分配和釋放對像由 alloc_fn 和 free_fn 處理, 它們有這些原型:</p>
+<pre class="programlisting">
+typedef void *(mempool_alloc_t)(int gfp_mask, void *pool_data);
+typedef void (mempool_free_t)(void *element, void *pool_data);
+</pre>
+<p>給 mempool_create 最後的參數 ( pool_data ) 被傳遞給 alloc_fn 和 free_fn.</p>
+<p>如果需要, 你可編寫特殊用途的函數來處理 mempool 的內存分配. 常常, 但是, 你只需要使內核 slab 分配器為你處理這個任務. 有 2 個函數 ( mempool_alloc_slab 和 mempool_free_slab) 來進行在內存池分配原型和 kmem_cache_alloc 和 kmem_cache_free 之間的感應淬火. 因此, 設置內存池的代碼常常看來如此:</p>
+<pre class="programlisting">
+cache = kmem_cache_create(. . .); 
+pool = mempool_create(MY_POOL_MINIMUM,mempool_alloc_slab, mempool_free_slab, cache); 
+</pre>
+<p>一旦已創建了內存池, 可以分配和釋放對像,使用:</p>
+<pre class="programlisting">
+void *mempool_alloc(mempool_t *pool, int gfp_mask);
+void mempool_free(void *element, mempool_t *pool);
+</pre>
+<p>當內存池創建了, 分配函數將被調用足夠的次數來創建一個預先分配的對象池. 因此, 對 mempool_alloc 的調用試圖從分配函數請求額外的對象; 如果那個分配失敗, 一個預先分配的對象(如果有剩下的)被返回. 當一個對像被用 mempool_free 釋放, 它保留在池中, 如果對齊預分配的對象數目小於最小量; 否則, 它將被返回給系統.</p>
+<p>一個 mempool 可被重新定大小, 使用:</p>
+<pre class="programlisting">
+int mempool_resize(mempool_t *pool, int new_min_nr, int gfp_mask);
+</pre>
+<p>這個調用, 如果成功, 調整內存池的大小至少有 new_min_nr 個對象. 如果你不再需要一個內存池, 返回給系統使用:</p>
+<pre class="programlisting">
+void mempool_destroy(mempool_t *pool); 
+</pre>
+<p>你編寫返回所有的分配的對象, 在銷毀 mempool 之前, 否則會產生一個內核 oops.</p>
+<p>如果你考慮在你的驅動中使用一個 mempool, 請記住一件事: mempools 分配一塊內存在一個鏈表中, 對任何真實的使用是空閒和無用的. 容易使用 mempools 消耗大量的內存. 在幾乎每個情況下, 首選的可選項是不使用 mempool 並且代替以簡單處理分配失敗的可能性. 如果你的驅動有任何方法以不危害到系統完整性的方式來響應一個分配失敗, 就這樣做. 驅動代碼中的 mempools 的使用應當少.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch08.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch08.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch08s03.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">第&#160;8&#160;章&#160;分配內存&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;8.3.&#160;get_free_page 和其友</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch08s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

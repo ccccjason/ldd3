@@ -1,0 +1,148 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch14s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>14.2.&#160;低級 sysfs 操作-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch14.html" title="第&#160;14&#160;章&#160;Linux 設備模型">
+<link rel="prev" href="ch14.html" title="第&#160;14&#160;章&#160;Linux 設備模型">
+<link rel="next" href="ch14s03.html" title="14.3.&#160;熱插拔事件產生">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">14.2.&#160;低級 sysfs 操作</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch14.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;14&#160;章&#160;Linux 設備模型</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch14s03.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="LowLevelSysfsOperations.sect"></a>14.2.&#160;低級 sysfs 操作</h2></div></div></div>
+<p>kobject 是在 sysfs 虛擬文件系統之後的機制. 對每個在 sysfs 中發現的目錄, 有一個 kobject 潛伏在內核某處. 每個感興趣的 kobject 也輸出一個或多個屬性, 它出現在 kobject 的 sysfs 目錄, 作為包含內核產生的信息的文件. 本節檢查 kobject 和 sysfs 如何在低層交互.</p>
+<p>使用 sysfs 的代碼應當包含 &lt;linux/sysfs.h&gt;.</p>
+<p>使一個 kobject 在 sysfs 出現僅僅是調用 kobject_add 的事情. 我們已經見到這個函數作為添加一個 kobject 到一個 kset 的方式; 在 sysfs 中創建入口也是它的工作的一部分. 有一些事情值得知道, 關於 sysfs 入口如何創建:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>kobjects 的 sysfs 入口一直為目錄, 因此一個對 kobject_add 的調用導致在sysfs 中創建一個目錄. 常常地, 這個目錄包含一個或多個屬性; 我們稍後見到屬性如何指定.</p></li>
+<li><p>分配給 kobject 的名字( 用 kobject_set_name ) 是給 sysfs 目錄使用的名字. 因此, 出現在 sysfs 層次的相同部分的 kobjects 必須有獨特的名字. 分配給 kobjects 的名字也應當是合理的文件名字: 它們不能包含斜線字符, 並且空白的使用強烈不推薦.</p></li>
+<li><p>sysfs 入口位於對應 kobject 的 parent 指針的目錄中. 如果 parent 是 NULL 當 kobject_add 被調用時, 它被設置為嵌在新 kobject 的 kset 中的 kobject; 因此, sysfs 層級常常匹配使用 kset 創建的內部層次. 如果 parent 和 kset 都是 NULL, sysfs 目錄在頂級被創建, 這幾乎當然不是你所要的.</p></li>
+</ul></div>
+<p>使用我們至今所描述的, 我們可以使用一個 kobject 來在 sysfs 中創建一個空目錄. 常常地, 你想做比這更有趣的事情, 因此是時間看屬性的實現.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="DefaultAttributes.sect"></a>14.2.1.&#160;缺省屬性</h3></div></div></div>
+<p>當被創建時, 每個 kobject 被給定一套缺省屬性. 這些屬性通過 kobj_type 結構來指定. 這個結構, 記住, 看來如此:</p>
+<pre class="programlisting">
+struct kobj_type {
+ void (*release)(struct kobject *);
+ struct sysfs_ops *sysfs_ops;
+ struct attribute **default_attrs; 
+}; 
+</pre>
+<p>default_attr 成員列舉了對每個這樣類型的 kobject 被創建的屬性, 並且 sysfs_ops 提供方法來實現這些屬性. 我們從 default_attrs 開始, 它指向一個指向屬性結構的指針數組:</p>
+<pre class="programlisting">
+struct attribute {
+ char *name;
+ struct module *owner;
+ mode_t mode; 
+}; 
+</pre>
+<p>在這個結構中, name 是屬性的名字( 如同它出現在 kobject 的 sysfs 目錄中), owner 是一個指向模塊的指針(如果有一個), 模塊負責這個屬性的實現, 並且 mode 是應用到這個屬性的保護位. mode 常常是 S_IRUGO 對於只讀屬性; 如果這個屬性是可寫的, 你可以扔出 S_IWUSR 來只給 root 寫權限( modes 的宏定義在 &lt;linux/stat.h&gt; 中). default_attrs 列表中的最後一個入口必須用 0 填充.</p>
+<p>default_attr 數組說明這些屬性是什麼, 但是沒有告訴 sysfs 如何真正實現這些屬性. 這個任務落到 kobj_type-&gt;sysfs_ops 成員, 它指向一個結構, 定義為:</p>
+<pre class="programlisting">
+struct sysfs_ops {
+ ssize_t (*show)(struct kobject *kobj, struct attribute *attr, char *buffer);
+ ssize_t (*store)(struct kobject *kobj, struct attribute *attr, const char *buffer, size_t size);
+};
+</pre>
+<p>無論何時一個屬性從用戶空間讀取, show 方法被用一個指向 kobject 的指針和適當的屬性結構來調用. 這個方法應當將給定屬性值編碼進緩衝, 要確定沒有覆蓋它( 它是 PAGE_SIZE 字節), 並且返回實際的被返回數據的長度. sysfs 的慣例表明每個屬性應當包含一個單個的, 人可讀的值; 如果你有許多消息返回, 你可要考慮將它分為多個屬性.</p>
+<p>同樣的 show 方法用在所有的和給定 kobject 關聯的屬性. 傳遞到函數的 attr 指針可用來決定需要哪個屬性. 一些 show 方法包含對屬性名字的一系列測試. 其他的實現將屬性結構嵌入另一個結構, 來包含需要返回屬性值的信息; 在這種情況下, container_of 可能用在 show 方法中來獲得一個指向嵌入結構的指針.</p>
+<p>store 方法類似; 它應當將存在緩衝的數據編碼( size 包含數據的長度, 這不能超過 PAGE_SIZE ), 存儲和以任何有意義的的方式響應新數據, 並且返回實際編碼的字節數. store 方法只在屬性的許可允許寫才被調用. 當編寫一個 store 方法時, 不要忘記你在接收來自用戶空間的任意信息; 你應當在採取對應動作之前非常小心地驗證它. 如果到數據不匹配期望, 返回一個負的錯誤值, 而不是可能地做一些不想要的和無法恢復的事情. 如果你的設備輸出一個自銷毀的屬性, 你應當要求一個特定的字符串寫到那裡來引發這個功能; 一個偶然的, 隨機寫應當只產生一個錯誤.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="NondefaultAttributes.sect"></a>14.2.2.&#160;非缺省屬性</h3></div></div></div>
+<p>在許多情況中, kobject 類型的 default_attrs 成員描述所有的 kobject 會擁有的屬性. 但是那不是一個設計中的限制; 屬性隨意可以添加到和刪除自 kojects. 如果你想添加一個新屬性到一個 kobject 的 sysfs 目錄, 簡單地填充一個屬性結構並且傳遞它到:</p>
+<pre class="programlisting">
+int sysfs_create_file(struct kobject *kobj, struct attribute *attr);
+</pre>
+<p>如果所有都進行順利, 文件被使用在屬性結構中給定的名字創建, 並且返回值是 0; 否則, 返回通常的負錯誤碼.</p>
+<p>注意, 相同的 show() 和 store() 函數被調用來實現對新屬性的操作. 在你添加一個新的, 非缺省屬性到 kobject, 你應當任何必要的步驟來確保這些函數知道如何實現這個屬性.</p>
+<p>為去除一個屬性, 調用:</p>
+<pre class="programlisting">
+int sysfs_remove_file(struct kobject *kobj, struct attribute *attr); 
+</pre>
+<p>在調用後, 這個屬性不再出現在 kobject 的 sysfs 入口. 要小心, 但是, 一個用戶空間進程可能有一個打開的那個屬性的文件描述符, 並且在這個屬性已經被去除後 show 和 store 調用仍然可能.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="BinaryAttributes.sect"></a>14.2.3.&#160;二進制屬性</h3></div></div></div>
+<p>sysfs 慣例調用所有屬性來包含一個單個的人可讀文本格式的值. 就是說, 只是偶然地很少需要來創建能夠處理大量二進制數據的屬性. 這個需要真正地只出現在必須傳遞數據, 不可動地, 在用戶空間和設備. 例如, 上載固件到設備需要這個特性. 當這樣一個設備在系統中遇到, 一個用戶程序可以被啟動( 通過熱插拔機制); 這個程序接著傳遞固件代碼到內核通過一個二進制 sysfs 屬性, 如同在"內核固件接口"一節中所示.</p>
+<p>二進制屬性使用一個 bin+attribute 結構來描述:</p>
+<pre class="programlisting">
+struct bin_attribute {
+struct attribute attr;
+size_t size;
+ssize_t (*read)(struct kobject *kobj, char *buffer, loff_t pos, size_t size);
+ssize_t (*write)(struct kobject *kobj, char *buffer, loff_t pos, size_t size);
+};
+</pre>
+<p>這裡, attr 是一個屬性結構, 給出名字, 擁有者, 和這個二進制屬性的權限, 並且 size 是這個二進制屬性的最大大小(或者 0 , 如果沒有最大值). read 和 write 方法類似於正常的字符驅動對應物; 它們一次加載可被多次調用, 每次調用最大一頁數據. 對於 sysfs 沒有辦法來指示最後一個寫操作, 因此實現二進制屬性的代碼必須能夠以其他方式決定數據的結束.</p>
+<p>二進制屬性必須明確創建; 它們不能建立為缺省屬性. 為創建一個二進制屬性, 調用:</p>
+<pre class="programlisting">
+int sysfs_create_bin_file(struct kobject *kobj, struct bin_attribute *attr);
+</pre>
+<p>去除二進制屬性可用:</p>
+<pre class="programlisting">
+int sysfs_remove_bin_file(struct kobject *kobj, struct bin_attribute *attr);
+</pre>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="SymbolicLinks.sect"></a>14.2.4.&#160;符號連接</h3></div></div></div>
+<p>sysfs 文件系統有通常的樹結構, 反映它代表的 kobjects 的層次組織. 但是內核中對像間的關係常常比那個更加複雜. 例如, 一個 sysfs 子樹 (/sys/devices )代表所有的系統已知的設備, 而其他的子樹( 在 /sys/bus 之下 )表示設備驅動. 這些樹, 但是, 不代表驅動和它們所管理的設備間的關係. 展示這些附加關係需要額外的指針, 指針在 sysfs 中通過符號連接實現.</p>
+<p>創建一個符號連接在 sysfs 是容易的:</p>
+<pre class="programlisting">
+int sysfs_create_link(struct kobject *kobj, struct kobject *target, char *name);
+</pre>
+<p>這個函數創建一個連接(稱為 name)指向目標的 sysfs 入口作為一個 kobj 的屬性. 它是一個相對連接, 因此它不管 sysfs 在任何特殊的系統中安裝在哪裡都可用.</p>
+<p>這個連接甚至當目標被從系統中移走也持續. 如果你在創建對其他 kobjects 的符號連接, 你應當可能有一個方法知道對這個 kobjects 的改變, 或者某種保證目標 kobjects 不會消失. 結果( 在 sysfs 中的死的符號連接 )不是特別嚴重, 但是它們不代表最好的編程風格並且可能導致在用戶空間的混亂.</p>
+<p>去除符號連接可使用:</p>
+<pre class="programlisting">
+void sysfs_remove_link(struct kobject *kobj, char *name); 
+</pre>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch14.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch14.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch14s03.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">第&#160;14&#160;章&#160;Linux 設備模型&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;14.3.&#160;熱插拔事件產生</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch14s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

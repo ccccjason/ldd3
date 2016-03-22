@@ -1,0 +1,195 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch08s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>8.6.&#160;快速參考-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch08.html" title="第&#160;8&#160;章&#160;分配內存">
+<link rel="prev" href="ch08s05.html" title="8.5.&#160;獲得大量緩衝">
+<link rel="next" href="ch09.html" title="第&#160;9&#160;章&#160;與硬件通訊">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">8.6.&#160;快速參考</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch08s05.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;8&#160;章&#160;分配內存</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch09.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="AllocatingMemoryqr.sect"></a>8.6.&#160;快速參考</h2></div></div></div>
+<p>相關於內存分配的函數和符號是:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>#include &lt;linux/slab.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void *kmalloc(size_t size, int flags);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void kfree(void *obj);</span></span></dt>
+<dd><p>內存分配的最常用接口.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/mm.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term">GFP_USER<span></span></span></dt>
+<dd></dd>
+<dt><span class="term">GFP_KERNEL<span></span></span></dt>
+<dd></dd>
+<dt><span class="term">GFP_NOFS<span></span></span></dt>
+<dd></dd>
+<dt><span class="term">GFP_NOIO<span></span></span></dt>
+<dd></dd>
+<dt><span class="term">GFP_ATOMIC <span></span></span></dt>
+<dd><p>控制內存分配如何進行的標誌, 從最少限制的到最多的. GFP_USER 和 GFP_KERNEL 優先級允許當前進程被置為睡眠來滿足請求. GFP_NOFS 和 GFP_NOIO 禁止文件系統操作和所有的 I/O 操作, 分別地, 而 GFP_ATOMIC 分配根本不能睡眠.</p></dd>
+<dt><span class="term">__GFP_DMA<span></span></span></dt>
+<dd></dd>
+<dt><span class="term">__GFP_HIGHMEM<span></span></span></dt>
+<dd></dd>
+<dt><span class="term">__GFP_COLD<span></span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__GFP_NOWARN</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__GFP_HIGH</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__GFP_REPEAT</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__GFP_NOFAIL</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__GFP_NORETRY </span></span></dt>
+<dd><p>這些標誌修改內核的行為, 當分配內存時.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/malloc.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>kmem_cache_t *kmem_cache_create(char *name, size_t size, size_t offset,  unsigned long flags, constructor(), destructor( ));</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int kmem_cache_destroy(kmem_cache_t *cache);</span></span></dt>
+<dd><p>創建和銷毀一個 slab 緩存. 這個緩存可被用來分配幾個相同大小的對象.</p></dd>
+<dt><span class="term"><span>SLAB_NO_REAP</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>SLAB_HWCACHE_ALIGN</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>SLAB_CACHE_DMA </span></span></dt>
+<dd><p>在創建一個緩存時可指定的標誌.</p></dd>
+<dt><span class="term"><span>SLAB_CTOR_ATOMIC</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>SLAB_CTOR_CONSTRUCTOR </span></span></dt>
+<dd><p>分配器可用傳遞給構造函數和析構函數的標誌.</p></dd>
+<dt><span class="term"><span>void *kmem_cache_alloc(kmem_cache_t *cache, int flags);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void kmem_cache_free(kmem_cache_t *cache, const void *obj);</span></span></dt>
+<dd><p>從緩存中分配和釋放一個單個對象. /proc/slabinfo 一個包含對 slab 緩存使用情況統計的虛擬文件.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/mempool.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>mempool_t *mempool_create(int min_nr, mempool_alloc_t *alloc_fn, mempool_free_t *free_fn, void *data);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void mempool_destroy(mempool_t *pool);</span></span></dt>
+<dd><p>創建內存池的函數, 它試圖避免內存分配設備, 通過保持一個已分配項的"緊急列表".</p></dd>
+<dt><span class="term"><span>void *mempool_alloc(mempool_t *pool, int gfp_mask);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void mempool_free(void *element, mempool_t *pool);</span></span></dt>
+<dd><p>從(並且返回它們給)內存池分配項的函數.</p></dd>
+<dt><span class="term"><span>unsigned long get_zeroed_page(int flags);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned long __get_free_page(int flags);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned long __get_free_pages(int flags, unsigned long order);</span></span></dt>
+<dd><p>面向頁的分配函數. get_zeroed_page 返回一個單個的, 零填充的頁. 這個調用的所有的其他版本不初始化返回頁的內容.</p></dd>
+<dt><span class="term"><span>int get_order(unsigned long size);</span></span></dt>
+<dd><p>返回關聯在當前平台的大小的分配級別, 根據 PAGE_SIZE. 這個參數必須是 2 的冪, 並且返回值至少是 0.</p></dd>
+<dt><span class="term"><span>void free_page(unsigned long addr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void free_pages(unsigned long addr, unsigned long order);</span></span></dt>
+<dd><p>釋放面向頁分配的函數.</p></dd>
+<dt><span class="term"><span>struct page *alloc_pages_node(int nid, unsigned int flags, unsigned int order);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct page *alloc_pages(unsigned int flags, unsigned int order);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct page *alloc_page(unsigned int flags);</span></span></dt>
+<dd><p>Linux 內核中最底層頁分配器的所有變體.</p></dd>
+<dt><span class="term"><span>void __free_page(struct page *page);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void __free_pages(struct page *page, unsigned int order);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void free_hot_page(struct page *page);</span></span></dt>
+<dd><p>使用一個 alloc_page 形式分配的頁的各種釋放方法.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/vmalloc.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void * vmalloc(unsigned long size);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void vfree(void * addr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>#include &lt;asm/io.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void * ioremap(unsigned long offset, unsigned long size);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void iounmap(void *addr);</span></span></dt>
+<dd><p>分配或釋放一個連續虛擬地址空間的函數. iormap 存取物理內存通過虛擬地址, 而 vmalloc 分配空閒頁. 使用 ioreamp 映射的區是 iounmap 釋放, 而從 vmalloc 獲得的頁使用 vfree 來釋放.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/percpu.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>DEFINE_PER_CPU(type, name);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>DECLARE_PER_CPU(type, name);</span></span></dt>
+<dd><p>定義和聲明每-CPU變量的宏.</p></dd>
+<dt><span class="term"><span>per_cpu(variable, int cpu_id)</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>get_cpu_var(variable)</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>put_cpu_var(variable)</span></span></dt>
+<dd><p>提供對靜態聲明的每-CPU變量存取的宏.</p></dd>
+<dt><span class="term"><span>void *alloc_percpu(type);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void *__alloc_percpu(size_t size, size_t align);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void free_percpu(void *variable);</span></span></dt>
+<dd><p>進行運行時分配和釋放每-CPU變量的函數.</p></dd>
+<dt><span class="term"><span>int get_cpu( );</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void put_cpu( );</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>per_cpu_ptr(void *variable, int cpu_id)</span></span></dt>
+<dd><p>get_cpu 獲得對當前處理器的引用(因此, 阻止搶佔和移動到另一個處理器)並且返回處理器的ID; put_cpu 返回這個引用. 為存取一個動態分配的每-CPU變量, 用應當被存取版本所在的 CPU 的 ID 來使用 per_cpu_ptr. 對一個動態的每-CPU 變量當前 CPU 版本的操作, 應當用對 get_cpu 和 put_cpu 的調用來包圍. </p></dd>
+<dt><span class="term"><span>#include &lt;linux/bootmem.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void *alloc_bootmem(unsigned long size);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void *alloc_bootmem_low(unsigned long size);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void *alloc_bootmem_pages(unsigned long size);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void *alloc_bootmem_low_pages(unsigned long size);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void free_bootmem(unsigned long addr, unsigned long size);</span></span></dt>
+<dd><p>在系統啟動時進行分配和釋放內存的函數(只能被直接連接到內核中去的驅動使用)</p></dd>
+</dl></div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch08s05.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch08.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch09.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">8.5.&#160;獲得大量緩衝&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;第&#160;9&#160;章&#160;與硬件通訊</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch08s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

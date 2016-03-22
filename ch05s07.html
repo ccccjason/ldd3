@@ -1,0 +1,229 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05s07.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>5.7.&#160;加鎖的各種選擇-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch05.html" title="第&#160;5&#160;章&#160;並發和競爭情況">
+<link rel="prev" href="ch05s06.html" title="5.6.&#160;鎖陷阱">
+<link rel="next" href="ch05s08.html" title="5.8.&#160;快速參考">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">5.7.&#160;加鎖的各種選擇</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch05s06.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;5&#160;章&#160;並發和競爭情況</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch05s08.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="AlternativestoLocking.sect"></a>5.7.&#160;加鎖的各種選擇</h2></div></div></div>
+<p>Linux 內核提供了不少有力的加鎖原語能夠用來使內核避免被自己絆倒. 但是, 如同我們已見到的, 一個加鎖機制的設計和實現不是沒有缺陷. 常常對於旗標和自旋鎖沒有選擇; 它們可能是唯一的方法來正確地完成工作. 然而, 有些情況, 可以建立原子的存取而不用完整的加鎖. 本節看一下做事情的其他方法.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="LockFreeAlgorithms.sect"></a>5.7.1.&#160;不加鎖算法</h3></div></div></div>
+<p>有時, 你可以重新打造你的算法來完全避免加鎖的需要. 許多讀者/寫者情況 -- 如果只有一個寫者 -- 常常能夠在這個方式下工作. 如果寫者小心使數據結構的視圖, 由讀者所見的, 是一直一致的, 有可能創建一個不加鎖的數據結構.</p>
+<p>常常可以對無鎖的生產者/消費者任務有用的數據結構是環形緩存.  這個算法包含一個生產者安放數據到一個數組的尾端, 而消費者從另一端移走數據. 當到達數組末端, 生產者繞回到開始. 因此一個環形緩存需要一個數組和 2 個索引值來跟蹤下一個新值放到哪裡, 以及哪個值在下一次應當從緩存中移走.</p>
+<p>當小心地實現了, 一個環形緩存在沒有多個生產者或消費者時不需要加鎖. 生產者是唯一允許修改寫索引和它所指向的數組位置的線程. 只要寫者在更新寫索引之前存儲一個新值到緩存中, 讀者將一直看到一個一致的視圖. 讀者, 輪換地, 是唯一存取讀索引和它指向的值的線程. 加一點小心到確保 2 個指針不相互覆蓋, 生產者和消費者可以並發存取緩存而沒有競爭情況.</p>
+<p>圖<a href="ch05s07.html#ldd3-5-1.fig" title="圖&#160;5.1.&#160;環形緩衝">環形緩衝</a>展示了在幾個填充狀態的環形緩存. 這個緩存被定義成一個空情況由讀寫指針相同來指示, 而滿情況發生在寫指針緊跟在讀指針後面的時候(小心解決繞回!). 當小心地編程, 這個緩存能夠不必加鎖地使用.</p>
+<div class="figure">
+<a name="ldd3-5-1.fig"></a><p class="title"><b>圖&#160;5.1.&#160;環形緩衝</b></p>
+<div><img src="images/snagitldd3/ldd3-5-1.png" alt="環形緩衝"></div>
+</div>
+<p>在設備驅動中環形緩存出現相當多. 網絡適配器, 特別地, 常常使用環形緩存來與處理器交換數據(報文). 注意, 對於 2.6.10, 有一個通用的環形緩存實現在內核中可用; 如何使用它的信息看 &lt;linux/kfifo.h&gt;.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AtomicVariables.sect"></a>5.7.2.&#160;原子變量</h3></div></div></div>
+<p>有時, 一個共享資源是一個簡單的整數值. 假設你的驅動維護一個共享變量 n_op, 它告知有多少設備操作目前未完成. 正常地, 即便一個簡單的操作例如:</p>
+<pre class="programlisting">
+n_op++; 
+</pre>
+<p>可能需要加鎖. 某些處理器可能以原子的方式進行那種遞減, 但是你不能依賴它. 但是一個完整的加鎖體制對於一個簡單的整數值看來過分了. 對於這樣的情況, 內核提供了一個原子整數類型稱為 atomic_t, 定義在 &lt;asm/atomic.h&gt;.</p>
+<p>一個 atomic_t 持有一個 int 值在所有支持的體繫上. 但是, 因為這個類型在某些處理器上的工作方式, 整個整數範圍可能不是都可用的; 因此, 你不應當指望一個 atomic_t 持有多於 24 位. 下面的操作為這個類型定義並且保證對於一個 SMP 計算機的所有處理器來說是原子的. 操作是非常快的, 因為它們在任何可能時編譯成一條單個機器指令.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>void atomic_set(atomic_t *v, int i);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>atomic_t v = ATOMIC_INIT(0);</span></span></dt>
+<dd><p>設置原子變量 v 為整數值 i. 你也可在編譯時使用宏定義 ATOMIC_INIT 初始化原子值.</p></dd>
+<dt><span class="term"><span>int atomic_read(atomic_t *v);</span></span></dt>
+<dd><p>返回 v 的當前值.</p></dd>
+<dt><span class="term"><span>void atomic_add(int i, atomic_t *v);</span></span></dt>
+<dd><p>由 v 指向的原子變量加 i. 返回值是 void, 因為有一個額外的開銷來返回新值, 並且大部分時間不需要知道它.</p></dd>
+<dt><span class="term"><span>void atomic_sub(int i, atomic_t *v);</span></span></dt>
+<dd><p>從 *v 減去 i.</p></dd>
+<dt><span class="term"><span>void atomic_inc(atomic_t *v);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void atomic_dec(atomic_t *v);</span></span></dt>
+<dd><p>遞增或遞減一個原子變量.</p></dd>
+<dt><span class="term"><span>int atomic_inc_and_test(atomic_t *v);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int atomic_dec_and_test(atomic_t *v);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int atomic_sub_and_test(int i, atomic_t *v);</span></span></dt>
+<dd><p>進行一個特定的操作並且測試結果; 如果, 在操作後, 原子值是 0, 那麼返回值是真; 否則, 它是假. 注意沒有 atomic_add_and_test.</p></dd>
+<dt><span class="term"><span>int atomic_add_negative(int i, atomic_t *v);</span></span></dt>
+<dd><p>加整數變量 i 到 v. 如果結果是負值返回值是真, 否則為假.</p></dd>
+<dt><span class="term"><span>int atomic_add_return(int i, atomic_t *v);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int atomic_sub_return(int i, atomic_t *v);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int atomic_inc_return(atomic_t *v);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int atomic_dec_return(atomic_t *v);</span></span></dt>
+<dd><p>就像 atomic_add 和其類似函數, 除了它們返回原子變量的新值給調用者.</p></dd>
+</dl></div>
+<p>如同它們說過的, atomic_t 數據項必須通過這些函數存取. 如果你傳遞一個原子項給一個期望一個整數參數的函數, 你會得到一個編譯錯誤.</p>
+<p>你還應當記住, atomic_t 值只在當被置疑的量真正是原子的時候才起作用. 需要多個 atomic_t 變量的操作仍然需要某種其他種類的加鎖. 考慮一下下面的代碼:</p>
+<pre class="programlisting">
+atomic_sub(amount, &amp;first_atomic); 
+atomic_add(amount, &amp;second_atomic);
+</pre>
+<p>從第一個原子值中減去 amount, 但是還沒有加到第二個時, 存在一段時間. 如果事情的這個狀態可能產生麻煩給可能在這 2 個操作之間運行的代碼, 某種加鎖必須採用.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="BitOperations.sect"></a>5.7.3.&#160;位操作</h3></div></div></div>
+<p>atomic_t 類型在進行整數算術時是不錯的. 但是, 它無法工作的好, 當你需要以原子方式操作單個位時. 為此, 內核提供了一套函數來原子地修改或測試單個位. 因為整個操作在單步內發生, 沒有中斷(或者其他處理器)能干擾.</p>
+<p>原子位操作非常快, 因為它們使用單個機器指令來進行操作, 而在任何時候低層平台做的時候不用禁止中斷. 函數是體系依賴的並且在 &lt;asm/bitops.h&gt; 中聲明. 它們保證是原子的, 即便在 SMP 計算機上, 並且對於跨處理器保持一致是有用的.</p>
+<p>不幸的是, 鍵入這些函數中的數據也是體系依賴的. nr 參數(描述要操作哪個位)常常定義為 int, 但是在幾個體系中是 unsigned long. 要修改的地址常常是一個 unsigned long 指針, 但是幾個體系使用 void * 代替.</p>
+<p>各種位操作是:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>void set_bit(nr, void *addr);</span></span></dt>
+<dd><p>設置第 nr 位在 addr 指向的數據項中.</p></dd>
+<dt><span class="term"><span>void clear_bit(nr, void *addr);</span></span></dt>
+<dd><p>清除指定位在 addr 處的無符號長型數據. 它的語義與 set_bit 的相反.</p></dd>
+<dt><span class="term"><span>void change_bit(nr, void *addr);</span></span></dt>
+<dd><p>翻轉這個位.</p></dd>
+<dt><span class="term"><span>test_bit(nr, void *addr);</span></span></dt>
+<dd><p>這個函數是唯一一個不需要是原子的位操作; 它簡單地返回這個位的當前值.</p></dd>
+<dt><span class="term"><span>int test_and_set_bit(nr, void *addr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int test_and_clear_bit(nr, void *addr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int test_and_change_bit(nr, void *addr);</span></span></dt>
+<dd><p>原子地動作如同前面列出的, 除了它們還返回這個位以前的值.</p></dd>
+</dl></div>
+<p>當這些函數用來存取和修改一個共享的標誌, 除了調用它們不用做任何事; 它們以原子發生進行它們的操作. 使用位操作來管理一個控制存取一個共享變量的鎖變量, 另一方面, 是有點複雜並且應該有個例子. 大部分現代的代碼不以這種方法來使用位操作, 但是象下面的代碼仍然在內核中存在.</p>
+<p>一段需要存取一個共享數據項的代碼試圖原子地請求一個鎖, 使用 test_and_set_bit 或者 test_and_clear_bit. 通常的實現展示在這裡; 它假定鎖是在地址 addr 的 nr 位. 它還假定當鎖空閒是這個位是 0, 忙為 非零.</p>
+<pre class="programlisting">
+/* try to set lock */
+while (test_and_set_bit(nr, addr) != 0)
+    wait_for_a_while(); 
+
+/* do your work */ 
+
+/* release lock, and check... */
+if (test_and_clear_bit(nr, addr) == 0)
+    something_went_wrong(); /* already released: error */ 
+
+</pre>
+<p>如果你通讀內核源碼, 你會發現象這個例子的代碼. 但是, 最好在新代碼中使用自旋鎖; 自旋鎖很好地調試過, 它們處理問題如同中斷和內核搶佔, 並且別人讀你代碼時不必努力理解你在做什麼.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="seqlocks.sect"></a>5.7.4.&#160;seqlock 鎖</h3></div></div></div>
+<p>2.6內核包含了一對新機制打算來提供快速地, 無鎖地存取一個共享資源. seqlock 在這種情況下工作, 要保護的資源小, 簡單, 並且常常被存取, 並且很少寫存取但是必須要快. 基本上, 它們通過允許讀者釋放對資源的存取, 但是要求這些讀者來檢查與寫者的衝突而工作, 並且當發生這樣的衝突時, 重試它們的存取. seqlock 通常不能用在保護包含指針的數據結構, 因為讀者可能跟隨著一個無效指針而寫者在改變數據結構.</p>
+<p>seqlock 定義在 &lt;linux/seqlock.h&gt;. 有 2 個通常的方法來初始化一個 seqlock( 有 seqlock_t 類型 ):</p>
+<pre class="programlisting">
+seqlock_t lock1 = SEQLOCK_UNLOCKED;
+
+seqlock_t lock2;
+seqlock_init(&amp;lock2);
+</pre>
+<p>讀存取通過在進入臨界區入口獲取一個(無符號的)整數序列來工作. 在退出時, 那個序列值與當前值比較; 如果不匹配, 讀存取必須重試. 結果是, 讀者代碼象下面的形式:</p>
+<pre class="programlisting">
+unsigned int seq;
+
+do {
+    seq = read_seqbegin(&amp;the_lock);
+    /* Do what you need to do */
+} while read_seqretry(&amp;the_lock, seq);
+</pre>
+<p>這個類型的鎖常常用在保護某種簡單計算, 需要多個一致的值. 如果這個計算最後的測試表明發生了一個並發的寫, 結果被簡單地丟棄並且重新計算.</p>
+<p>如果你的 seqlock 可能從一個中斷處理裡存取, 你應當使用 IRQ 安全的版本來代替:</p>
+<pre class="programlisting">
+unsigned int read_seqbegin_irqsave(seqlock_t *lock, unsigned long flags);
+int read_seqretry_irqrestore(seqlock_t *lock, unsigned int seq, unsigned long flags);
+</pre>
+<p>寫者必須獲取一個排他鎖來進入由一個 seqlock 保護的臨界區. 為此, 調用:</p>
+<pre class="programlisting">
+void write_seqlock(seqlock_t *lock); 
+</pre>
+<p>寫鎖由一個自旋鎖實現, 因此所有的通常的限制都適用. 調用:</p>
+<pre class="programlisting">
+void write_sequnlock(seqlock_t *lock); 
+</pre>
+<p>來釋放鎖. 因為自旋鎖用來控制寫存取, 所有通常的變體都可用:</p>
+<pre class="programlisting">
+void write_seqlock_irqsave(seqlock_t *lock, unsigned long flags);
+void write_seqlock_irq(seqlock_t *lock);
+void write_seqlock_bh(seqlock_t *lock);
+
+void write_sequnlock_irqrestore(seqlock_t *lock, unsigned long flags);
+void write_sequnlock_irq(seqlock_t *lock);
+void write_sequnlock_bh(seqlock_t *lock);
+</pre>
+<p>還有一個 write_tryseqlock 在它能夠獲得鎖時返回非零.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ReadCopyUpdate.sect"></a>5.7.5.&#160;讀取-拷貝-更新</h3></div></div></div>
+<p>讀取-拷貝-更新(RCU) 是一個高級的互斥方法, 能夠有高效率在合適的情況下. 它在驅動中的使用很少但是不是沒人知道, 因此這裡值得快速瀏覽下. 那些感興趣 RCU 算法的完整細節的人可以在由它的創建者出版的白皮書中找到( http://www.rdrop.com/users/paulmck/rclock/intro/rclock_intro.html).</p>
+<p>RCU 對它所保護的數據結構設置了不少限制. 它對經常讀而極少寫的情況做了優化. 被保護的資源應當通過指針來存取, 並且所有對這些資源的引用必須由原子代碼持有. 當數據結構需要改變, 寫線程做一個拷貝, 改變這個拷貝, 接著使相關的指針對準新的版本 -- 因此, 有了算法的名子. 當內核確認沒有留下對舊版本的引用, 它可以被釋放.</p>
+<p>作為在真實世界中使用 RCU 的例子, 考慮一下網絡路由表. 每個外出的報文需要請求檢查路由表來決定應當使用哪個接口. 這個檢查是快速的, 並且, 一旦內核發現了目標接口, 它不再需要路由表入口項. RCU 允許路由查找在沒有鎖的情況下進行, 具有相當多的性能好處. 內核中的 Startmode 無線 IP 驅動也使用 RCU 來跟蹤它的設備列表.</p>
+<p>使用 RCU 的代碼應當包含 &lt;linux/rcupdate.h&gt;.</p>
+<p>在讀這一邊, 使用一個 RCU-保護的數據結構的代碼應當用 rcu_read_lock 和 rcu_read_unlock 調用將它的引用包含起來. 結果就是, RCU 代碼往往是像這樣:</p>
+<pre class="programlisting">
+struct my_stuff *stuff; 
+rcu_read_lock();
+stuff = find_the_stuff(args...);
+do_something_with(stuff);
+rcu_read_unlock();
+</pre>
+<p>rcu_read_lock 調用是快的; 它禁止內核搶佔但是沒有等待任何東西. 在讀"鎖"被持有時執行的代碼必須是原子的. 在對 rcu_read_unlock 調用後, 沒有使用對被保護的資源的引用.</p>
+<p>需要改變被保護的結構的代碼必須進行幾個步驟. 第一步是容易的; 它分配一個新結構, 如果需要就從舊的拷貝數據, 接著替換讀代碼所看到的指針. 在此, 對於讀一邊的目的, 改變結束了. 任何進入臨界區的代碼看到數據的新版本.</p>
+<p>剩下的是釋放舊版本. 當然, 問題是在其他處理器上運行的代碼可能仍然有對舊數據的一個引用, 因此它不能立刻釋放. 相反, 寫代碼必須等待直到它知道沒有這樣的引用存在了. 因為所有持有對這個數據結構引用的代碼必須(規則規定)是原子的, 我們知道一旦系統中的每個處理器已經被調度了至少一次, 所有的引用必須消失. 這就是 RCU 所做的; 它留下了一個等待直到所有處理器已經調度的回調; 那個回調接下來被運行來進行清理工作.</p>
+<p>改變一個 RCU-保護的數據結構的代碼必須通過分配一個 struct rcu_head 來獲得它的清理回調, 儘管不需要以任何方式初始化這個結構. 常常, 那個結構被簡單地嵌入在 RCU 所保護的大的資源裡面. 在改變資源完成後, 應當調用:</p>
+<pre class="programlisting">
+void call_rcu(struct rcu_head *head, void (*func)(void *arg), void *arg);
+</pre>
+<p>給定的 func 在釋放資源是安全的時候調用; 傳遞給 call_rcu的是給同一個 arg. 常常, func 需要的唯一的東西是調用 kfree.</p>
+<p>全部 RCU 接口比我們已見的要更加複雜; 它包括, 例如, 輔助函數來使用被保護的鏈表. 全部內容見相關的頭文件.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch05s06.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch05.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch05s08.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">5.6.&#160;鎖陷阱&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;5.8.&#160;快速參考</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05s07.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

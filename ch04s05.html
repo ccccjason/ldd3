@@ -1,0 +1,185 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch04s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>4.5.&#160;調試系統故障-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch04.html" title="第&#160;4&#160;章&#160;調試技術">
+<link rel="prev" href="ch04s04.html" title="4.4.&#160;使用觀察來調試">
+<link rel="next" href="ch04s06.html" title="4.6.&#160;調試器和相關工具">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">4.5.&#160;調試系統故障</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch04s04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;4&#160;章&#160;調試技術</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch04s06.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="DebuggingSystemFaults.sect"></a>4.5.&#160;調試系統故障</h2></div></div></div>
+<p>即便你已使用了所有的監視和調試技術, 有時故障還留在驅動裡, 當驅動執行時系統出錯. 當發生這個時, 能夠收集盡可能多的信息來解決問題是重要的.</p>
+<p>注意"故障"不意味著"崩潰". Linux 代碼是足夠健壯地優雅地響應大部分錯誤:一個故障常常導致當前進程的破壞而系統繼續工作. 系統可能崩潰, 如果一個故障發生在一個進程的上下文之外, 或者如果系統的一些至關重要的部分毀壞了. 但是當是一個驅動錯誤導致的問題, 它常常只會導致不幸使用驅動的進程的突然死掉. 當進程被銷毀時唯一無法恢復的破壞是分配給進程上下文的一些內存丟失了; 例如, 驅動通過 kmalloc 分配的動態列表可能丟失. 但是, 因為內核為任何一個打開的設備在進程死亡時調用關閉操作, 你的驅動可以釋放由 open 方法分配的東西.</p>
+<p>儘管一個 oops 常常都不會關閉整個系統, 你很有可能發現在發生一次後需要重啟系統. 一個滿是錯誤的驅動能使硬件處於不能使用的狀態, 使內核資源處於不一致的狀態, 或者, 最壞的情況, 在隨機的地方破壞內核內存. 常常你可簡單地卸載你的破驅動並且在一次 oops 後重試. 然而, 如果你看到任何東西建議說系統作為一個整體不太好了, 你最好立刻重啟.</p>
+<p>我們已經說過, 當內核代碼出錯, 一個提示性的消息打印在控制台上. 下一節解釋如何解釋並利用這樣的消息. 儘管它們對新手看來相當模糊, 處理器轉儲是很有趣的信息, 常常足夠來查明一個程序錯誤而不需要附加的測試.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="OopsMessages.scet"></a>4.5.1.&#160;oops 消息</h3></div></div></div>
+<p>大部分 bug 以解引用 NULL 指針或者使用其他不正確指針值來表現自己的. 此類 bug 通常的輸出是一個 oops 消息.</p>
+<p>處理器使用的任何地址幾乎都是一個虛擬地址, 通過一個複雜的頁表結構映射為物理地址(例外是內存管理子系統自己使用的物理地址). 當解引用一個無效的指針, 分頁機制無法映射指針到一個物理地址, 處理器發出一個頁錯誤給操作系統. 如果地址無效, 內核無法"頁入"缺失的地址; 它(常常)產生一個 oops 如果在處理器處於管理模式時發生這個情況.</p>
+<p>一個 oops 顯示了出錯時的處理器狀態, 包括CPU 寄存器內容和其他看來不可理解的信息. 消息由錯誤處理的 printk 語句產生( arch/*/kernel/traps.c )並且如同前面 "printk" 一節中描述的被分派.</p>
+<p>我們看一個這樣的消息. 這是來自在運行 2.6 內核的 PC 上一個 NULL 指針導致的結果. 這裡最相關的信息是指令指針(EIP), 錯誤指令的地址.</p>
+<pre class="screen">
+Unable to handle kernel NULL pointer dereference at virtual address 00000000
+ printing eip:  
+d083a064  
+Oops: 0002 [#1]  
+SMP  
+CPU:  0  
+EIP:  0060:[&lt;d083a064&gt;]  Not tainted  
+EFLAGS: 00010246  (2.6.6)  
+EIP is at faulty_write+0x4/0x10 [faulty]  
+eax: 00000000  ebx: 00000000  ecx: 00000000  edx: 00000000  
+esi: cf8b2460  edi: cf8b2480  ebp: 00000005  esp: c31c5f74  
+ds: 007b  es: 007b  ss: 0068  
+
+Process bash (pid: 2086, threadinfo=c31c4000 task=cfa0a6c0) 
+Stack: c0150558 cf8b2460 080e9408 00000005 cf8b2480 00000000 cf8b2460 cf8b2460 fffffff7 080e9408 c31c4000 c0150682 cf8b2460 080e9408 00000005 cf8b2480 00000000 00000001 00000005 c0103f8f 00000001 080e9408 00000005 00000005 
+Call Trace:
+ [&lt;c0150558&gt;] vfs_write+0xb8/0x130
+ [&lt;c0150682&gt;] sys_write+0x42/0x70
+ [&lt;c0103f8f&gt;] syscall_call+0x7/0xb
+
+Code: 89 15 00 00 00 00 c3 90 8d 74 26 00 83 ec 0c b8 00 a6 83 d0 
+</pre>
+<p>寫入一個由壞模塊擁有的設備而產生的消息, 一個故意用來演示失效的模塊. faulty.c 的 write 方法的實現是瑣細的:</p>
+<pre class="programlisting">
+ssize_t faulty_write (struct file *filp, const char __user *buf, size_t count, loff_t *pos)
+{
+        /* make a simple fault by dereferencing a NULL pointer */
+        *(int *)0 = 0;
+        return 0;
+}
+</pre>
+<p>如你能見, 我們這裡做的是解引用一個 NULL 指針. 因為 0 一直是一個無效的指針值, 一個錯誤發生, 由內核轉變為前面展示的 oops 消息. 調用進程接著被殺掉.</p>
+<p>錯誤模塊有不同的錯誤情況在它的讀實現中:</p>
+<pre class="programlisting">
+ssize_t faulty_read(struct file *filp, char __user *buf, size_t count, loff_t *pos)
+{
+    int ret;
+    char stack_buf[4];
+
+    /* Let's try a buffer overflow */
+    memset(stack_buf, 0xff, 20);
+    if (count &gt; 4)
+
+        count = 4; /* copy 4 bytes to the user */
+    ret = copy_to_user(buf, stack_buf, count);
+    if (!ret)
+
+        return count;
+    return ret;
+}
+</pre>
+<p>這個方法拷貝一個字串到一個本地變量; 不幸的是, 字串長於目的數組. 當函數返回時導致的緩存區溢出引起一次 oops . 因為返回指令使指令指針到不知何處, 這類的錯誤很難跟蹤, 並且你得到如下的:</p>
+<pre class="programlisting">
+EIP: 0010:[&lt;00000000&gt;]
+Unable to handle kernel paging request at virtual address ffffffff
+
+ printing eip:  
+ffffffff  
+Oops: 0000 [#5]  
+SMP  
+CPU:  0  
+EIP:  0060:[&lt;ffffffff&gt;]  Not tainted  
+EFLAGS: 00010296  (2.6.6)  
+EIP is at 0xffffffff  
+eax: 0000000c  ebx: ffffffff  ecx: 00000000  edx: bfffda7c  
+esi: cf434f00  edi: ffffffff  ebp: 00002000  esp: c27fff78  
+ds: 007b  es: 007b  ss: 0068  
+
+Process head (pid: 2331, threadinfo=c27fe000 task=c3226150) 
+Stack: ffffffff bfffda70 00002000 cf434f20 00000001 00000286 cf434f00 fffffff7 bfffda70 c27fe000 c0150612 cf434f00 bfffda70 00002000 cf434f20 00000000 00000003 00002000 c0103f8f 00000003 bfffda70 00002000 00002000 bfffda70 
+Call Trace: [&lt;c0150612&gt;] sys_read+0x42/0x70 [&lt;c0103f8f&gt;] syscall_call+0x7/0xb 
+Code: Bad EIP value. 
+</pre>
+<p>這個情況, 我們只看到部分的調用堆棧( vfs_read 和 faulty_read 丟失 ), 內核抱怨一個"壞 EIP 值". 這個抱怨和在開頭列出的犯錯的地址 ( ffffffff ) 都暗示內核堆棧已被破壞.</p>
+<p>通常, 當你面對一個 oops, 第一件事是查看發生問題的位置, 常常與調用堆棧分開列出. 在上面展示的第一個 oops, 相關的行是:</p>
+<pre class="screen">
+EIP is at faulty_write+0x4/0x10 [faulty] 
+</pre>
+<p>這裡我們看到, 我們曾在函數 faulty_write, 它位於 faulty 模塊( 在方括號中列出的 ). 16 進制數指示指令指針是函數內 4 字節, 函數看來是 10 ( 16 進制 )字節長. 常常這就足夠來知道問題是什麼.</p>
+<p>如果你需要更多信息, 調用堆棧展示給你如何得知在哪裡壞事的. 堆棧自己是 16 機制形式打印的; 做一點工作, 你經常可以從堆棧的列表中決定本地變量的值和函數參數. 有經驗的內核開發者可以從這裡的某些模式識別中獲益; 例如, 如果你看來自 faulty_read oops 的堆棧列表:</p>
+<pre class="screen">
+Stack: ffffffff bfffda70 00002000 cf434f20 00000001 00000286 cf434f00 fffffff7
+ bfffda70 c27fe000 c0150612 cf434f00 bfffda70 00002000 cf434f20 00000000
+ 00000003 00002000 c0103f8f 00000003 bfffda70 00002000 00002000 bfffda70 
+</pre>
+<p>堆棧頂部的 ffffffff 是我們壞事的字串的一部分. 在 x86 體系, 缺省地, 用戶空間堆棧開始於 0xc0000000; 因此, 循環值 0xbfffda70 可能是一個用戶堆棧地址; 實際上, 它是傳遞給 read 系統調用的緩存地址, 每次下傳過系統調用鏈時都被複製. 在 x86 (又一次, 缺省地), 內核空間開始於 0xc0000000, 因此這個之上的值幾乎肯定是內核空間的地址, 等等.</p>
+<p>最後, 當看一個 oops 列表, 一直監視本章開始討論的"slab 毒害"值. 例如,如果你得到一個內核 oops, 裡面的犯錯地址時 0xa5a5a5a5a5, 你幾乎肯定 - 某個地方在初始化動態內存.</p>
+<p>請注意, 只在你的內核是打開 CONFIG_KALLSYMS 選項而編譯時可以看到符號的調用堆棧. 否則, 你見到一個裸的, 16 機制列表, 除非你以別的方式對其解碼, 它是遠遠無用的.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="SystemHange.sect"></a>4.5.2.&#160;系統掛起</h3></div></div></div>
+<p>儘管內核代碼的大部分 bug 以 oops 消息結束, 有時候它們可能完全掛起系統. 如果系統掛起, 沒有消息打印. 例如, 如果代碼進入一個無限循環, 內核停止調度,<sup>[<a name="id422785" href="#ftn.id422785">15</a>]</sup> 並且系統不會響應任何動作, 包括魔術 Ctrl-Alt-Del 組合鍵. 你有 2 個選擇來處理系統掛起-- 或者事先阻止它們, 或者能夠事後調試它們.</p>
+<p>你可阻止無限循環通過插入 schedule 引用在戰略點上. schedule 調用( 如你可能猜到的 )調度器, 因此, 允許別的進程從當前進程偷取 CPU 數據. 如果一個進程由於你的驅動的bug而在內核空間循環, schedule 調用使你能夠殺掉進程在跟蹤發生了什麼之後.</p>
+<p>你應當知道, 當然, 如何對 schedule 的調用可能創造一個附加的重入調用源到你的驅動, 因為它允許別的進程運行. 這個重入正常地不應當是問題, 假定你在你的驅動中已經使用了合適的加鎖. 然而, 要確認在你的驅動持有一個自旋鎖的任何時間不能調用 schedule.</p>
+<p>如果你的驅動真正掛起了系統, 並且你不知道在哪裡插入 schedule 調用, 最好的方式是加入一些打印消息並且寫到控制台(如果需要, 改變 console_loglevel 值).</p>
+<p>有時候系統可能看來被掛起, 但是沒有. 例如, 這可能發生在鍵盤以某個奇怪的方式保持鎖住的時候. 這些假掛起可通過查看你為此目的運行的程序的輸出來檢測. 一個你的顯示器上的時鐘或者系統負載表是一個好的狀態監控器; 只要他繼續更新, 調度器就在工作.</p>
+<p>對許多的上鎖一個必不可少的工具是"魔術 sysrq 鍵", 在大部分體繫上都可用. 魔鍵 sysrq 是 PC 鍵盤上 alt 和 sysrq 鍵組合來發出的, 或者在別的平台上使用其他特殊鍵(詳見 documentation/sysrq.txt), 在串口控制台上也可用. 一個第三鍵, 與這 2 個一起按下, 進行許多有用的動作中的一個:</p>
+<p>r	關閉鍵盤原始模式; 用在一個崩潰的應用程序( 例如 X 服務器 )可能將你的鍵盤搞成一個奇怪的狀態.</p>
+<p>k 調用"安全注意鍵"( SAK ) 功能. SAK 殺掉在當前控制台的所有運行的進程, 給你一個乾淨的終端.</p>
+<p>s 進行一個全部磁盤的緊急同步.</p>
+<p>u	umount. 試圖重新加載所有磁盤在只讀模式. 這個操作, 常常在 s 之後馬上調用, 可以節省大量的文件系統檢查時間, 在系統處於嚴重麻煩時.</p>
+<p>b boot. 立刻重啟系統. 確認先同步和重新加載磁盤.</p>
+<p>p 打印處理器消息.</p>
+<p>t 打印當前任務列表.</p>
+<p>m 打印內存信息.</p>
+<p>有別的魔術 sysrq 功能存在; 完整內容看內核源碼的文檔目錄中的 sysrq.txt. 注意魔術 sysrq 必須在內核配置中顯式使能, 大部分的發佈沒有使能它, 因為明顯的安全理由. 對於用來開發驅動的系統, 然而, 使能魔術 sysrq 值得為它自己建立一個新內核的麻煩. 魔術 sysrq 可能在運行時關閉, 使用如下的一個命令:</p>
+echo 0 &gt; /proc/sys/kernel/sysrq 
+<p>如果非特權用戶能夠接觸你的系統鍵盤, 你應當考慮關閉它, 來阻止有意或無意的損壞. 一些以前的內核版本缺省關閉 sysrq, 因此你需要在運行時使能它, 通過向同樣的 /proc/sys 文件寫入 1.</p>
+<p>sysrq 操作是非常有用, 因此它們已經對不能接觸到控制台的系統管理員可用. 文件 /proc/sysrq-trigger 是一個只寫的入口點, 這裡你可以觸發一個特殊的 sysrq 動作, 通過寫入關聯的命令字符; 接著你可收集內核日誌的任何輸出數據. 這個 sysrq 的入口點是一直工作的, 即便 sysrq 在控制台上被關閉.</p>
+<p>如果你經歷一個"活掛", 就是你的驅動粘在一個循環中, 但是系統作為一個整體功能正常, 有幾個技術值得瞭解. 經常地, sysrq p 功能直接指向出錯的函數. 如果這個不行, 你還可以使用內核剖析功能. 建立一個打開剖析的內核, 並且用命令行中 profile=2 來啟動它. 使用 readprofile 工具復位剖析計數器, 接著使你的驅動進入它的循環. 一會兒後, 使用 readprofile 來看內核在哪裡消耗它的時間. 另一個更高級的選擇是 oprofile, 你可以也考慮下. 文件 documentation/basic_profiling.txt 告訴你啟動剖析器所有需要知道的東西.</p>
+<p>在追逐系統掛起時一個值得使用的防範措施是以只讀方式加載你的磁盤(或者卸載它們). 如果磁盤是只讀或者卸載的, 就沒有風險損壞文件系統或者使它處於不一致的狀態. 另外的可能性是使用一個通過 NFS, 網絡文件系統, 來加載它的全部文件系統的計算機, 內核的"NFS-Root"功能必須打開, 在啟動時必須傳遞特殊的參數. 在這個情況下, 即便不依靠 sysrq 你也會避免文件系統破壞, 因為文件系統的一致有 NFS 服務器來管理, 你的設備驅動不會關閉它.</p>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id422785" href="#id422785">15</a>] </sup>實際上, 多處理器系統仍然在其他處理器上調度, 甚至一個單處理器的機器可能重新調度, 如果內核搶佔被使能. 然而, 對於大部分的通常的情況( 單處理器不使能搶佔), 系統一起停止調度.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch04s04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch04.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch04s06.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">4.4.&#160;使用觀察來調試&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;4.6.&#160;調試器和相關工具</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch04s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

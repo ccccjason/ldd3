@@ -1,0 +1,387 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch15s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:41 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>15.2.&#160;mmap 設備操作-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch15.html" title="第&#160;15&#160;章&#160;內存映射和 DMA ">
+<link rel="prev" href="ch15.html" title="第&#160;15&#160;章&#160;內存映射和 DMA ">
+<link rel="next" href="ch15s03.html" title="15.3.&#160;進行直接 I/O">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">15.2.&#160;mmap 設備操作</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch15.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;15&#160;章&#160;內存映射和 DMA </th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch15s03.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="ThemmapDeviceOperation.sect1"></a>15.2.&#160;mmap 設備操作</h2></div></div></div>
+<p>內存映射是現代 Unix 系統最有趣的特性之一. 至於驅動, 內存映射可被實現來提供用戶程序對設備內存的直接存取.</p>
+<p>一個 mmap 用法的明確的例子可由查看給 X Windows 系統服務器的虛擬內存區的一個子集來見到:</p>
+<pre class="screen">
+cat /proc/731/maps 
+000a0000-000c0000 rwxs 000a0000 03:01 282652 /dev/mem
+000f0000-00100000 r-xs 000f0000 03:01 282652 /dev/mem
+00400000-005c0000 r-xp 00000000 03:01 1366927 /usr/X11R6/bin/Xorg
+006bf000-006f7000 rw-p 001bf000 03:01 1366927 /usr/X11R6/bin/Xorg
+2a95828000-2a958a8000 rw-s fcc00000 03:01 282652 /dev/mem
+2a958a8000-2a9d8a8000 rw-s e8000000 03:01 282652 /dev/mem
+...
+</pre>
+<p>X 服務器的 VMA 的完整列表很長, 但是大部分此處不感興趣. 我們確實見到, 但是, /dev/mm 的 4 個不同映射, 它給出一些關於 X 服務器如何使用視頻卡的內幕. 第一個映射在 a0000, 它是視頻內存的在 640-KB ISA 孔裡的標準位置. 再往下, 我們見到了大映射在 e8000000, 這個地址在系統中最高的 RAM 地址之上. 這是一個在適配器上的視頻內存的直接映射.</p>
+<p>這些區也可在 /proc/iomem 中見到:</p>
+<pre class="screen">
+000a0000-000bffff : Video RAM area
+000c0000-000ccfff : Video ROM
+000d1000-000d1fff : Adapter ROM
+000f0000-000fffff : System ROM
+d7f00000-f7efffff : PCI Bus #01
+
+ e8000000-efffffff : 0000:01:00.0
+fc700000-fccfffff : PCI Bus #01
+
+ fcc00000-fcc0ffff : 0000:01:00.0 
+</pre>
+<p>映射一個設備意味著關聯一些用戶空間地址到設備內存. 無論何時程序在給定範圍內讀或寫, 它實際上是在存取設備. 在 X 服務器例子裡, 使用 mmap 允許快速和容易地存取視頻卡內存. 對於一個像這樣的性能關鍵的應用, 直接存取有很大不同.</p>
+<p>如你可能期望的, 不是每個設備都出借自己給 mmap 抽像; 這樣沒有意義, 例如, 對串口或其他面向流的設備. mmap 的另一個限制是映射粒度是 PAGE_SIZE. 內核可以管理虛擬地址只在頁表一級; 因此, 被映射區必須是 PAGE_SIZE 的整數倍並且必須位於是 PAGE_SIZE 整數倍開始的物理地址. 內核強制 size 的粒度通過做一個稍微大些的區域, 如果它的大小不是頁大小的整數倍.</p>
+<p>這些限制對驅動不是大的限制, 因為存取設備的程序是設備依賴的. 因為程序必須知道設備如何工作的, 程序員不會太煩於需要知道如頁對齊這樣的細節. 一個更大的限制存在當 ISA 設備被用在非 x86 平台時, 因為它們的 ISA 硬件視圖可能不連續. 例如, 一些 Alpha 計算機將 ISA 內存看作一個分散的 8 位, 16 位, 32 位項的集合, 沒有直接映射. 這種情況下, 你根本無法使用 mmap. 對不能進行直接映射 ISA 地址到 Alph 地址可能只發生在 32-位 和 64-位內存存取, ISA 可只做 8-位 和 16-位 發送, 並且沒有辦法來透明映射一個協議到另一個.</p>
+<p>使用 mmap 有相當地優勢當這樣做可行的時候. 例如, 我們已經看到 X 服務器, 它傳送大量數據到和從視頻內存; 動態映射圖形顯示到用戶空間提高了吞吐量, 如同一個 lseek/write 實現相反. 另一個典型例子是一個控制一個 PCI 設備的程序. 大部分 PCI 外設映射它們的控制寄存器到一個內存地址, 並且一個高性能應用程序可能首選對寄存器的直接存取來代替反覆地調用 ioctl 來完成它的工作.</p>
+<p>mmap 方法是 file_operation 結構的一部分, 當發出 mmap 系統調用時被引用. 用了 mmap, 內核進行大量工作在調用實際的方法之前, 並且, 因此, 方法的原型非常不同於系統調用的原型. 這不像 ioctl 和 poll 等調用, 內核不會在調用這些方法之前做太多.</p>
+<p>系統調用如下一樣被聲明(如在 mmap(2) 手冊頁中描述的 );</p>
+<pre class="programlisting">
+mmap (caddr_t addr, size_t len, int prot, int flags, int fd, off_t offset) 
+</pre>
+<p>另一方面, 文件操作聲明如下:</p>
+<pre class="programlisting">
+int (*mmap) (struct file *filp, struct vm_area_struct *vma);
+</pre>
+<p>方法中的 filp 參數像在第 3 章介紹的那樣, 而 vma 包含關於用來存取設備的虛擬地址範圍的信息. 因此, 大量工作被內核完成; 為實現 mmap, 驅動只要建立合適的頁表給這個地址範圍, 並且, 如果需要, 用新的操作集合替換 vma-&gt;vm_ops.</p>
+<p>有 2 個建立頁表的方法:調用 remap_pfn_range 一次完成全部, 或者一次一頁通過 nopage VMA 方法. 每個方法有它的優點和限制. 我們從"一次全部"方法開始, 它更簡單. 從這裡, 我們增加一個真實世界中的實現需要的複雜性.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Usingremap_pfn_range.sect2"></a>15.2.1.&#160;使用 remap_pfn_range</h3></div></div></div>
+<p>建立新頁來映射物理地址的工作由 remap_pfn_range 和 io_remap_page_range 來處理, 它們有下面的原型:</p>
+<pre class="programlisting">
+int remap_pfn_range(struct vm_area_struct *vma, unsigned long virt_addr, unsigned long pfn, unsigned long size, pgprot_t prot); 
+int io_remap_page_range(struct vm_area_struct *vma, unsigned long virt_addr, unsigned long phys_addr, unsigned long size, pgprot_t prot); 
+</pre>
+<p>由這個函數返回的值常常是 0 或者一個負的錯誤值. 讓我們看看這些函數參數的確切含義:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>vma </span></span></dt>
+<dd><p>頁範圍被映射到的虛擬內存區</p></dd>
+<dt><span class="term"><span>virt_addr </span></span></dt>
+<dd><p>重新映射應當開始的用戶虛擬地址. 這個函數建立頁表為這個虛擬地址範圍從 virt_addr 到 virt_addr_size.</p></dd>
+<dt><span class="term"><span>pfn</span></span></dt>
+<dd><p>頁幀號, 對應虛擬地址應當被映射的物理地址. 這個頁幀號簡單地是物理地址右移 PAGE_SHIFT 位. 對大部分使用, VMA 結構的 vm_paoff 成員正好包含你需要的值. 這個函數影響物理地址從 (pfn&lt;&lt;PAGE_SHIFT) 到 (pfn&lt;&lt;PAGE_SHIFT)+size.</p></dd>
+<dt><span class="term"><span>size </span></span></dt>
+<dd><p>正在被重新映射的區的大小, 以字節.</p></dd>
+<dt><span class="term"><span>prot </span></span></dt>
+<dd><p>給新 VMA 要求的"protection". 驅動可(並且應當)使用在 vma-&gt;vm_page_prot 中找到的值.</p></dd>
+</dl></div>
+<p>給 remap_fpn_range 的參數是相當直接的, 並且它們大部分是已經在 VMA 中提供給你, 當你的 mmap 方法被調用時. 你可能好奇為什麼有 2 個函數, 但是. 第一個 (remap_pfn_range)意圖用在 pfn 指向實際的系統 RAM 的情況下, 而 io_remap_page_range 應當用在 phys_addr 指向 I/O 內存時. 實際上, 這 2 個函數在每個體繫上是一致的, 除了 SPARC, 並且你在大部分情況下被使用看到 remap_pfn_range . 為編寫可移植的驅動, 但是, 你應當使用 remap_pfn_range 的適合你的特殊情況的變體.</p>
+<p>另一種複雜性不得不處理緩存: 常常地, 引用設備內存不應當被處理器緩存. 常常系統 BIOS 做了正確設置, 但是它也可能通過保護字段關閉特定 VMA 的緩存. 不幸的是, 在這個級別上關閉緩存是高度處理器依賴的. 好奇的讀者想看看來自 drivers/char/mem.c 的 pgprot_noncached 函數來找到包含什麼. 我們這裡不進一步討論這個主題.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ASimpleImplementation.sect2"></a>15.2.2.&#160;一個簡單的實現</h3></div></div></div>
+<p>如果你的驅動需要做一個簡單的線性的設備內存映射, 到一個用戶地址空間, remap_pfn_range 幾乎是所有你做這個工作真正需要做的. 下列的代碼從 drivers/char/mem.c 中得來, 並且顯示了這個任務如何在一個稱為 simple ( Simple Implementation Mapping Pages with Little Enthusiasm)的典型模塊中進行的.</p>
+<pre class="programlisting">
+static int simple_remap_mmap(struct file *filp, struct vm_area_struct *vma) 
+{
+ if (remap_pfn_range(vma, vma-&gt;vm_start, vm-&gt;vm_pgoff,
+ vma-&gt;vm_end - vma-&gt;vm_start,
+ vma-&gt;vm_page_prot))
+ return -EAGAIN;
+ vma-&gt;vm_ops = &amp;simple_remap_vm_ops;
+ simple_vma_open(vma);
+ return 0; 
+} 
+</pre>
+<p>如你所見, 重新映射內存只不過是調用 remap_pfn_rage 來創建必要的頁表.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AddingVMAOperations.sect2"></a>15.2.3.&#160;添加 VMA 的操作</h3></div></div></div>
+<p>如我們所見, vm_area_struct 結構包含一套操作可以用到 VMA. 現在我們看看以一個簡單的方式提供這些操作. 特別地, 我們為 VMA 提供 open 和 close 操作. 這些操作被調用無論何時一個進程打開或關閉 VMA; 特別地, open 方法被調用任何時候一個進程產生和創建一個對 VMA 的新引用. open 和 close VMA 方法被調用加上內核進行的處理, 因此它們不需要重新實現任何那裡完成的工作. 它們對於驅動存在作為一個方法來做任何它們可能要求的附加處理.</p>
+<p>如同它所證明的, 一個簡單的驅動例如 simple 不需要做任何額外的特殊處理. 我們已創建了 open 和 close 方法, 它打印一個信息到系統日誌來通知大家它們已被調用. 不是特別有用, 但是它確實允許我們來顯示這些方法如何被提供, 並且見到當它們被調用時.</p>
+<p>到此, 我們忽略了缺省的 vma-&gt;vm_ops 使用調用 printk 的操作:</p>
+<pre class="programlisting">
+void simple_vma_open(struct vm_area_struct *vma)
+{
+	printk(KERN_NOTICE "Simple VMA open, virt %lx, phys %lx\n", vma-&gt;vm_start, vma-&gt;vm_pgoff &lt;&lt; PAGE_SHIFT);
+} 
+
+void simple_vma_close(struct vm_area_struct *vma)
+{
+ printk(KERN_NOTICE "Simple VMA close.\n");
+}
+
+static struct vm_operations_struct simple_remap_vm_ops = {
+ .open = simple_vma_open,
+ .close = simple_vma_close,
+};
+</pre>
+<p>為使這些操作為一個特定的映射激活, 有必要存儲一個指向 simple_remap_um_ops 指針在相關 VMA 的 vm_ops 成員中. 這常常在 mmap 方法中完成. 如果你回看 simple_remap_mmap 例子, 你見到這些代碼行:</p>
+<pre class="programlisting">
+vma-&gt;vm_ops = &amp;simple_remap_vm_ops;
+simple_vma_open(vma);
+</pre>
+<p>注意對 simple_vma_open 的明確調用. 因為 open 方法不在初始化 mmap 時調用, 我們必須明確調用它如果我們要它運行.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="MappingMemorywithnopage.sect2"></a>15.2.4.&#160;使用 nopage 映射內存</h3></div></div></div>
+<p>儘管 remap_pfn_range 對許多人工作得不錯, 如果不是大部分人, 驅動 mmap 的實現有時有點更大的靈活性是必要的. 在這樣的情況下, 一個使用 nopage VMA 方法的實現可被調用.</p>
+<p>一種 nopage 方法有用的情況可由 mremap 系統調用引起, 它被應用程序用來改變一個被映射區的綁定地址. 如它所發生的, 當一個被映射的 VMA 被 mremap 改變時內核不直接通知驅動. 如果這個 VMA 的大小被縮減, 內核可靜靜地刷出不需要的頁, 而不必告訴驅動. 相反, 如果這個 VMA 被擴大, 當映射必須為新頁建立時, 驅動最終通過對 nopage 的調用發現, 因此沒有必要進行特殊的通知. nopage 方法, 因此, 如果你想支持 mremap 系統調用必須實現. 這裡, 我們展示一個簡單的 nopage 實現給 simple 設備.</p>
+<p>nopage 方法, 記住, 有下列原型:</p>
+<pre class="programlisting">
+struct page *(*nopage)(struct vm_area_struct *vma, unsigned long address, int *type);
+</pre>
+<p>當一個用戶進程試圖存取在一個不在內存中的 VMA 中的一個頁, 相關的 nopage 函數被調用. 地址參數包含導致出錯的虛擬地址, 向下圓整到頁的開始. nopage 函數必須定位並返回用戶需要的頁的 struct page 指針. 這個函數必須也負責遞增它通過調用 get_page 宏返回的頁的使用計數.</p>
+<pre class="programlisting">
+ get_page(struct page *pageptr); 
+</pre>
+<p>這一步是需要的來保持在被映射頁的引用計數正確. 內核為每個頁維護這個計數; 當計數到 0, 內核知道這個頁可被放置在空閒列表了. 當一個 VMA 被去映射, 內核遞減使用計數給區中每個頁. 如果你的驅動在添加一個頁到區時不遞增計數, 使用計數過早地成為 0, 系統的整體性被破壞了.</p>
+<p>nopage 方法也應當存儲錯誤類型在由 type 參數指向的位置 -- 但是只當那個參數不為 NULL. 在設備驅動中, 類型的正確值將總是 VM_FAULT_MINOR.</p>
+<p>如果你使用 nopage, 當調用 mmap 常常很少有工作來做; 我們的版本看來像這樣:</p>
+<pre class="programlisting">
+static int simple_nopage_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+ unsigned long offset = vma-&gt;vm_pgoff &lt;&lt; PAGE_SHIFT;
+
+    if (offset &gt;= __pa(high_memory) || (filp-&gt;f_flags &amp; O_SYNC))
+ vma-&gt;vm_flags |= VM_IO;
+ vma-&gt;vm_flags |= VM_RESERVED;
+
+ vma-&gt;vm_ops = &amp;simple_nopage_vm_ops;
+ simple_vma_open(vma);
+ return 0;
+
+}
+</pre>
+<p>mmap 必須做的主要的事情是用我們自己的操作來替換缺省的(NULL)vm_ops 指針. nopage 方法接著進行一次重新映射一頁並且返回它的 struct page 結構的地址. 因為我們這裡只實現一個到物理內存的窗口, 重新映射的步驟是簡單的: 我們只需要定位並返回一個指向 struct page 的指針給需要的地址. 我們的 nopage 方法看來如下:</p>
+<pre class="programlisting">
+struct page *simple_vma_nopage(struct vm_area_struct *vma, unsigned long address, int *type) 
+{
+ struct page *pageptr;
+ unsigned long offset = vma-&gt;vm_pgoff &lt;&lt; PAGE_SHIFT;
+ unsigned long physaddr = address - vma-&gt;vm_start + offset;
+ unsigned long pageframe = physaddr &gt;&gt; PAGE_SHIFT;
+
+ if (!pfn_valid(pageframe))
+ return NOPAGE_SIGBUS;
+ pageptr = pfn_to_page(pageframe);
+ get_page(pageptr);
+ if (type)
+
+ *type = VM_FAULT_MINOR;
+ return pageptr;
+}
+</pre>
+<p>因為, 再一次, 在這裡我們簡單地映射主內存, nopage 函數只需要找到正確的 struct page 給出錯地址並且遞增它的引用計數. 因此, 事件的請求序列是計算需要地物理地址, 並且通過右移它 PAGE_SHIFT 位轉換它為以頁幀號. 因為用戶空間可以給我們任何它喜歡的地址, 我們必須確保我們有一個有效的頁幀; pfn_valid 函數為我們做這些. 如果地址超範圍, 我們返回 NOPAGE_SIGBUS, 它產生一個總線信號被遞交給調用進程.</p>
+<p>否則, pfn_to_page 獲得必要的 struct page 指針; 我們可遞增它的引用計數(使用調用 get_page)並且返回它.</p>
+<p>nopage 方法正常地返回一個指向 struct page 的指針. 如果, 由於某些原因, 一個正常的頁不能返回(即, 請求的地址超出驅動的內存區), NOPAGE_SIGBUS 可被返回來指示錯誤; 這是上的簡單代碼所做的. nopage 也可以返回 NOPAGE_OOM 來指示由於資源限制導致的失敗.</p>
+<p>注意, 這個實現對 ISA 內存區起作用, 但是對那些在 PCI 總線上的不行. PCI 內存被映射在最高的系統內存之上, 並且在系統內存中沒有這些地址的入口. 因為沒有 struct page 來返回一個指向的指針, nopage 不能在這些情況下使用; 你必須使用 remap_pfn_range 代替.</p>
+<p>如果 nopage 方法被留置為 NULL, 處理頁出錯的內核代碼映射零頁到出錯的虛擬地址. 零頁是一個寫時拷貝的頁, 它讀作為0, 並且被用來, 例如, 映射 BSS 段. 任何引用零頁的進程都看到: 一個填滿 0 的頁. 如果進程寫到這個頁, 它最終修改一個私有頁. 因此, 如果一個進程擴展一個映射的頁通過調用 mremap, 並且驅動還沒有實現 nopage, 進程結束以零填充的內存代替一個段錯誤.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RemappingSpecificIORegions.sect2"></a>15.2.5.&#160;重新映射特定 I/O 區</h3></div></div></div>
+<p>所有的我們至今所見的例子是 /dev/mem 的重新實現; 它們重新映射物理地址到用戶空間. 典型的驅動, 但是, 想只映射應用到它的外設設備的小的地址範圍, 不是全部內存. 為了映射到用戶空間只一個整個內存範圍的子集, 驅動只需要使用偏移. 下面為一個驅動做這個技巧來映射一個 simple_region_size 字節的區域, 在物理地址 simple_region_start(應當是頁對齊的) 開始:</p>
+<pre class="programlisting">
+unsigned long off = vma-&gt;vm_pgoff &lt;&lt; PAGE_SHIFT;
+unsigned long physical = simple_region_start + off;
+unsigned long vsize = vma-&gt;vm_end - vma-&gt;vm_start;
+unsigned long psize = simple_region_size - off;
+
+if (vsize &gt; psize)
+ return -EINVAL; /* spans too high */
+remap_pfn_range(vma, vma_&gt;vm_start, physical, vsize, vma-&gt;vm_page_prot);
+</pre>
+<p>除了計算偏移, 這個代碼引入了一個檢查來報告一個錯誤當程序試圖映射超過在目標設備的 I/O 區可用的內存. 在這個代碼中, psize 是已指定了偏移後剩下的物理 I/O 大小, 並且 vsize 是虛擬內存請求的大小; 這個函數拒絕映射超出允許的內存範圍的地址.</p>
+<p>注意, 用戶空間可一直使用 mremap 來擴展它的映射, 可能超過物理設備區的結尾. 如果你的驅動不能定義一個 nopage method, 它從不會得到這個擴展的通知, 並且額外的區映射到零頁. 作為一個驅動編寫者, 你可能很想阻止這種行為; 映射理由到你的區的結尾不是一個明顯的壞事情, 但是很不可能程序員希望它發生.</p>
+<p>最簡單的方法來阻止映射擴展是實現一個簡單的 nopage 方法, 它一直導致一個總線信號被發送給出錯進程. 這樣的一個方法可能看來如此:</p>
+<pre class="programlisting">
+struct page *simple_nopage(struct vm_area_struct *vma,
+ unsigned long address, int *type);
+{ return NOPAGE_SIGBUS; /* send a SIGBUS */}
+</pre>
+<p>如我們已見到的, nopage 方法只當進程解引用一個地址時被調用, 這個地址在一個已知的 VMA 中但是當前沒有有效的頁表入口給這個 VMA. 如果有已使用 remap_pfn_range 來映射全部設備區, 這裡展示的 nopage 方法只被調用來引用那個區外部. 因此, 它能夠安全地返回 NOPAGE_SIGBUS 來指示一個錯誤. 當然, 一個更加完整的 nopage 實現可以檢查是否出錯地址在設備區內, 並且如果是這樣進行重新映射. 但是, 再一次, nopage 無法在 PCI 內存區工作, 因此 PCI 映射的擴展是不可能的.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RemappingRAM.sect2"></a>15.2.6.&#160;重新映射 RAM</h3></div></div></div>
+<p>remap_pfn_range 的一個有趣的限制是它只存取保留頁和在物理內存頂之上的物理地址. 在 Linux, 一個物理地址頁被標誌為"保留的"在內存映射中來指示它對內存管理是不可用的. 在 PC 上, 例如, 640 KB 和 1MB 之間被標記為保留的, 如同駐留內核代碼自身的頁. 保留頁被鎖定在內存並且是唯一可被安全映射到用戶空間的; 這個限制是系統穩定的一個基本要求.</p>
+<p>因此, remap_pfn_range 不允許你重新映射傳統地址, 這包括你通過調用 get_free_page 獲得的. 相反, 它映射在零頁. 所有都看來正常, 除了進程見到私有的, 零填充的頁而不是它在期望的被重新映射的 RAM. 這個函數做了大部分硬件驅動需要來做的所有事情, 因為它能夠重新映射高端 PCI 緩衝和 ISA 內存.</p>
+<p>remap_pfn_range 的限制可通過運行 mapper 見到, 其中一個例子程序在 misc-progs 在 O'Reilly 的 FTP 網站提供的文件. mapper 是一個簡單的工具可用來快速測試 mmap 系統調用; 它映射由命令行選項指定的一個文件的只讀部分, 並且輸出被映射的區到標準輸出. 下面的部分, 例如, 顯示 /dev/mem 沒有映射位於地址 64 KB的物理頁 --相反, 我們看到一個頁充滿 0 (例子中的主機是一台 PC, 但是結果應該在其他平台上相同).</p>
+<pre class="screen">
+morgana.root# ./mapper /dev/mem 0x10000 0x1000 | od -Ax -t x1
+mapped "/dev/mem" from 65536 to 69632
+000000 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+*
+001000
+</pre>
+<p>remap_pfn_range 處理 RAM 的不能之處說明基於內存的設備如 scull 不能輕易實現 mmap, 因為它的設備內存是傳統內存, 不是 I/O 內存. 幸運的是, 一個相對容易的方法對任何需要映射 RAM 到用戶空間的驅動都可用; 它使用我們前面已見過的 nopage 方法.</p>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="RemmapingRAMwiththenopagemethod.sect3"></a>15.2.6.1.&#160;使用 nopage 方法重新映射 RAM</h4></div></div></div>
+<p>映射真實內存到用戶空間的方法是使用 vm_ops-&lt;nopage 來一次一個地處理頁錯. 一個簡單的實現是 scullp 模塊的一部分, 在第 8 張介紹.</p>
+<p>scullp 是一個面向頁的字符設備. 因為它是面向頁的, 它可以在它的內存上實現 mmap. 實現內存映射的代碼使用一些在"Linux 中的內存管理"一節中介紹的概念.</p>
+<p>在檢查代碼前, 讓我們查看影響在 scullp 中的 mmap 實現的設計選擇.</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>scullp 只要設備被映射就不會釋放設備內存. 這是策略問題而非一個需求, 並且它不同於 scull 和類似設備的行為, 它們被截短為 0 當為寫而打開時. 對釋放一個映射的 scullp 設備的拒絕, 允許一個進程覆蓋被其他進程映射的區., 因此你可以測試並且看進程和設備內存如何交互. 為避免釋放一個映射設備, 驅動必須保持一個激活映射的計數; 在設備結構中的 vmas 成員被用來作此目的.</p></li>
+<li><p>內存映射僅當 scullp 的 order 參數(在模塊加載時間設置)是 0 時進行. 這個參數控制 __get_free_pages 如何被調用( 見第 8 章"get_free_page 及其友" 一節). 0 order 的限制( 這強制一次分配一頁, 而不是以大的組)被 __get_free_pages 的內部所規定, 它是 scullp 所使用的分配函數. 為最大化分配性能, Linux 內核維護一個空閒頁列表給每個分配級別, 並且只有在一個簇中第一頁的引用計數被 get_free_pages 遞增以及被 free_pages 遞減. mmap 方法對一個 scullp 設備被禁止, 如果分配級大於 0, 因為 nopage 處理單個頁而不是一簇頁. scullp 不知道如何正確管理是高級別分配的一部分的頁的引用計數.(如果你需要重新回顧 scullp 和 內存分配級別值, 返回第 8 章的"一個使用整頁的 scull: scullp"一節.)</p></li>
+</ul></div>
+<p>0-級的限制大部分是用來保持代碼簡單. 它可能正確實現 mmap 給多頁分配, 通過使用頁的使用計數, 但是它可能只增加了例子的複雜性而沒有介紹任何有趣的信息.</p>
+<p>打算根據剛剛概括的規則來映射 RAM 的代碼, 需要實現 open, close, 和 nopage VMA 方法; 它還需要存取內存映射來調整頁使用計數.</p>
+<p>這個 scullp_mmap 的實現非常短, 因為它依賴 nopage 函數來做所有的感興趣的工作:</p>
+<pre class="programlisting">
+int scullp_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+
+ struct inode *inode = filp-&gt;f_dentry-&gt;d_inode;
+ /* refuse to map if order is not 0 */
+ if (scullp_devices[iminor(inode)].order)
+ return -ENODEV;
+
+ /* don't do anything here: "nopage" will fill the holes */
+ vma-&gt;vm_ops = &amp;scullp_vm_ops;
+ vma-&gt;vm_flags |= VM_RESERVED;
+ vma-&gt;vm_private_data = filp-&gt;private_data;
+ scullp_vma_open(vma);
+ return 0;
+}
+</pre>
+<p>if 語句的目的是避免映射分配級別不是 0 的設備. scullp 的操作存儲在 vm_ops 成員, 並且一個指向設備結構的指針藏於 vm_private_data 成員. 最後, vm_ops-&gt;open 被調用來更新設備的激活映射的計數.</p>
+<p>open 和 close 簡單地跟蹤映射計數並如下定義:</p>
+<pre class="programlisting">
+void scullp_vma_open(struct vm_area_struct *vma)
+{
+ struct scullp_dev *dev = vma-&gt;vm_private_data;
+ dev-&gt;vmas++;
+}
+
+void scullp_vma_close(struct vm_area_struct *vma)
+{
+ struct scullp_dev *dev = vma-&gt;vm_private_data;
+ dev-&gt;vmas--;
+}
+</pre>
+<p>大部分地工作接下來由 nopage 進行. 在 scullp 實現中, 給 nopage 的地址參數被用來計算設備中的偏移; 這個偏移接著被用來在 scullp 內存樹中查找正確的頁.</p>
+<pre class="programlisting">
+struct page *scullp_vma_nopage(struct vm_area_struct *vma, unsigned long address, int *type)
+{
+        unsigned long offset;
+        struct scullp_dev *ptr, *dev = vma-&gt;vm_private_data;
+        struct page *page = NOPAGE_SIGBUS;
+        void *pageptr = NULL; /* default to "missing" */
+
+        down(&amp;dev-&gt;sem);
+        offset = (address - vma-&gt;vm_start) + (vma-&gt;vm_pgoff &lt;&lt; PAGE_SHIFT);
+        if (offset &gt;= dev-&gt;size)
+                goto out; /* out of range */
+
+        /*
+        * Now retrieve the scullp device from the list,then the page.
+        * If the device has holes, the process receives a SIGBUS when
+        * accessing the hole.
+        */
+        offset &gt;&gt;= PAGE_SHIFT; /* offset is a number of pages */
+        for (ptr = dev; ptr &amp;&amp; offset &gt;= dev-&gt;qset;)
+        {
+                ptr = ptr-&gt;next;
+                offset -= dev-&gt;qset;
+        }
+        if (ptr &amp;&amp; ptr-&gt;data)
+                pageptr = ptr-&gt;data[offset];
+        if (!pageptr)
+                goto out; /* hole or end-of-file */
+        page = virt_to_page(pageptr);
+
+        /* got it, now increment the count */
+        get_page(page);
+        if (type)
+                *type = VM_FAULT_MINOR;
+out:
+        up(&amp;dev-&gt;sem);
+        return page;
+}
+</pre>
+<p>scullp 使用由 get_free_pages 獲取的內存. 那個內存使用邏輯地址尋址, 因此所有的 scullp_nopage 為獲得一個 struct page 指針不得不做的是調用 virt_to_page.</p>
+<p>現在 scullp 設備如同期望般工作了, 就像你在這個從 mapper 工具中的例子輸出能見到的. 這裡, 我們發送一個 /dev 的目錄列表(一個長的)到 scullp 設備並且接著使用 mapper 工具來查看這個列表的各個部分連同 mmap.</p>
+<pre class="screen">
+morgana% ls -l /dev &gt; /dev/scullp
+morgana% ./mapper /dev/scullp 0 140
+mapped "/dev/scullp" from 0 (0x00000000) to 140 (0x0000008c)
+total 232
+crw-------1 root root 10, 10 Sep 15 07:40 adbmouse
+crw-r--r--1 root root 10, 175 Sep 15 07:40 agpgart
+morgana% ./mapper /dev/scullp 8192 200 mapped "/dev/scullp" from 8192 (0x00002000) to 8392 (0x000020c8) 
+d0h1494  
+brw-rw---- 1 root  floppy  2,  92 Sep 15 07:40 fd0h1660  
+brw-rw---- 1 root  floppy  2,  20 Sep 15 07:40 fd0h360  
+brw-rw---- 1 root  floppy  2,  12 Sep 15 07:40 fd0H360  
+</pre>
+</div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RemappingKernelVirtualAddresses.sect2"></a>15.2.7.&#160;重映射內核虛擬地址</h3></div></div></div>
+<p>儘管它極少需要, 看一個驅動如何使用 mmap 映射一個內核虛擬地址到用戶空間是有趣的. 記住, 一個真正的內核虛擬地址, 是一個由諸如 vmalloc 的函數返回的地址 -- 就是, 一個映射到內核頁表中的虛擬地址. 本節的代碼來自 scullv, 這是如同 scullp 但是通過 vmalloc 分配它的存儲的模塊.</p>
+<p>大部分的 scullv 實現如同我們剛剛見到的 scullp, 除了沒有必要檢查控制內存分配的 order 參數. 這個的原因是 vmalloc 分配它的頁一次一個, 因為單頁分配比多頁分配更加可能成功. 因此, 分配級別問題不適用 vmalloc 分配的空間.</p>
+<p>此外, 在由 scullp 和 scullv 使用的 nopage 實現中只有一個不同. 記住, scullp 一旦它發現感興趣的頁, 將使用 virt_to_page 來獲得對應的 struct page 指針. 那個函數不使用內核虛擬地址, 但是. 相反, 你必須使用 mvalloc_to_page. 因此 scullv 版本的  nopage 的最後部分看來如此:</p>
+<pre class="programlisting">
+/*
+* After scullv lookup, "page" is now the address of the page
+* needed by the current process. Since it's a vmalloc address,
+* turn it into a struct page.
+*/
+page = vmalloc_to_page(pageptr);
+
+/* got it, now increment the count */
+get_page(page);
+if (type)
+        *type = VM_FAULT_MINOR;
+out:
+up(&amp;dev-&gt;sem);
+return page;
+</pre>
+<p>基於這個討論, 你可能也想映射由 ioremap 返回的地址到用戶空間. 但是, 那可能是一個錯誤; 來自 ioremap 的地址是特殊的並且不能作為正常的內核虛擬地址對待. 相反, 你應當使用 remap_pfn_range 來重新映射 I/O 內存區到用戶空間.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch15.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch15.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch15s03.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">第&#160;15&#160;章&#160;內存映射和 DMA &#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;15.3.&#160;進行直接 I/O</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch15s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:41 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

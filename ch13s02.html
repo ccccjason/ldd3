@@ -1,0 +1,110 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch13s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>13.2.&#160;USB 和 sysfs-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch13.html" title="第&#160;13&#160;章&#160;USB 驅動">
+<link rel="prev" href="ch13.html" title="第&#160;13&#160;章&#160;USB 驅動">
+<link rel="next" href="ch13s03.html" title="13.3.&#160;USB 的 Urbs">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">13.2.&#160;USB 和 sysfs</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch13.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;13&#160;章&#160;USB 驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch13s03.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="USBandSysfs.sect1"></a>13.2.&#160;USB 和 sysfs</h2></div></div></div>
+<p>由於單個 USB 物理設備的複雜性, 設備在 sysfs 中的表示也非常複雜. 物理 USB 設備(通過 struct usb_device 表示)和單個 USB 接口(由 struct usb_interface 表示)都作為單個設備出現在 sysfs . (這是因為這 2 個結構都包含一個 struct device結構). 例如, 對於一個簡單的只包含一個 USB 接口的 USB  鼠標, 下面的內容給這個設備的 sysfs 目錄樹:</p>
+<pre class="screen">
+/sys/devices/pci0000:00/0000:00:09.0/usb2/2-1
+|-- 2-1:1.0
+|  |-- bAlternateSetting  
+|  |-- bInterfaceClass  
+|  |-- bInterfaceNumber  
+|  |-- bInterfaceProtocol  
+|  |-- bInterfaceSubClass  
+|  |-- bNumEndpoints  
+|  |-- detach_state  
+|  |-- iInterface  
+|  `-- power  
+|  `-- state  
+|-- bConfigurationValue
+|-- bDeviceClass
+|-- bDeviceProtocol
+|-- bDeviceSubClass
+|-- bMaxPower
+|-- bNumConfigurations
+|-- bNumInterfaces
+|-- bcdDevice
+|-- bmAttributes
+|-- detach_state
+|-- devnum
+|-- idProduct
+|-- idVendor
+|-- maxchild
+|-- power
+| `-- state
+|-- speed
+`-- version
+</pre>
+<p>結構 usb_device 在樹中被表示在:</p>
+<pre class="screen">
+/sys/devices/pci0000:00/0000:00:09.0/usb2/2-1 
+</pre>
+<p>而鼠標的 USB 接口 - USB 鼠標設備驅動被綁定到的接口 - 位於目錄:</p>
+<pre class="screen">
+/sys/devices/pci0000:00/0000:00:09.0/usb2/2-1/2-1:1.0 
+</pre>
+<p>為幫助理解這個長設備路徑的含義, 我們描述內核如何標識 USB 設備.</p>
+<p>第一個 USB  設備是一個根集線器. 這是 USB 控制器, 常常包含在一個 PCI 設備中. 控制器的命名是由於它控制整個連接到它上面的 USB 總線. 控制器是一個 PCI 總線和 USB 總線之間的橋, 同時是總線上的第一個設備.</p>
+<p>所有的根集線器被 USB 核心安排了一個唯一的號. 在我們的例子裡, 根集線器稱為 usb2, 因為它是註冊到 USB 核心的第 2 個根集線器. 可包含在單個系統中在任何時間的根集線器的數目沒有限制.</p>
+<p>每個在 USB 總線上的設備採用根集線器的號作為它的名子的第一個數字. 緊跟著的是 - 字符和設備插入的端口號. 由於我們例子中的設備插在第一個端口, 一個 1 被添加到名子. 因此給主 USB 鼠標設備的名子是2-1. 因為這個 USB 設備包含一個接口, 那使得樹中的另一個設備被添加到 sysfs 路徑. 到此點, USB 接口的命名方法是設備名:在我們的例子, 是 2-1 接著一個分號和 USB 配置名, 接著一個句點和接口名. 因此對這個例子, 設備名是 2-1:1.0 因為它是第一個配置並且有接口號 0.</p>
+<p>總結, USB sysfs 設備命名方法是:</p>
+<pre class="screen">
+root_hub-hub_port:config.interface 
+</pre>
+<p>隨著設備在 USB 樹中進一步向下, 並且越來越多的 USB 集線器, 集線器端口號被添加到字符串中緊隨著鏈中之前的集線器端口號. 對一個 2 層的樹, 設備名看來像:</p>
+<pre class="screen">
+root_hub-hub_port-hub_port:config.interface 
+</pre>
+<p>如同可在之前的 USB 設備和接口目錄列表中見到的, 所有的 USB 特定信息可直接從 sysfs 獲得(例如, idVendor, idProduct, 和 bMaxPower 信息). 一個文件, bConfigrationValue, 可被寫入來改變激活的正被使用的 USB 配置. 這對有多個配置的設備是有用的, 當內核不能決定選擇什麼配置來正確操作設備. 許多 USB 貓需要有正確的配置值被寫到這個文件來使正確的 USB 驅動綁定到設備.</p>
+<p>sysfs 沒暴露一個 USB 設備的所有的不同部分,因為它停止在接口水平. 任何這個設備可能包含的預備配置都沒有展示, 連同關聯到接口的端點的細節. 這個信息可在 usbfs 文件系統中找到, 它加載在系統的 /proc/bus/usb/ 目錄. 文件 /proc/bus/usb/devices 展示了所有的在 sysfs 中暴露的信息, 連同所有的出現在系統中的 USB 設備的預備配置和端點信息. usbfs 也允許用戶空間程序直接對話 USB 設備, 這已使能了許多內核驅動被移出到用戶空間, 這裡容易維護和調試. USB 掃瞄器驅動是這個的一個好例子, 由於它不再在內核中出現, 它的功能現在包含在用戶空間的 SANE 庫程序中.</p>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch13.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch13.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch13s03.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">第&#160;13&#160;章&#160;USB 驅動&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;13.3.&#160;USB 的 Urbs</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch13s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

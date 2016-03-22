@@ -1,0 +1,67 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>5.2.&#160;並發和它的管理-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch05.html" title="第&#160;5&#160;章&#160;並發和競爭情況">
+<link rel="prev" href="ch05.html" title="第&#160;5&#160;章&#160;並發和競爭情況">
+<link rel="next" href="ch05s03.html" title="5.3.&#160;旗標和互斥體">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">5.2.&#160;並發和它的管理</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch05.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;5&#160;章&#160;並發和競爭情況</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch05s03.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="ConcurrencyandItsManagement.sect"></a>5.2.&#160;並發和它的管理</h2></div></div></div>
+<p>在現代 Linux 系統, 有非常多的並發源, 並且因此而來的可能競爭情況. 多個用戶空間進程在運行, 它們可能以令人驚訝的方式組合存取你的代碼.  SMP 系統能夠同時在不同處理器上執行你的代碼. 內核代碼是可搶佔的; 你的驅動代碼可能在任何時間失去處理器, 代替它的進程可能也在你的驅動中運行. 設備中斷是能夠導致你的代碼並發執行的異步事件. 內核也提供各種延遲代碼執行的機制, 例如 workqueue, tasklet, 以及定時器, 這些能夠使你的代碼在任何時間以一種與當前進程在做的事情無關的方式運行. 在現代的, 熱插拔的世界中, 你的設備可能在你使用它們的時候輕易地消失.</p>
+<p>避免競爭情況可能是一個令人害怕的工作. 在一個任何時候可能發生任何事的世界, 驅動程序員如何避免產生絕對的混亂? 事實證明, 大部分競爭情況可以避免, 通過一些想法, 內核並發控制原語, 以及幾個基本原則的應用. 我們會先從原則開始, 接著進入如何使用它們的細節中</p>
+<p>競爭情況來自對資源的共享存取的結果. 當 2 個執行的線路<sup>[<a name="id426884" href="#ftn.id426884">17</a>]</sup>有機會操作同一個數據結構(或者硬件資源), 混合的可能性就一直存在. 因此第一個經驗法則是在你設計驅動時在任何可能的時候記住避免共享的資源. 如果沒有並發存取, 就沒有競爭情況. 因此小心編寫的內核代碼應當有最小的共享. 這個想法的最明顯應用是避免使用全局變量. 如果你將一個資源放在多個執行線路能夠找到它的地方, 應當有一個很強的理由這樣做.</p>
+<p>事實是, 然而, 這樣的共享常常是需要的. 硬件資源是, 由於它們的特性, 共享的, 軟件資源也必須常常共享給多個線程. 也要記住全局變量遠遠不是共享數據的唯一方式; 任何時候你的代碼傳遞一個指針給內核的其他部分, 潛在地它創造了一個新的共享情形. 共享是生活的事實.</p>
+<p>這是資源共享的硬規則: 任何時候一個硬件或軟件資源被超出一個單個執行線程共享, 並且可能存在一個線程看到那個資源的不一致時, 你必須明確地管理對那個資源的存取. 在上面的 scull 例子, 這個情況在進程 B 看來是不一致的; 不知道進程 A 已經為( 共享的 ) 設備分配了內存, 它做它自己的分配並且覆蓋了 A 的工作. 在這個例子裡, 我們必須控制對 scull 數據結構的存取. 我們需要安排, 這樣代碼或者看到內存已經分配了, 或者知道沒有內存已經或者將要被其他人分配. 存取管理的常用技術是加鎖或者互斥 -- 確保在任何時間只有一個執行線程可以操作一個共享資源. 本章剩下的大部分將專門介紹加鎖.</p>
+<p>然而, 首先, 我們必須簡短考慮一下另一個重要規則. 當內核代碼創建一個會被內核其他部分共享的對象時, 這個對象必須一直存在(並且功能正常)到它知道沒有對它的外部引用存在為止. scull 使它的設備可用的瞬間, 它必須準備好處理對那些設備的請求. 並且 scull 必須一直能夠處理對它的設備的請求直到它知道沒有對這些設備的引用(例如打開的用戶空間文件)存在. 2 個要求出自這個規則: 除非它處於可以正確工作的狀態, 不能有對象能對內核可用, 對這樣的對象的引用必須被跟蹤. 在大部分情況下, 你將發現內核為你處理引用計數, 但是常常有例外.</p>
+<p>遵照上面的規則需要計劃和對細節小心注意. 容易被對資源的並發存取而吃驚, 你事先並沒有認識到被共享. 通過一些努力, 然而, 大部分競爭情況能夠在它們咬到你或者你的用戶前被消滅.</p>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id426884" href="#id426884">17</a>] </sup>本章的意圖, 一個執行"線程"是任何運行代碼的上下文. 每個進程顯然是一個執行線程, 但是一個中斷處理也是, 或者其他響應一個異步內核事件的代碼.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch05.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch05.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch05s03.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">第&#160;5&#160;章&#160;並發和競爭情況&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;5.3.&#160;旗標和互斥體</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

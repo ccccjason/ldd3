@@ -1,0 +1,105 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch17s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:43 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>17.6.&#160;報文接收-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch17.html" title="第&#160;17&#160;章&#160;網絡驅動">
+<link rel="prev" href="ch17s05.html" title="17.5.&#160;報文傳送">
+<link rel="next" href="ch17s07.html" title="17.7.&#160;中斷處理">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">17.6.&#160;報文接收</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch17s05.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;17&#160;章&#160;網絡驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch17s07.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="PacketReception"></a>17.6.&#160;報文接收</h2></div></div></div>
+<p>從網絡上接收報文比發送它要難一些, 因為必須分配一個 sk_buff 並從一個原子性上下文中遞交給上層. 網絡驅動可以實現 2 種報文接收的模式: 中斷驅動和查詢. 大部分驅動採用中斷驅動技術, 這是我們首先要涉及的. 有些高帶寬適配卡的驅動也可能採用查詢技術; 我們在"接收中斷緩解"一節中瞭解這個方法.</p>
+<p>snull 的實現將"硬件"細節從設備獨立的常規事務中分離. 因此, 函數 snull_rx 在硬件收到報文後從 snull 的"中斷"處理中調用, 並且報文現在已經在計算機的內存中. snull_rx 收到一個數據指針和報文長度; 它唯一的責任是發走這個報文和運行附加信息給上層的網絡代碼. 這個代碼獨立於獲得數據指針和長度的方式.</p>
+<pre class="programlisting">
+void snull_rx(struct net_device *dev, struct snull_packet *pkt)
+{
+    struct sk_buff *skb;
+    struct snull_priv *priv = netdev_priv(dev);
+    /*
+    *
+    The packet has been retrieved from the transmission
+
+    *
+    medium. Build an skb around it, so upper layers can handle it
+    */
+    skb = dev_alloc_skb(pkt-&gt;datalen + 2);
+    if (!skb) {
+
+        if (printk_ratelimit())
+            printk(KERN_NOTICE "snull rx: low on mem - packet dropped\n"); priv-&gt;stats.rx_dropped++; goto out;
+    }
+    memcpy(skb_put(skb, pkt-&gt;datalen), pkt-&gt;data, pkt-&gt;datalen);
+
+    /* Write metadata, and then pass to the receive level */
+    skb-&gt;dev = dev;
+    skb-&gt;protocol = eth_type_trans(skb, dev);
+    skb-&gt;ip_summed = CHECKSUM_UNNECESSARY; /* don't check it */
+    priv-&gt;stats.rx_packets++;
+    priv-&gt;stats.rx_bytes += pkt-&gt;datalen;
+    netif_rx(skb);
+out:
+    return;
+}
+</pre>
+<p>這個函數足夠普通以作為任何網絡驅動的一個模板, 但是在你有信心重用這個代碼段前需要一些解釋.</p>
+<p>第一步是分配一個緩存區來保存報文. 注意緩存分配函數 (dev_alloc_skb) 需要知道數據長度. 函數用這些信息來給緩存區分配空間. dev_alloc_skb 使用 atomic 優先級調用 kmalloc , 因此它可以在中斷時間安全使用. 內核提供了其他接口給 socket 緩存分配, 但是它們不值得在此介紹; socket 緩存在"socket 緩存"一節中詳細介紹.</p>
+<p>當然, dev_alloc_skb 的返回值必須檢查, snull 這樣做了. 我們調用 printk_ratelimit 在抱怨失敗之前, 但是. 每秒鐘產生成百上千的控制台消息是完全陷死系統和隱藏問題的真正源頭的好方法; printk_ratelimit 幫助阻止這個問題, 通過在有太多輸出到了控制台時返回 0, 事情需要慢下來一點.</p>
+<p>一旦有一個有效的 skb 指針, 通過調用 memcpy, 報文數據被拷貝到緩存區; skb_put 函數更新緩存中的數據末尾指針並返回指向新建空間的指針.</p>
+<p>如果你在編寫一個高性能驅動, 為一個可以進行完全總線佔據 I/O 的接口, 一個可能的優化值得在此考慮下. 一些驅動在報文接收前分配 sokcet 緩存, 接著使接口將報文數據直接放入 socket 緩存空間. 網絡層通過在可 DMA 的空間( 如果你的設備設置了 NETIF_F_HIGHDMA 標誌, 這個空間有可能在高端內存)中分配所有 socket 緩存來配合這個策略. 這樣避免了單獨的填充 socket 緩存的拷貝操作, 但是需要小心緩存區的大小, 因為你無法提前知道進來的報文大小. change_mtu 方法的實現在這種情況下也重要, 因為它允許驅動對最大報文大小改變作出響應.</p>
+<p>網絡層在搞懂報文的意思前需要清楚一些事情. 為此, dev 和 protocol 成員必須在緩存向上傳遞前賦值. 以太網支持代碼輸出一個幫助函數( eth_type_trans ), 它發現一個合適值來賦給 protocol. 接著我們需要指出校驗和要如何進行或者已經在報文上完成( snull 不需要做任何校驗和 ). 對於 skb-&gt;ip_summed 可能的策略有:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>CHECKSUM_HW</span></span></dt>
+<dd><p>設備已經在硬件裡做了校驗. 一個硬件校驗的例子使 APARC HME 接口.</p></dd>
+<dt><span class="term"><span>CHECKSUM_NONE</span></span></dt>
+<dd><p>校驗和還沒被驗證, 必須由系統軟件來完成這個任務. 這個是缺省的, 在新分配的緩存中.</p></dd>
+<dt><span class="term"><span>CHECKSUM_UNNECESSARY</span></span></dt>
+<dd><p>不要做任何校驗. 這是 snull 和 環回接口的策略.</p></dd>
+</dl></div>
+<p>你可能奇怪為什麼校驗和狀態必須在這裡指定, 當我們已經在我們的 net_device 結構的特性成員中設置了標誌. 答案是特性標誌告訴內核我們的設備如何對待外出的報文. 它不用於進入的報文, 相反, 進入報文必須單獨標記.</p>
+<p>最後, 驅動更新它的統計計數來記錄收到一個報文。 統計結構由幾個成員組成; 最重要的是 rx_packet, rx_bytes, 和 tx_bytes, 分別含有收到的報文數目, 發送的數目, 和發送的字節總數. 所有的成員在"統計信息"一節中完全描述.</p>
+<p>報文接收的最後一步由 netif_rx 進行, 它遞交 socket 緩存給上層. 實際上 netif_rx 返回一個整數; NET_RX_SUCCESS(0) 意思是報文成功接收; 任何其他值指示錯誤. 有 3 個返回值 (NET_RX_CN_LOW, NET_RX_CN_MOD, 和 NET_RX_CN_HIGH )指出網絡子系統的遞增的擁塞級別; NET_RX_DROP 意思是報文被丟棄. 一個驅動在擁塞變高時可能使用這些值來停止輸送報文給內核, 但是, 實際上, 大部分驅動忽略從 netif_rx 的返回值. 如果你在編寫一個高帶寬設備的驅動, 並且希望正確處理擁塞, 最好的辦法是實現 NAPI, 我們在快速討論中斷處理後討論它.</p>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch17s05.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch17.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch17s07.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">17.5.&#160;報文傳送&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;17.7.&#160;中斷處理</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch17s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:43 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

@@ -1,0 +1,98 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch10.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;10&#160;章&#160;中斷處理-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch09s05.html" title="9.5.&#160;快速參考">
+<link rel="next" href="ch10s02.html" title="10.2.&#160;安裝一個中斷處理">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;10&#160;章&#160;中斷處理</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch09s05.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch10s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="InterruptHandling.chap"></a>第&#160;10&#160;章&#160;中斷處理</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch10.html#PreparingtheParallelPort.sect">10.1. 準備並口</a></span></dt>
+<dt><span class="sect1"><a href="ch10s02.html">10.2. 安裝一個中斷處理</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch10s02.html#TheprocInterface.sect">10.2.1. /proc 接口</a></span></dt>
+<dt><span class="sect2"><a href="ch10s02.html#AutodetectingtheIRQNumber.sect">10.2.2. 自動檢測 IRQ 號</a></span></dt>
+<dt><span class="sect2"><a href="ch10s02.html#FastandSlowHandlers.sect">10.2.3. 快速和慢速處理</a></span></dt>
+<dt><span class="sect2"><a href="ch10s02.html#ImplementingaHandler.sect">10.2.4. 實現一個處理</a></span></dt>
+<dt><span class="sect2"><a href="ch10s02.html#HandlerArgumentsandReturnValue.sect">10.2.5. 處理者的參數和返回值</a></span></dt>
+<dt><span class="sect2"><a href="ch10s02.html#EnablingandDisablingInterrupts.sect">10.2.6. 使能和禁止中斷</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch10s03.html">10.3. 前和後半部</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch10s03.html#Tasklet.sect">10.3.1. Tasklet 實現</a></span></dt>
+<dt><span class="sect2"><a href="ch10s03.html#Workqueues.sect">10.3.2. 工作隊列</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch10s04.html">10.4. 中斷共享</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch10s04.html#InstallingaSharedHandler.sect">10.4.1. 安裝一個共享的處理者</a></span></dt>
+<dt><span class="sect2"><a href="ch10s04.html#RunningtheHandler.sect">10.4.2. 運行處理者</a></span></dt>
+<dt><span class="sect2"><a href="ch10s04.html#TheprocInterfaceandShardInterrupts.sect">10.4.3. /proc 接口和共享中斷</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch10s05.html">10.5. 中斷驅動 I/O</a></span></dt>
+<dd><dl><dt><span class="sect2"><a href="ch10s05.html#AWriteBufferingExample.sect">10.5.1. 一個寫緩存例子</a></span></dt></dl></dd>
+<dt><span class="sect1"><a href="ch10s06.html">10.6. 快速參考</a></span></dt>
+</dl>
+</div>
+<p>儘管一些設備可只使用它們的 I/O 區來控制, 大部分真實的設備比那個要複雜點. 設備不得不和外部世界打交道, 常常包括諸如旋轉的磁盤, 移動的磁帶, 連到遠處的線纜, 等等. 很多必須在一個時間片中完成, 不同於, 並且遠慢於處理器. 因為幾乎一直是不希望使處理器等待外部事件, 對於設備必須有一種方法使處理器知道有事情發生了.</p>
+<p>當然, 那種方法是中斷. 一個中斷不過是一個硬件在它需要處理器的注意時能夠發出的信號. Linux 處理中斷非常類似它處理用戶空間信號的方式. 對大部分來說, 一個驅動只需要為它的設備中斷註冊一個處理函數, 並且當它們到來時正確處理它們. 當然, 在這個簡單圖像之下有一些複雜; 特別地, 中斷處理有些受限於它們能夠進行的動作, 這是它們如何運行而導致的結果.</p>
+<p>沒有一個真實的硬件設備來產生中斷, 就難演示中斷的使用. 因此, 本章使用的例子代碼使用並口工作. 這些端口在現代硬件上開始變得稀少, 但是, 運氣地, 大部分人仍然能夠有一個有可用的端口的系統. 我們將使用來自上一章的簡短模塊; 添加一小部分它能夠產生並處理來自並口的中斷. 模塊的名子, short, 實際上意味著 short int ( 它是 C, 對不?), 來提醒我們它處理中斷.</p>
+<p>但是, 在我們進入主題之前, 是時候提出一個注意事項. 中斷處理, 由於它們的特性, 與其他的代碼並行地運行. 因此, 它們不可避免地引起並發問題和對數據結構和硬件的競爭. 如果你屈服於誘惑以越過第 5 章的討論, 我們理解. 但是我們也建議你轉回去並且現在看一下. 一個堅實的並發控制技術的理解是重要的, 在使用中斷時.</p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="PreparingtheParallelPort.sect"></a>10.1.&#160;準備並口</h2></div></div></div>
+<p>儘管並口簡單, 它能夠觸發中斷. 這個能力被打印機用來通知 lp 驅動它準備好接收緩存中的下一個字符.</p>
+<p>如同大部分設備, 並口實際上不產生中斷, 在它被指示這樣作之前; 並口標準規定設置 port 2 (0x37a, 0x27a, 或者任何)的 bit 4 就使能中斷報告. short 在模塊初始化時進行一個簡單的 outb 調用來設置這個位.</p>
+<p>一旦中斷使能, 任何時候在管腳 10 (所謂的 ACK 位)上的電信號從低變到高, 並口產生一個中斷. 最簡單的方法來強制接口產生中斷( 沒有掛一個打印機到端口 )是連接並口連接器的管腳 9 和 管腳 10. 一根短線, 插到你的系統後面的並口連接器的合適的孔中, 就建立這個連接. 並口外面的管腳圖示於圖<a href="ch09s03.html#ldd3-9-1.fig" title="圖&#160;9.1.&#160;並口的管腳">並口的管腳</a></p>
+<p>管腳 9 是並口數據字節的最高位. 如果你寫二進制數據到 /dev/short0, 你產生幾個中斷. 然而, 寫 ASCII 文本到這個端口不會產生任何中斷, 因為 ASCII 字符集沒有最高位置位的項.</p>
+<p>如果你寧願避免連接管腳到一起, 而你手上確實有一台打印機, 你可用使用一個真正的打印機來運行例子中斷處理, 如同下面展示的. 但是, 注意我們介紹的探測函數依賴管腳 9 和管腳 10 之間的跳線在位置上, 並且你需要它使用你的代碼來試驗探測.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch09s05.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch10s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">9.5.&#160;快速參考&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;10.2.&#160;安裝一個中斷處理</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch10.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

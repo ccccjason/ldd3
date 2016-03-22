@@ -1,0 +1,117 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;3&#160;章&#160;字符驅動-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch02s10.html" title="2.10.&#160;快速參考">
+<link rel="next" href="ch03s02.html" title="3.2.&#160;主次編號">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;3&#160;章&#160;字符驅動</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch02s10.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch03s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="CharDrivers.chapter"></a>第&#160;3&#160;章&#160;字符驅動</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch03.html#TheDesignofscull.sect">3.1. scull 的設計</a></span></dt>
+<dt><span class="sect1"><a href="ch03s02.html">3.2. 主次編號</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch03s02.html#TheInternalRepresentationofDeviceNumber.sect">3.2.1. 設備編號的內部表示</a></span></dt>
+<dt><span class="sect2"><a href="ch03s02.html#AllocatingandFreeingDeviceNumbers.sect">3.2.2. 分配和釋放設備編號</a></span></dt>
+<dt><span class="sect2"><a href="ch03s02.html#DynamicAllocaionofMajorNumbers.sect">3.2.3. 主編號的動態分配</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch03s03.html">3.3. 一些重要數據結構</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch03s03.html#FileOperation.sect">3.3.1. 文件操作</a></span></dt>
+<dt><span class="sect2"><a href="ch03s03.html#ThefileStructure.sect">3.3.2. 文件結構</a></span></dt>
+<dt><span class="sect2"><a href="ch03s03.html#TheinodeStructure.sect">3.3.3. inode 結構</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch03s04.html">3.4. 字符設備註冊</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch03s04.html#DeviceRegistrationinscull.sect">3.4.1. scull 中的設備註冊</a></span></dt>
+<dt><span class="sect2"><a href="ch03s04.html#TheOlderWay.sect">3.4.2. 老方法</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch03s05.html">3.5. open 和 release</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch03s05.html#TheopenMethod.sect">3.5.1. open 方法</a></span></dt>
+<dt><span class="sect2"><a href="ch03s05.html#ThereleaseMethod.sect">3.5.2. release 方法</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch03s06.html">3.6. scull 的內存使用</a></span></dt>
+<dt><span class="sect1"><a href="ch03s07.html">3.7. 讀和寫</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch03s07.html#ThereadMethod.sect">3.7.1. read 方法</a></span></dt>
+<dt><span class="sect2"><a href="ch03s07.html#ThewriteMethod.sect">3.7.2. write 方法</a></span></dt>
+<dt><span class="sect2"><a href="ch03s07.html#readvandwritev.sect">3.7.3. readv 和 writev</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch03s08.html">3.8. 使用新設備</a></span></dt>
+<dt><span class="sect1"><a href="ch03s09.html">3.9. 快速參考</a></span></dt>
+</dl>
+</div>
+<p>本章的目的是編寫一個完整的字符設備驅動. 我們開發一個字符驅動是因為這一類適合大部分簡單硬件設備. 字符驅動也比塊驅動易於理解(我們在後續章節接觸). 我們的最終目的是編寫一個模塊化的字符驅動, 但是我們不會在本章討論模塊化的事情.</p>
+<p>貫串本章, 我們展示從一個真實設備驅動提取的代碼片段: scull( Simple Character Utility for Loading Localities). scull 是一個字符驅動, 操作一塊內存區域好像它是一個設備. 在本章, 因為 scull 的這個怪特性, 我們可互換地使用設備這個詞和"scull使用的內存區".</p>
+<p>scull 的優勢在於它不依賴硬件. scull 只是操作一些從內核分配的內存. 任何人都可以編譯和運行 scull, 並且 scull 在 Linux 運行的體系結構中可移植. 另一方面, 這個設備除了演示內核和字符驅動的接口和允許用戶運行一些測試之外, 不做任何有用的事情.</p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="TheDesignofscull.sect"></a>3.1.&#160;scull 的設計</h2></div></div></div>
+<p>編寫驅動的第一步是定義驅動將要提供給用戶程序的能力(機制).因為我們的"設備"是計算機內存的一部分, 我們可自由做我們想做的事情. 它可以是一個順序的或者隨機存取的設備, 一個或多個設備, 等等.</p>
+<p>為使 scull 作為一個模板來編寫真實設備的真實驅動, 我們將展示給你如何在計算機內存上實現幾個設備抽像, 每個有不同的個性.</p>
+<p>scull 源碼實現下面的設備. 模塊實現的每種設備都被引用做一種類型.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>scull0 到 scull3</span></span></dt>
+<dd><p>4 個設備, 每個由一個全局永久的內存區組成. 全局意味著如果設備被多次打開, 設備中含有的數據由所有打開它的文件描述符共享. 永久意味著如果設備關閉又重新打開, 數據不會丟失. 這個設備用起來有意思, 因為它可以用慣常的命令來存取和測試, 例如 cp, cat, 以及 I/O 重定向.</p></dd>
+<dt><span class="term"><span>scullpipe0 到 scullpipe3</span></span></dt>
+<dd><p>4 個 FIFO (先入先出) 設備, 行為象管道. 一個進程讀的內容來自另一個進程所寫的. 如果多個進程讀同一個設備, 它們競爭數據. scullpipe 的內部將展示阻塞讀寫和非阻塞讀寫如何實現, 而不必採取中斷. 儘管真實的驅動使用硬件中斷來同步它們的設備, 阻塞和非阻塞操作的主題是重要的並且與中斷處理是分開的.(在第 10 章涉及).</p></dd>
+<dt><span class="term"><span>scullsingle</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>scullpriv</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>sculluid</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>scullwuid</span></span></dt>
+<dd><p>這些設備與 scull0 相似, 但是在什麼時候允許打開上有一些限制. 第一個( snullsingle) 只允許一次一個進程使用驅動, 而 scullpriv 對每個虛擬終端(或者 X 終端會話)是私有的, 因為每個控制台/終端上的進程有不同的內存區. sculluid 和 scullwuid 可以多次打開, 但是一次只能是一個用戶; 前者返回一個"設備忙"錯誤, 如果另一個用戶鎖著設備, 而後者實現阻塞打開. 這些 scull 的變體可能看來混淆了策略和機制, 但是它們值得看看, 因為一些實際設備需要這類管理.</p></dd>
+</dl></div>
+<p>每個 scull 設備演示了驅動的不同特色, 並且呈現了不同的難度. 本章涉及 scull0 到 scull3 的內部; 更高級的設備在第 6 章涉及. scullpipe 在"一個阻塞 I/O 例子"一節中描述, 其他的在"設備文件上的存取控制"中描述.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch02s10.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch03s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">2.10.&#160;快速參考&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;3.2.&#160;主次編號</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

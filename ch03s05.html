@@ -1,0 +1,127 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch03s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>3.5.&#160;open 和 release-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch03.html" title="第&#160;3&#160;章&#160;字符驅動">
+<link rel="prev" href="ch03s04.html" title="3.4.&#160;字符設備註冊">
+<link rel="next" href="ch03s06.html" title="3.6.&#160;scull 的內存使用">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">3.5.&#160;open 和 release</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch03s04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;3&#160;章&#160;字符驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch03s06.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="openandrelease.sect"></a>3.5.&#160;open 和 release</h2></div></div></div>
+<p>到此我們已經快速瀏覽了這些成員, 我們開始在真實的 scull 函數中使用它們.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheopenMethod.sect"></a>3.5.1.&#160;open 方法</h3></div></div></div>
+<p>open 方法提供給驅動來做任何的初始化來準備後續的操作. 在大部分驅動中, open 應當進行下面的工作:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>檢查設備特定的錯誤(例如設備沒準備好, 或者類似的硬件錯誤</p></li>
+<li><p>如果它第一次打開, 初始化設備</p></li>
+<li><p>如果需要, 更新 f_op 指針.</p></li>
+<li><p>分配並填充要放進 filp-&gt;private_data 的任何數據結構</p></li>
+</ul></div>
+<p>但是, 事情的第一步常常是確定打開哪個設備. 記住 open 方法的原型是:</p>
+<pre class="programlisting">
+int (*open)(struct inode *inode, struct file *filp);
+</pre>
+<p>inode 參數有我們需要的信息,以它的 i_cdev 成員的形式, 裡面包含我們之前建立的 cdev 結構. 唯一的問題是通常我們不想要 cdev 結構本身, 我們需要的是包含 cdev 結構的 scull_dev 結構. C 語言使程序員玩弄各種技巧來做這種轉換; 但是, 這種技巧編程是易出錯的, 並且導致別人難於閱讀和理解代碼. 幸運的是, 在這種情況下, 內核 hacker 已經為我們實現了這個技巧, 以 container_of 宏的形式, 在 &lt;linux/kernel.h&gt; 中定義:</p>
+<pre class="programlisting">
+container_of(pointer, container_type, container_field); 
+</pre>
+<p>這個宏使用一個指向 container_field 類型的成員的指針, 它在一個 container_type 類型的結構中, 並且返回一個指針指向包含結構. 在 scull_open, 這個宏用來找到適當的設備結構:</p>
+<pre class="programlisting">
+struct scull_dev *dev; /* device information */ 
+dev = container_of(inode-&gt;i_cdev, struct scull_dev, cdev);
+filp-&gt;private_data = dev; /* for other methods */
+</pre>
+<p>一旦它找到 scull_dev 結構, scull 在文件結構的 private_data 成員中存儲一個它的指針, 為以後更易存取.</p>
+<p>識別打開的設備的另外的方法是查看存儲在 inode 結構的次編號. 如果你使用 register_chrdev 註冊你的設備, 你必須使用這個技術. 確認使用 iminor 從 inode 結構中獲取次編號, 並且確定它對應一個你的驅動真正準備好處理的設備.</p>
+<p>scull_open 的代碼(稍微簡化過)是:</p>
+<pre class="programlisting">
+int scull_open(struct inode *inode, struct file *filp)
+{
+        struct scull_dev *dev; /* device information */
+        dev = container_of(inode-&gt;i_cdev, struct scull_dev, cdev);
+        filp-&gt;private_data = dev; /* for other methods */
+
+        /* now trim to 0 the length of the device if open was write-only */
+        if ( (filp-&gt;f_flags &amp; O_ACCMODE) == O_WRONLY)
+        {
+                scull_trim(dev); /* ignore errors */
+        }
+        return 0; /* success */
+}
+</pre>
+<p>代碼看來相當稀疏, 因為在調用 open 時它沒有做任何特別的設備處理. 它不需要, 因為 scull 設備設計為全局的和永久的. 特別地, 沒有如"在第一次打開時初始化設備"等動作, 因為我們不為 scull 保持打開計數.</p>
+<p>唯一在設備上的真實操作是當設備為寫而打開時將它截取為長度為 0. 這樣做是因為, 在設計上, 用一個短的文件覆蓋一個 scull 設備導致一個短的設備數據區. 這類似於為寫而打開一個常規文件, 將其截短為 0. 如果設備為讀而打開, 這個操作什麼都不做.</p>
+<p>在我們查看其他 scull 特性的代碼時將看到一個真實的初始化如何起作用的.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ThereleaseMethod.sect"></a>3.5.2.&#160;release 方法</h3></div></div></div>
+<p>release 方法的角色是 open 的反面. 有時你會發現方法的實現稱為 device_close, 而不是 device_release. 任一方式, 設備方法應當進行下面的任務:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>釋放 open 分配在 filp-&gt;private_data 中的任何東西</p></li>
+<li><p>在最後的 close 關閉設備</p></li>
+</ul></div>
+<p>scull 的基本形式沒有硬件去關閉, 因此需要的代碼是最少的:<sup>[<a name="id415980" href="#ftn.id415980">12</a>]</sup></p>
+<pre class="programlisting">
+int scull_release(struct inode *inode, struct file *filp)
+{
+ return 0;
+}
+</pre>
+<p>你可能想知道當一個設備文件關閉次數超過它被打開的次數會發生什麼. 畢竟, dup 和 fork 系統調用不調用 open 來創建打開文件的拷貝; 每個拷貝接著在程序終止時被關閉. 例如, 大部分程序不打開它們的 stdin 文件(或設備), 但是它們都以關閉它結束. 當一個打開的設備文件已經真正被關閉時驅動如何知道?</p>
+<p>答案簡單: 不是每個 close 系統調用引起調用 release 方法. 只有真正釋放設備數據結構的調用會調用這個方法 -- 因此得名. 內核維持一個文件結構被使用多少次的計數. fork 和 dup 都不創建新文件(只有 open 這樣); 它們只遞增正存在的結構中的計數. close 系統調用僅在文件結構計數掉到 0 時執行 release 方法, 這在結構被銷毀時發生. release 方法和 close 系統調用之間的這種關係保證了你的驅動一次 open 只看到一次 release.</p>
+<p>注意, flush 方法在每次應用程序調用 close 時都被調用. 但是, 很少驅動實現 flush, 因為常常在 close 時沒有什麼要做, 除非調用 release.</p>
+<p>如你會想到的, 前面的討論即便是應用程序沒有明顯地關閉它打開的文件也適用: 內核在進程 exit 時自動關閉了任何文件, 通過在內部使用 close 系統調用.</p>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id415980" href="#id415980">12</a>] </sup>其他風味的設備由不同的函數關閉, 因為 scull_open 為每個設備替換了不同的 filp-&gt;f_op. 我們在介紹每種風味時再討論它們.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch03s04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch03.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch03s06.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">3.4.&#160;字符設備註冊&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;3.6.&#160;scull 的內存使用</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch03s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

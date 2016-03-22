@@ -1,0 +1,174 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch13.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;13&#160;章&#160;USB 驅動-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch12s08.html" title="12.8.&#160;快速參考">
+<link rel="next" href="ch13s02.html" title="13.2.&#160;USB 和 sysfs">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;13&#160;章&#160;USB 驅動</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch12s08.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch13s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="USBDrivers.chap"></a>第&#160;13&#160;章&#160;USB 驅動</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch13.html#USBDeviceBasics.sect1">13.1. USB 設備基礎知識</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch13.html#Endpoints.sect2">13.1.1. 端點</a></span></dt>
+<dt><span class="sect2"><a href="ch13.html#Interfaces.sect2">13.1.2. 接口</a></span></dt>
+<dt><span class="sect2"><a href="ch13.html#Congurations.sect2">13.1.3. 配置</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch13s02.html">13.2. USB 和 sysfs</a></span></dt>
+<dt><span class="sect1"><a href="ch13s03.html">13.3. USB 的 Urbs</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch13s03.html#structurb.sect2">13.3.1. 結構 struct urb</a></span></dt>
+<dt><span class="sect2"><a href="ch13s03.html#CreatingandDestroyingUrbs.sect2">13.3.2. 創建和銷毀 urb</a></span></dt>
+<dt><span class="sect2"><a href="ch13s03.html#SubmittingUrbs.sect2">13.3.3. 提交 urb</a></span></dt>
+<dt><span class="sect2"><a href="ch13s03.html#CompletingUrbsTheCompletionCallbackHandler.sect2">13.3.4. 完成 urb: 完成回調處理者</a></span></dt>
+<dt><span class="sect2"><a href="ch13s03.html#CancelingUrbs.sect2">13.3.5. 取消 urb</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch13s04.html">13.4. 編寫一個 USB 驅動</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch13s04.html#WhatDevicesDoestheDriverSupport.sect2">13.4.1. 驅動支持什麼設備</a></span></dt>
+<dt><span class="sect2"><a href="ch13s04.html#RegisteringaUSBDriver.sect2">13.4.2. 註冊一個 USB 驅動</a></span></dt>
+<dt><span class="sect2"><a href="ch13s04.html#SubmittingandControllingaUrb.sect2">13.4.3. 提交和控制一個 urb</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch13s05.html">13.5. 無 urb 的 USB 傳送</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch13s05.html#usb_bulk_msg.sect2">13.5.1. usb_bulk_msg 接口</a></span></dt>
+<dt><span class="sect2"><a href="ch13s05.html#usb_control_msg.sect2">13.5.2. usb_control_msg 接口</a></span></dt>
+<dt><span class="sect2"><a href="ch13s05.html#OtherUSBDataFunctions.sect2">13.5.3. 使用 USB 數據函數</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch13s06.html">13.6. 快速參考</a></span></dt>
+</dl>
+</div>
+<p>通用串行總線(USB)是一個在主機和許多外設之間的連接. 最初它被創建來替代許多慢速和不同的總線-並口, 串口, 和鍵盤連接--有一個單個的所有設備都可以連接的總線類型.<sup>[<a name="id473861" href="#ftn.id473861">45</a>]</sup> USB 已經成長超出了這些慢速連接並且現在支持幾乎每種可以連接到 PC 的設備. USB 規範的最新版本增加了高速連接, 理論上到 480 MBps.</p>
+<p>拓撲結構上, 一個 USB 子系統沒有如同一個總線一樣分佈; 它更多是一個樹, 有幾個點對點連接. 這些連接是 4-線 電纜(地, 電源, 和 2 個信號線)來連接一個設備和一個集線器, 如同雙絞線以太網. USB 主控制器負責詢問每個 USB 設備是否它有數據發送. 由於這個拓撲關係, 一個 USB 設備在沒有首先被主控制器詢問時從不啟動發送數據. 這個配置允許一個非常容易即插即用的系統, 這樣各種設備可自動被主機配置.</p>
+<p>在技術層面這個總線是非常簡單的, 因為它是一個單主實現, 其中主機查詢各種外設. 除了這個固有的限制, 這個總線有一些有趣的特性, 例如一個設備能夠請求一個固定的數據傳送帶寬, 為了可靠地支持視頻和音頻 I/O. 另一個重要的特性是它只作為設備和主機之間的一個通訊通道, 對它傳遞的數據沒有特殊的含義和結構要求.</p>
+<p>實際上, 有一些結構, 但是它大部分精簡為適應一個預先定義的類別: 例如, 一個鍵盤不會分配帶寬, 而一些視頻攝像頭會.</p>
+<p>USB 協議規範定義了一套標準, 任何特定類型的設備都可以遵循. 如果一個設備遵循這個標準, 那麼給那個設備的一個特殊的驅動就不必了. 這些不同的類型稱為類, 並且包含如同存儲設備, 鍵盤, 鼠標, 遊戲桿, 網絡設備, 和貓. 其他不適合這些類的設備需要一個特殊的供應商-特定的驅動給這些特別的設備. 視頻設備和 USB-到-串口 設備是一個好的例子, 這裡沒有定義好的標準, 並且需要一個驅動給每個來自不同製造商的不同的設備.</p>
+<p>這些特性, 連同固有的設計上的熱插拔能力, 使 USB 稱為一個方便的, 低成本的機制來連接(和去連接)多個設備到計算機, 而不必關機, 開盒子, 並且旋開螺釘和電線.</p>
+<p>Linux 內核支持 2 類 USB 驅動: 位於主機系統的驅動和位於設備的驅動. 給主機系統的 USB 驅動控制插入其中的 USB 設備, 從主機的觀點看(一個通常的 USB 主機是一個桌面計算機). 在設備中的 USB 驅動, 控制單個設備如何作為一個 USB 設備看待主機系統. 由於術語" USB 設備驅動"是非常迷惑, USB 開發者已經創建了術語" USB 器件驅動"來描述控制一個連接到計算機的 USB 設備的驅動(記住 Linux 也運行在這些小的嵌入式的設備中). 本章詳述了運行在一台桌面計算機上的 USB 系統如何工作的. USB 器件驅動此時超出了本書的範圍.</p>
+<p>如同圖<a href="ch13.html#ldd3-13-1.fig" title="圖&#160;13.1.&#160;USB 驅動概覽">USB 驅動概覽</a>所示, USB 驅動位於不同的內核子系統(塊, 網絡, 字符, 等等)和硬件控制器之間. USB 核心提供了一個接口給 USB 驅動用來存取和控制 USB 硬件, 而不必擔心出現在系統中的不同的 USB 硬件控制器.</p>
+<div class="figure">
+<a name="ldd3-13-1.fig"></a><p class="title"><b>圖&#160;13.1.&#160;USB 驅動概覽</b></p>
+<div><img src="images/snagitldd3/ldd3-13-1.png" alt="USB 驅動概覽"></div>
+</div>
+<div class="figure">
+<a name="ldd3-13-2.fig"></a><p class="title"><b>圖&#160;13.2.&#160;USB 設備概覽</b></p>
+<div><img src="images/snagitldd3/ldd3-13-2.png" alt="USB 設備概覽"></div>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="USBDeviceBasics.sect1"></a>13.1.&#160;USB 設備基礎知識</h2></div></div></div>
+<p>一個 USB 設備是一個非常複雜的事物, 如同在官方的 USB 文檔(可從 http://www.usb.org 中得到)中描述的. 幸運的是, Linux 提供了一個子系統稱為 USB 核, 來處理大部分複雜的工作. 這一章描述驅動和 USB 核之間的交互. 圖<a href="ch13.html#ldd3-13-2.fig" title="圖&#160;13.2.&#160;USB 設備概覽">USB 設備概覽</a>顯示了 USB 設備如何包含配置, 接口, 和端點, 以及 USB 驅動如何綁定到 USB 接口, 而不是整個 USB 設備.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Endpoints.sect2"></a>13.1.1.&#160;端點</h3></div></div></div>
+<p>USB 通訊的最基本形式是通過某些稱為 端點 的. 一個 USB 端點只能在一個方向承載數據, 或者從主機到設備(稱為輸出端點)或者從設備到主機(稱為輸入端點). 端點可看作一個單向的管道.</p>
+<p>一個 USB 端點可是 4 種不同類型的一種, 它來描述數據如何被傳送:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>CONTROL </span></span></dt>
+<dd><p>控制端點被用來允許對 USB 設備的不同部分存取. 通常用作配置設備, 獲取關於設備的信息, 發送命令到設備, 或者獲取關於設備的狀態報告. 這些端點在尺寸上常常較小. 每個 USB 設備有一個控制端點稱為"端點 0", 被 USB 核用來在插入時配置設備. 這些傳送由 USB 協議保證來總有足夠的帶寬使它到達設備.</p></dd>
+<dt><span class="term"><span>INTERRUPT </span></span></dt>
+<dd><p>中斷端點傳送小量的數據, 以固定的速率在每次 USB 主請求設備數據時. 這些端點對 USB 鍵盤和鼠標來說是主要的傳送方法. 它們還用來傳送數據到 USB 設備來控制設備, 但通常不用來傳送大量數據. 這些傳送由 USB 協議保證來總有足夠的帶寬使它到達設備.</p></dd>
+<dt><span class="term"><span>BULK </span></span></dt>
+<dd><p>塊端點傳送大量的數據. 這些端點常常比中斷端點大(它們一次可持有更多的字符). 它們是普遍的, 對於需要傳送不能有任何數據丟失的數據. 這些傳送不被 USB 協議保證來一直使它在特定時間範圍內完成. 如果總線上沒有足夠的空間來發送整個 BULK 報文, 它被分為多次傳送到或者從設備. 這些端點普遍在打印機, 存儲器, 和網絡設備上.</p></dd>
+<dt><span class="term"><span>ISOCHRONOUS </span></span></dt>
+<dd><p>同步端點也傳送大量數據, 但是這個數據常常不被保證它完成. 這些端點用在可以處理數據丟失的設備中, 並且更多依賴於保持持續的數據流. 實時數據收集, 例如音頻和視頻設備, 一直都使用這些端點.</p></dd>
+</dl></div>
+<p>控制和塊端點用作異步數據傳送, 無論何時驅動決定使用它們. 中斷和同步端點是週期性的. 這意味著這些端點被設置來連續傳送數據在固定的時間, 這使它們的帶寬被 USB 核所保留.</p>
+<p>USB 端點在內核中使用結構 struct usb_host_endpoint 來描述. 這個結構包含真實的端點信息在另一個結構中, 稱為 struct usb_endpoint_descriptor. 後者包含所有的 USB-特定 數據, 以設備自身特定的準確格式. 驅動關心的這個結構的成員是:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>bEndpointAddress </span></span></dt>
+<dd><p>這是這個特定端點的 USB 地址. 還包含在這個 8-位 值的是端點的方向. 位掩碼 USB_DIR_OUT 和 USB_DIR_IN 可用來和這個成員比對, 來決定給這個端點的數據是到設備還是到主機.</p></dd>
+<dt><span class="term"><span>bmAttributes </span></span></dt>
+<dd><p>這是端點的類型. 位掩碼 USB_ENDPOINT_XFERTYPE_MASK 應當用來和這個值比對, 來決定這個端點是否是 USB_ENDPOINT_XFER_ISOC, USB_ENDPOINT_XFER_BULK, 或者是類型 USB_ENDPOINT_XFER_INT. 這些宏定義了同步, 塊, 和中斷端點, 相應地.</p></dd>
+<dt><span class="term"><span>wMaxPacketSize </span></span></dt>
+<dd><p>這是以字節計的這個端點可一次處理的最大大小. 注意驅動可能發送大量的比這個值大的數據到端點, 但是數據會被分為 wMaxPakcetSize 的塊, 當真正傳送到設備時. 對於高速設備, 這個成員可用來支持端點的一個高帶寬模式, 通過使用幾個額外位在這個值的高位部分. 關於如何完成的細節見 USB 規範.</p></dd>
+<dt><span class="term"><span>bInterval </span></span></dt>
+<dd><p>如果這個端點是中斷類型的, 這個值是為這個端點設置的間隔, 即在請求端點的中斷之間的時間. 這個值以毫秒表示.</p></dd>
+</dl></div>
+<p>這個結構的成員沒有一個"傳統" Linux 內核的命名機制. 這是因為這些成員直接對應於 USB 規範中的名子. USB 內核程序員認為使用規定的名子更重要, 以便在閱讀規範時減少混亂, 不必使這些名子對 Linux 程序員看起來熟悉. </p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Interfaces.sect2"></a>13.1.2.&#160;接口</h3></div></div></div>
+<p>USB 端點被綁在接口中. USB 接口只處理一類 USB 邏輯連接, 例如一個鼠標, 一個鍵盤, 或者一個音頻流. 一些 USB 設備有多個接口, 例如一個 USB 揚聲器可能有 2 個接口: 一個 USB 鍵盤給按鈕和一個 USB 音頻流. 因為一個 USB 接口表示基本的功能, 每個 USB 驅動控制一個接口; 因此, 對揚聲器的例子, Linux 需要 2 個不同的驅動給一個硬件設備.</p>
+<p>USB 接口可能有預備的設置, 是對接口參數的不同選擇. 接口的初始化的狀態是第一個設置, 0 號. 預備的設置可用來以不同方式控制單獨的端點, 例如來保留不同量的 USB 帶寬給設備. 每個有同步端點的設備使用預備設備給同一個接口.</p>
+<p>USB 接口在內核中使用 struct usb_interface 結構來描述. 這個結構是 USB 核傳遞給 USB 驅動的並且是 USB 驅動接下來負責控制的. 這個結構中的重要成員是:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct usb_host_interface *altsetting </span></span></dt>
+<dd><p>一個包含所有預備設置的接口結構的數組, 可被挑選給這個接口. 每個 struct usb_host_interface 包含一套端點配置, 如同由 struct usb_host_endpoint 結構所定義的. 注意這些接口結構沒有特別的順序.</p></dd>
+<dt><span class="term"><span>unsigned num_altsetting</span></span></dt>
+<dd><p>由 altsetting 指針指向的預備設置的數目.</p></dd>
+<dt><span class="term"><span>struct usb_host_interface *cur_altsetting </span></span></dt>
+<dd><p>指向數組 altsetting 的一個指針, 表示這個接口當前的激活的設置.</p></dd>
+<dt><span class="term"><span>int minor </span></span></dt>
+<dd><p>如果綁定到這個接口的 USB 驅動使用 USB 主編號, 這個變量包含由 USB 核心安排給接口的次編號. 這只在一次成功地調用 usb_register_dev (本章稍後描述)之後才有效.</p></dd>
+</dl></div>
+<p>在 struct usb_interface 結構中有其他成員, 但是 USB 驅動不需要知道它們.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Congurations.sect2"></a>13.1.3.&#160;配置</h3></div></div></div>
+<p>USB 接口是自己被捆綁到配置的. 一個 USB 設備可有多個配置並且可能在它們之間轉換以便改變設備的狀態. 例如, 一些允許固件被下載到它們的設備包含多個配置來實現這個. 一個配置只能在一個時間點上被使能. Linux 處理多配置 USB 設備不是太好, 但是, 幸運的是, 它們很少.</p>
+<p>linux 描述 USB 配置使用結構 struct usb_host_config 和整個 USB 設備使用結構 struct usb_device. USB 設備驅動通常不會需要讀寫這些結構的任何值, 因此它們在這裡沒有詳細定義. 好奇的讀者可在內核源碼樹的文件 include/linux/usb.h 中找到對它們的描述.</p>
+<p>一個 USB 設備驅動通常不得不轉換數據從給定的 struct usb_interface 結構到 struct usb_device 結構, USB 核心需要給很多的函數調用. 為此, 提供有函數 interface_to_usbdev. 在以後, 希望所有的當前需要一個 struct usb_device 的 USB 調用, 將被轉換為採用一個 struct usb_interface 參數, 並且不會要求驅動做這個轉換.</p>
+<p>所以總結, USB 設備是非常複雜的, 並且由許多不同邏輯單元組成. 這些單元之間的關係可簡單地描述如下:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>設備通常有一個或多個配置.</p></li>
+<li><p>配置常常有一個或多個接口</p></li>
+<li><p>接口常常有一個或多個設置.</p></li>
+<li><p>接口有零或多個端點.</p></li>
+</ul></div>
+</div>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id473861" href="#id473861">45</a>] </sup>本章的多個部分是基於內核中的給 Linux 內核 USB 代碼的文檔, 這些代碼由內核 USB 開發者編寫並且以 GPL 發佈.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch12s08.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch13s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">12.8.&#160;快速參考&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;13.2.&#160;USB 和 sysfs</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch13.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

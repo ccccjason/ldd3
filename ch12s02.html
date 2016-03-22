@@ -1,0 +1,88 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch12s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>12.2.&#160;回顧: ISA-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch12.html" title="第&#160;12&#160;章&#160;PCI 驅動">
+<link rel="prev" href="ch12.html" title="第&#160;12&#160;章&#160;PCI 驅動">
+<link rel="next" href="ch12s03.html" title="12.3.&#160;PC/104 和 PC/104+">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">12.2.&#160;回顧: ISA</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch12.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;12&#160;章&#160;PCI 驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch12s03.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="ALookBackISA.sect1"></a>12.2.&#160;回顧: ISA</h2></div></div></div>
+<p>設計上 ISA 總線非常老了, 並且是非常地低能, 但是它仍然持有一塊挺大的控制設備的市場. 如果速度不重要並且你想支持老式主板, 一個 ISA 實現要優於 PCI. 這個老標準的另外一個好處是如果你是一個電子愛好者, 你可輕易建立你自己的 ISA 設備, 顯然對 PCI 是不可能的.</p>
+<p>另一方面, ISA 的許多缺點是它緊密綁定在 PC 體繫上; 這個接口總線有所有的 80286 處理器的限制並且給系統程序員帶來無窮的痛苦. ISA 設計(從原始的 IBM PC 繼承下來的)的另一個大問題是地理式尋址的缺乏, 它已導致許多問題和長時間的拔下-重置跳線-插上-測試 循環來添加新設備. 有趣的是要注意甚至是最老的 Aplle II 計算機都已經採用了地理式尋址, 並且它們特有無跳線擴展板.</p>
+<p>不管它的大的缺點, ISA 仍然在幾個意想不到的地方使用. 例如, 用在幾個掌上電腦的 VR41xx 系列的 MIPS 處理器特有一個 ISA 兼容的擴展總線, 就像它看起來那麼奇怪. 在 ISA 的這些意想不到的用法之後的理由是一些老式設備的相當低的成本, 例如基於 8390 的以太網卡, 因此一個帶有 ISA 電路信號的 CPU 可輕易採用這個糟糕的, 但是便宜的 PC 設備.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="HardwareResources.sect2"></a>12.2.1.&#160;硬件資源</h3></div></div></div>
+<p>一個 ISA 設備可配備有 I/O 端口, 內存區, 和中斷線.</p>
+<p>儘管 x86 處理器支持 64 KB I/O 端口內存(即, 處理器有 16 條地址線), 一些老 PC 硬件僅解碼最低的 10 位地址線. 這限制可用的地址空間為 1024 個端口, 因為任何在 1 KB 到64 KB 範圍內的地址都被只解碼低地址的任何設備錯當成一個低地址. 一些外設解決這個限制通過映射一個端口到低 KB 並且使用高地址線來選擇不同的設備寄存器. 例如, 一個映射在 0x340 的設備可安全地使用端口 0x740, 0x840, 等等.</p>
+<p>如果 I/O 端口的可用性被限制, 內存存取更加麻煩. 一個 ISA 設備可只使用 640KB 到1 MB 之間的內存範圍和 15 MB 和 16MB 之間的範圍給 I/O 寄存器和設備控制. 640-KB 到 1-MB 範圍被 PC BIOS , VAG-兼容的視頻卡, 和各種其他設備使用, 給新設備留下了很少空間. 另一方面, 在 15MB 的內存, 不被 Linux 直接支持, 並且改造內核來支持它是浪費時間.</p>
+<p>對 ISA 設備板第 3 個可用資源是中斷線. 一個有限數目的中斷線被連接到 ISA 總線, 並且它們由所有接口板共享. 結果是, 如果設備不被正確配置, 它們可能發現它們自己在使用同一個中斷線.</p>
+<p>儘管原始的 ISA 規範不允許在設備間共享, 大部分設備板允許這樣. <sup>[<a name="id471589" href="#ftn.id471589">44</a>]</sup>在軟件層次的共享在"中斷共享"一節中描述, 在第 10 章.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ISAProgramming.sect2"></a>12.2.2.&#160;ISA 編程</h3></div></div></div>
+<p>對於編程, 內核中沒有特別的幫助來易於存取 ISA 設備(象對 PCI 那樣有, 例如). 你可使用的唯一工具是 I/O 端口和 IRQ 線的註冊, 在 10 章的"安裝一個中斷處理"一節.</p>
+<p>在本書第一部分所展示的編程技術適用於 ISA 設備; 驅動可探測 I/O 端口, 並且中斷線必須被自動探測, 使用在 10 章的"自動探測 IRQ 號"一節的一個技術.</p>
+<p>幫忙函數 isa_readb 和 它的朋友已經在"使用 I/O 內存" 9 章中簡單介紹了, 並且對它們沒有更多要說的.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ThePlugandPlaySpecification.sect2"></a>12.2.3.&#160;即插即用規範</h3></div></div></div>
+<p>一些新 ISA 設備板遵循特殊的設計規範並且需要一個特別的初始化順序, 對增加接口板的簡單安裝和配置的擴展. 這些板的設計規範稱為即插即用, 由一個麻煩的規則集組成, 來建立和配置無跳線的 ISA 設備. PnP 設備實現可重分配的 I/O 區; PC 的 BIOS 負責重新分配 -- 回想 PCI</p>
+<p>簡短來說, PnP 的目標是獲得同樣的靈活性, 在 PCI 設備中有的, 而不必關閉底層的電路接口(ISA 總線). 為此, 這個規範定義了一套設備獨立的配置寄存器和一個地理式尋址接口板的方法, 儘管物理總線沒有每塊板子相連(地理上)--每個 ISA 信號線連接到每個可用的槽位.</p>
+<p>地理式尋址通過分配一個小的整數, 稱為卡選擇號(CSN), 給計算機中的每個 PnP 外設. 每個 PnP 設備特有一個唯一的系列標識符, 64-位寬, 這硬連線到外設板. CSN 分配使用唯一的序列號來標識 PnP 設備. 但是 CSN 可被分配只在啟動時, 它要求 BISO 是知道 PnP 的. 由於這個理由, 老式計算機要求用戶來獲得並插入一個特別的配置磁盤, 即便這個設備是 PnP 的.</p>
+<p>遵循 PnP 的接口板在硬件級別上是複雜的. 它們比 PCI 板更加精細並且需要複雜的軟件. 安裝這些設備有困難是常有的, 並且即便安裝順利, 你仍然面對性能限制和 ISA 總線的受限的 I/O 空間. 最好在任何可能時安裝 PCI 設備, 並且享受新技術.</p>
+<p>如果你對 PnP 配置軟件感興趣, 你可瀏覽 drivers/net/3c509.c, 它的探測函數處理 PnP 設備. 2.6 內核有許多工作在 PnP 設備支持領域, 因此許多靈活的接口和之前的內核發行相比被清理了.</p>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id471589" href="#id471589">44</a>] </sup>中斷共享的問題是一個電子工程的問題: 如果一個設備驅動信號線非激活 -- 通過給一個低阻電平 -- 中斷無法被共享. 如果, 另一方面, 設備使用一個上拉電阻來去激活邏輯電平, 共享是可能的. 現在這是正常的. 但是, 仍然有潛在的丟失中斷事件的危險, 因為 ISA 中斷是沿觸發的而不是電平觸發的. 沿觸發中斷易於在硬件中實現, 但是沒有使它們可安全共享.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch12.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch12.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch12s03.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">第&#160;12&#160;章&#160;PCI 驅動&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;12.3.&#160;PC/104 和 PC/104+</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch12s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

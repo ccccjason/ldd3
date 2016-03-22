@@ -1,0 +1,100 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch04s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>4.4.&#160;使用觀察來調試-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch04.html" title="第&#160;4&#160;章&#160;調試技術">
+<link rel="prev" href="ch04s03.html" title="4.3.&#160;用查詢來調試">
+<link rel="next" href="ch04s05.html" title="4.5.&#160;調試系統故障">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">4.4.&#160;使用觀察來調試</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch04s03.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;4&#160;章&#160;調試技術</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch04s05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="DebuggingbyWatching.sect"></a>4.4.&#160;使用觀察來調試</h2></div></div></div>
+<p>有時小問題可以通過觀察用戶空間的應用程序的行為來追蹤. 監視程序也有助於建立對驅動正確工作的信心. 例如, 我們能夠對 scull 感到有信心, 在看了它的讀實現如何響應不同數量數據的讀請求之後.</p>
+<p>有幾個方法來監視用戶空間程序運行. 你可以運行一個調試器來單步過它的函數, 增加打印語句, 或者在 strace 下運行程序. 這裡, 我們將討論最後一個技術, 當真正目的是檢查內核代碼時它是最有趣的.</p>
+<p>strace 命令時一個有力工具, 顯示所有的用戶空間程序發出的系統調用.  它不僅顯示調用, 還以符號形式顯示調用的參數和返回值. 當一個系統調用失敗, 錯誤的符號值(例如, ENOMEM)和對應的字串(Out of memory) 都顯示. strace 有很多命令行選項; 其中最有用的是 -t 來顯示每個調用執行的時間, -T 來顯示調用中花費的時間, -e 來限制被跟蹤調用的類型, 以及-o 來重定向輸出到一個文件. 缺省地, strace 打印調用信息到 stderr.</p>
+<p>strace 從內核自身獲取信息. 這意味著可以跟蹤一個程序, 不管它是否帶有調試支持編譯(對 gcc 是 -g 選項)以及不管它是否 strip 過. 你也可以連接追蹤到一個運行中的進程, 類似於一個調試器的方式連接到一個運行中的進程並控制它.</p>
+<p>跟蹤信息常用來支持發給應用程序開發者的故障報告, 但是對內核程序員也是很有價值的. 我們已經看到驅動代碼運行如何響應系統調用; strace 允許我們檢查每個調用的輸入和輸出數據的一致性.</p>
+<p>例如, 下面的屏幕輸出顯示(大部分)運行命令 strace ls /dev &gt; /dev/scull0 的最後的行:</p>
+<pre class="screen">
+open("/dev", O_RDONLY|O_NONBLOCK|O_LARGEFILE|O_DIRECTORY) = 3
+fstat64(3, {st_mode=S_IFDIR|0755, st_size=24576, ...}) = 0
+
+fcntl64(3, F_SETFD, FD_CLOEXEC)  = 0  
+getdents64(3, /* 141 entries */, 4096)  = 4088  
+[...]  
+getdents64(3, /* 0 entries */, 4096)  = 0  
+close(3)  = 0  
+[...]  
+
+fstat64(1, {st_mode=S_IFCHR|0664, st_rdev=makedev(254, 0), ...}) = 0
+write(1, "MAKEDEV\nadmmidi0\nadmmidi1\nadmmid"..., 4096) = 4000
+write(1, "b\nptywc\nptywd\nptywe\nptywf\nptyx0\n"..., 96) = 96
+write(1, "b\nptyxc\nptyxd\nptyxe\nptyxf\nptyy0\n"..., 4096) = 3904
+write(1, "s17\nvcs18\nvcs19\nvcs2\nvcs20\nvcs21"..., 192) = 192
+write(1, "\nvcs47\nvcs48\nvcs49\nvcs5\nvcs50\nvc"..., 673) = 673
+close(1) = 0
+exit_group(0) = ?
+</pre>
+<p>從第一個 write 調用看, 明顯地, 在 ls 結束查看目標目錄後, 它試圖寫 4KB. 奇怪地(對ls), 只有 4000 字節寫入, 並且操作被重複. 但是, 我們知道 scull 中的寫實現一次寫一個單個量子, 因此我們本來就期望部分寫. 幾步之後, 所有東西清空, 程序成功退出.</p>
+<p>作為另一個例子, 讓我們讀取 scull 設備(使用 wc 命令):</p>
+<pre class="screen">
+[...]
+open("/dev/scull0", O_RDONLY|O_LARGEFILE) = 3
+fstat64(3, {st_mode=S_IFCHR|0664, st_rdev=makedev(254, 0), ...}) = 0
+read(3, "MAKEDEV\nadmmidi0\nadmmidi1\nadmmid"..., 16384) = 4000
+read(3, "b\nptywc\nptywd\nptywe\nptywf\nptyx0\n"..., 16384) = 4000
+read(3, "s17\nvcs18\nvcs19\nvcs2\nvcs20\nvcs21"..., 16384) = 865
+read(3, "", 16384) = 0
+fstat64(1, {st_mode=S_IFCHR|0620, st_rdev=makedev(136, 1), ...}) = 0
+write(1, "8865 /dev/scull0\n", 17) = 17
+close(3) = 0
+exit_group(0) = ?
+</pre>
+<p>如同期望的, read 一次只能獲取 4000 字節, 但是數據總量等同於前個例子寫入的. 注意在這個例子裡讀取是如何組織的, 同前面跟蹤的相反. wc 為快速讀被優化過, 因此繞過了標準庫, 試圖一個系統調用讀取更多數據. 你可從跟蹤的讀的行裡看到 wc 是如何試圖一次讀取 16 KB.</p>
+<p>Linux 專家能夠從 strace 的輸出中發現更多有用信息. 如果你不想看到所有的符號, 你可使用 efile 標誌來限制你自己僅查看文件方法是如何工作的.</p>
+<p>就個人而言, 我們發現 strace 對於查明系統調用的運行時錯誤是非常有用. 常常是應用程序或演示程序中的 perror 調用不足夠詳細, 並且能夠確切說出哪個系統調用的哪個參數觸發了錯誤是非常有幫助的.</p>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch04s03.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch04.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch04s05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">4.3.&#160;用查詢來調試&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;4.5.&#160;調試系統故障</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch04s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

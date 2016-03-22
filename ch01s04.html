@@ -1,0 +1,67 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch01s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:31 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>1.4.&#160;安全問題-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch01.html" title="第&#160;1&#160;章&#160;第一章 設備驅動簡介">
+<link rel="prev" href="ch01s03.html" title="1.3.&#160;設備和模塊的分類">
+<link rel="next" href="ch01s05.html" title="1.5.&#160;版本編號">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">1.4.&#160;安全問題</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch01s03.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;1&#160;章&#160;第一章 設備驅動簡介</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch01s05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="SecurityIssues.sect1"></a>1.4.&#160;安全問題</h2></div></div></div>
+<p>安全是當今重要性不斷增長的關注點. 我們將討論安全相關的問題, 在它們在本書中出現時. 有幾個通用的概念, 卻值得現在提一下.</p>
+<p>系統中任何安全檢查都由內核代碼強加上去. 如果內核有安全漏洞, 系統作為一個整體就有漏洞. 在官方的內核發佈裡, 只有一個有授權的用戶可以加載模塊; 系統調用 init_module 檢查調用進程是否是有權加載模塊到內核裡. 因此, 當運行一個官方內核時, 只有超級用戶<sup>[<a name="id407079" href="#ftn.id407079">1</a>]</sup>或者一個成功獲得特權的入侵者, 才可以利用特權代碼的能力.</p>
+<p>在可能時, 驅動編寫者應當避免將安全策略編到他們的代碼中. 安全是一個策略問題, 最好在內核高層來處理, 在系統管理員的控制下. 但是, 常有例外.</p>
+<p>作為一個設備驅動編寫者, 你應當知道在什麼情形下, 某些類型的設備存取可能反面地影響系統作為一個整體, 並且應當提供足夠地控制. 例如, 會影響全局資源的設備操作( 例如設置一條中斷線 ), 可能會損壞硬件( 例如, 加載固件 ), 或者它可能會影響其他用戶( 例如設置一個磁帶驅動的缺省的塊大小 ), 常常是只對有足夠授權的用戶, 並且這種檢查必須由驅動自身進行.</p>
+<p>驅動編寫者也必須要小心, 當然, 來避免引入安全 bug. C 編程語言使得易於犯下幾類的錯誤. 例如, 許多現今的安全問題是由於緩衝區覆蓋引起, 它是由於程序員忘記檢查有多少數據寫入緩衝區, 數據在緩衝區結尾之外結束, 因此覆蓋了無關的數據. 這樣的錯誤可能會危及整個系統的安全, 必須避免. 幸運的是, 在設備驅動上下文中避免這樣的錯誤經常是相對容易的, 這裡對用戶的接口經過精細定義並被高度地控制.</p>
+<p>一些其他的通用的安全觀念也值得牢記. 任何從用戶進程接收的輸入應當以極大的懷疑態度來對待; 除非你能核實它, 否則不要信任它. 小心對待未初始化的內存; 從內核獲取的任何內存應當清零或者在其對用戶進程或設備可用之前進行初始化. 否則, 可能發生信息洩漏( 數據, 密碼的暴露等等 ). 如果你的設備解析發送給它的數據, 要確保用戶不能發送任何能危及系統的東西. 最後, 考慮一下設備操作的可能後果; 如果有特定的操作( 例如, 加載一個適配卡的固件或者格式化一個磁盤 ), 能影響到系統的, 這些操作應該完全確定地要限制在授權的用戶中.</p>
+<p>也要小心, 當從第三方接收軟件時, 特別是與內核有關: 因為每個人都可以接觸到源碼, 每個人都可以分拆和重組東西. 儘管你能夠信任在你的發佈中的預編譯的內核, 你應當避免運行一個由不能信任的朋友編譯的內核 -- 如果你不能作為 root 運行預編譯的二進制文件, 那麼你最好不要運行一個預編譯的內核. 例如, 一個經過了惡意修改的內核可能會允許任何人加載模塊, 這樣就通過 init_module 開啟了一個不想要的後門.</p>
+<p>注意, Linux 內核可以編譯成不支持任何屬於模塊的東西, 因此關閉了任何模塊相關的安全漏洞. 在這種情況下, 當然, 所有需要的驅動必須直接建立到內核自身內部. 在 2.2 和以後的內核, 也可以在系統啟動之後, 通過 capability 機制來禁止內核模塊的加載.</p>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id407079" href="#id407079">1</a>] </sup>從技術上講, 只有具有 CAP_SYS_MODULE 權利的人才可以進行這個操作. 我們第 6 章討論 capabilities .</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch01s03.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch01.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch01s05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">1.3.&#160;設備和模塊的分類&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;1.5.&#160;版本編號</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch01s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:31 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

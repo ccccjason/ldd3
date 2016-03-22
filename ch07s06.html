@@ -1,0 +1,164 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch07s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>7.6.&#160;工作隊列-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch07.html" title="第&#160;7&#160;章&#160;時間, 延時, 和延後工作">
+<link rel="prev" href="ch07s05.html" title="7.5.&#160;Tasklets 機制">
+<link rel="next" href="ch07s07.html" title="7.7.&#160;快速參考">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">7.6.&#160;工作隊列</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch07s05.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;7&#160;章&#160;時間, 延時, 和延後工作</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch07s07.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="Workqueues.sect"></a>7.6.&#160;工作隊列</h2></div></div></div>
+<p>工作隊列是, 表面上看, 類似於 taskets; 它們允許內核代碼來請求在將來某個時間調用一個函數. 但是, 有幾個顯著的不同在這 2 個之間, 包括:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p> tasklet 在軟件中斷上下文中運行的結果是所有的 tasklet 代碼必須是原子的. 相反, 工作隊列函數在一個特殊內核進程上下文運行; 結果, 它們有更多的靈活性. 特別地, 工作隊列函數能夠睡眠.</p></li>
+<li><p>tasklet 常常在它們最初被提交的處理器上運行. 工作隊列以相同地方式工作, 缺省地.</p></li>
+<li><p>內核代碼可以請求工作隊列函數被延後一個明確的時間間隔.</p></li>
+</ul></div>
+<p>兩者之間關鍵的不同是 tasklet 執行的很快, 短時期, 並且在原子態, 而工作隊列函數可能有高週期但是不需要是原子的. 每個機制有它適合的情形.</p>
+<p>工作隊列有一個 struct workqueue_struct 類型, 在 &lt;linux/workqueue.h&gt; 中定義. 一個工作隊列必須明確的在使用前創建, 使用一個下列的 2 個函數:</p>
+<pre class="programlisting">
+struct workqueue_struct *create_workqueue(const char *name);
+struct workqueue_struct *create_singlethread_workqueue(const char *name);
+</pre>
+<p>每個工作隊列有一個或多個專用的進程("內核線程"), 它運行提交給這個隊列的函數. 如果你使用 create_workqueue, 你得到一個工作隊列它有一個專用的線程在系統的每個處理器上. 在很多情況下, 所有這些線程是簡單的過度行為; 如果一個單個工作者線程就足夠, 使用 create_singlethread_workqueue 來代替創建工作隊列</p>
+<p>提交一個任務給一個工作隊列, 你需要填充一個 work_struct 結構. 這可以在編譯時完成, 如下:</p>
+<pre class="programlisting">
+DECLARE_WORK(name, void (*function)(void *), void *data);
+</pre>
+<p>這裡 name 是聲明的結構名稱, function 是從工作隊列被調用的函數, 以及 data 是一個傳遞給這個函數的值. 如果你需要建立 work_struct 結構在運行時, 使用下面 2 個宏定義:</p>
+<pre class="programlisting">
+INIT_WORK(struct work_struct *work, void (*function)(void *), void *data); 
+PREPARE_WORK(struct work_struct *work, void (*function)(void *), void *data); 
+</pre>
+<p>INIT_WORK 做更加全面的初始化結構的工作; 你應當在第一次建立結構時使用它. PREPARE_WORK 做幾乎同樣的工作, 但是它不初始化用來連接 work_struct 結構到工作隊列的指針. 如果有任何的可能性這個結構當前被提交給一個工作隊列, 並且你需要改變這個隊列, 使用 PREPARE_WORK 而不是 INIT_WORK.</p>
+<p>有 2 個函數來提交工作給一個工作隊列:</p>
+<pre class="programlisting">
+int queue_work(struct workqueue_struct *queue, struct work_struct *work);
+int queue_delayed_work(struct workqueue_struct *queue, struct work_struct *work, unsigned long delay);
+</pre>
+<p>每個都添加工作到給定的隊列. 如果使用 queue_delay_work, 但是, 實際的工作沒有進行直到至少 delay jiffies 已過去. 從這些函數的返回值是 0 如果工作被成功加入到隊列; 一個非零結果意味著這個 work_struct 結構已經在隊列中等待, 並且第 2 次沒有加入.</p>
+<p>在將來的某個時間, 這個工作函數將被使用給定的 data 值來調用. 這個函數將在工作者線程的上下文運行, 因此它可以睡眠如果需要 -- 儘管你應當知道這個睡眠可能怎樣影響提交給同一個工作隊列的其他任務. 這個函數不能做的是, 但是, 是存取用戶空間. 因為它在一個內核線程中運行, 完全沒有用戶空間來存取.</p>
+<p>如果你需要取消一個掛起的工作隊列入口, 你可以調用:</p>
+<pre class="programlisting">
+int cancel_delayed_work(struct work_struct *work); 
+</pre>
+<p>返回值是非零如果這個入口在它開始執行前被取消. 內核保證給定入口的執行不會在調用 cancel_delay_work 後被初始化. 如果 cancel_delay_work 返回 0, 但是, 這個入口可能已經運行在一個不同的處理器, 並且可能仍然在調用 cancel_delayed_work 後在運行. 要絕對確保工作函數沒有在 cancel_delayed_work 返回 0 後在任何地方運行, 你必須跟隨這個調用來調用:</p>
+<pre class="programlisting">
+void flush_workqueue(struct workqueue_struct *queue); 
+</pre>
+<p>在 flush_workqueue 返回後, 沒有在這個調用前提交的函數在系統中任何地方運行.</p>
+<p>當你用完一個工作隊列, 你可以去掉它, 使用:</p>
+<pre class="programlisting">
+void destroy_workqueue(struct workqueue_struct *queue); 
+</pre>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheSharedQueue.sect"></a>7.6.1.&#160;共享隊列</h3></div></div></div>
+<p>一個設備驅動, 在許多情況下, 不需要它自己的工作隊列. 如果你只偶爾提交任務給隊列, 簡單地使用內核提供的共享的, 缺省的隊列可能更有效. 如果你使用這個隊列, 但是, 你必須明白你將和別的在共享它. 從另一個方面說, 這意味著你不應當長時間獨佔隊列(無長睡眠), 並且可能要更長時間它們輪到處理器.</p>
+<p>jiq ("just in queue") 模塊輸出 2 個文件來演示共享隊列的使用. 它們使用一個單個 work_struct structure, 這個結構這樣建立:</p>
+<pre class="programlisting">
+static struct work_struct jiq_work;
+    /* this line is in jiq_init() */
+ INIT_WORK(&amp;jiq_work, jiq_print_wq, &amp;jiq_data);
+</pre>
+<p>當一個進程讀 /proc/jiqwq, 這個模塊不帶延遲地初始化一系列通過共享的工作隊列的路線.</p>
+<pre class="programlisting">
+int schedule_work(struct work_struct *work); 
+</pre>
+<p>注意, 當使用共享隊列時使用了一個不同的函數; 它只要求 work_struct 結構作為一個參數. 在 jiq 中的實際代碼看來如此:</p>
+<pre class="programlisting">
+prepare_to_wait(&amp;jiq_wait, &amp;wait, TASK_INTERRUPTIBLE);
+schedule_work(&amp;jiq_work);
+schedule();
+finish_wait(&amp;jiq_wait, &amp;wait);
+</pre>
+<p>這個實際的工作函數打印出一行就像 jit 模塊所作的, 接著, 如果需要, 重新提交這個 work_structcture 到工作隊列中. 在這是 jiq_print_wq 全部:</p>
+<pre class="programlisting">
+static void jiq_print_wq(void *ptr)
+{
+        struct clientdata *data = (struct clientdata *) ptr;
+
+        if (! jiq_print (ptr))
+                return;
+
+        if (data-&gt;delay)
+                schedule_delayed_work(&amp;jiq_work, data-&gt;delay);
+        else
+                schedule_work(&amp;jiq_work);
+}
+</pre>
+<p>如果用戶在讀被延後的設備 (/proc/jiqwqdelay), 這個工作函數重新提交它自己在延後的模式, 使用 schedule_delayed_work:</p>
+<pre class="programlisting">
+int schedule_delayed_work(struct work_struct *work, unsigned long delay); 
+</pre>
+<p>如果你看從這 2 個設備的輸出, 它看來如:</p>
+<pre class="screen">
+% cat /proc/jiqwq
+ time  delta preempt  pid cpu command 
+ 1113043  0  0  7  1 events/1 
+ 1113043  0  0  7  1 events/1 
+ 1113043  0  0  7  1 events/1 
+ 1113043  0  0  7  1 events/1 
+ 1113043  0  0  7  1 events/1  
+% cat /proc/jiqwqdelay 
+ time  delta preempt  pid cpu command 
+ 1122066  1  0  6  0 events/0  
+
+1122067  1  0  6  0 events/0 
+ 1122068  1  0  6  0 events/0 
+ 1122069  1  0  6  0 events/0 
+ 1122070  1  0  6  0 events/0  
+</pre>
+<p>當 /proc/jiqwq 被讀, 在每行的打印之間沒有明顯的延遲. 相反, 當 /proc/jiqwqdealy 被讀時, 在每行之間有恰好一個 jiffy 的延時. 在每一種情況, 我們看到同樣的進程名子被打印; 它是實現共享隊列的內核線程的名子. CPU 號被打印在斜線後面; 我們從不知道當讀 /proc 文件時哪個 CPU 會在運行, 但是這個工作函數之後將一直運行在同一個處理器.</p>
+<p>如果你需要取消一個已提交給工作隊列的工作入口, 你可以使用 cancel_delayed_work, 如上面所述. 刷新共享隊列需要一個不同的函數, 但是:</p>
+<pre class="programlisting">
+void flush_scheduled_work(void); 
+</pre>
+<p>因為你不知道別人誰可能使用這個隊列, 你從不真正知道 flush_schduled_work 返回可能需要多長時間.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch07s05.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch07.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch07s07.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">7.5.&#160;Tasklets 機制&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;7.7.&#160;快速參考</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch07s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

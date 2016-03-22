@@ -1,0 +1,109 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch07s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>7.5.&#160;Tasklets 機制-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch07.html" title="第&#160;7&#160;章&#160;時間, 延時, 和延後工作">
+<link rel="prev" href="ch07s04.html" title="7.4.&#160;內核定時器">
+<link rel="next" href="ch07s06.html" title="7.6.&#160;工作隊列">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">7.5.&#160;Tasklets 機制</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch07s04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;7&#160;章&#160;時間, 延時, 和延後工作</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch07s06.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="Tasklets.sect"></a>7.5.&#160;Tasklets 機制</h2></div></div></div>
+<p>另一個有關於定時問題的內核設施是 tasklet 機制. 它大部分用在中斷管理(我們將在第 10 章再次見到).</p>
+<p>tasklet 類似內核定時器在某些方面. 它們一直在中斷時間運行, 它們一直運行在調度它們的同一個 CPU 上, 並且它們接收一個 unsigned long 參數. 不像內核定時器, 但是, 你無法請求在一個指定的時間執行函數. 通過調度一個 tasklet, 你簡單地請求它在以後的一個由內核選擇的時間執行. 這個行為對於中斷處理特別有用, 那裡硬件中斷必須被盡快處理, 但是大部分的時間管理可以安全地延後到以後的時間. 實際上, 一個 tasket, 就像一個內核定時器, 在一個"軟中斷"的上下文中執行(以原子模式), 在使能硬件中斷時執行異步任務的一個內核機制.</p>
+<p>一個 tasklet 存在為一個時間結構, 它必須在使用前被初始化. 初始化能夠通過調用一個特定函數或者通過使用某些宏定義聲明結構:</p>
+<pre class="programlisting">
+#include &lt;linux/interrupt.h&gt; 
+struct tasklet_struct {
+ /* ... */
+
+void (*func)(unsigned long);
+ unsigned long data;
+};
+
+void tasklet_init(struct tasklet_struct *t,
+ void (*func)(unsigned long), unsigned long data);
+DECLARE_TASKLET(name, func, data);
+DECLARE_TASKLET_DISABLED(name, func, data);
+</pre>
+<p>tasklet 提供了許多有趣的特色:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>一個 tasklet 能夠被禁止並且之後被重新使能; 它不會執行直到它被使能與被禁止相同的的次數.</p></li>
+<li><p>如同定時器, 一個 tasklet 可以註冊它自己.</p></li>
+<li><p>一個 tasklet 能被調度來執行以正常的優先級或者高優先級. 後一組一直是首先執行.</p></li>
+<li><p>taslet 可能立刻運行, 如果系統不在重載下, 但是從不會晚於下一個時鐘嘀噠.</p></li>
+<li><p>一個 tasklet 可能和其他 tasklet 並發, 但是對它自己是嚴格地串行的 -- 同樣的 tasklet 從不同時運行在超過一個處理器上. 同樣, 如已經提到的, 一個 tasklet 常常在調度它的同一個 CPU 上運行.</p></li>
+</ul></div>
+<p>jit 模塊包括 2 個文件, /proc/jitasklet 和 /proc/jitasklethi, 它返回和在"內核定時器"一節中介紹過的 /proc/jitimer 同樣的數據. 當你讀其中一個文件時, 你取回一個 header 和 sixdata 行. 第一個數據行描述了調用進程的上下文, 並且其他的行描述了一個 tasklet 過程連續運行的上下文. 這是一個在編譯一個內核時的運行例子:</p>
+<pre class="screen">
+phon% cat /proc/jitasklet
+ time delta inirq pid cpu command
+ 6076139 0 0 4370 0 cat
+ 6076140 1 1 4368 0 cc1
+ 6076141 1 1 4368 0 cc1
+ 6076141 0 1 2 0 ksoftirqd/0
+ 6076141 0 1 2 0 ksoftirqd/0
+ 6076141 0 1 2 0 ksoftirqd/0
+</pre>
+<p>如同由上面數據所確定的, tasklet 在下一個時間嘀噠內運行只要 CPU 在忙於運行一個進程, 但是它立刻被運行當 CPU 處於空閒. 內核提供了一套 ksoftirqd 內核線程, 每個 CPU 一個, 只是來運行 "軟件中斷" 處理, 就像 tasklet_action 函數. 因此, tasklet 的最後 3 個運行在關聯到 CPU 0 的 ksoftirqd 內核線程的上下文中發生. jitasklethi 的實現使用了一個高優先級 tasklet, 在馬上要來的函數列表中解釋. </p>
+<p>jit 中實現 /proc/jitasklet 和 /proc/jittasklethi 的實際代碼與 /proc/jitimer 的實現代碼幾乎是一致的, 但是它使用 tasklet 調用代替那些定時器. 下面的列表詳細展開了 tasklet 結構已被初始化後的內核對 tasklet 的接口:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>void tasklet_disable(struct tasklet_struct *t);</span></span></dt>
+<dd><p>這個函數禁止給定的 tasklet. tasklet 可能仍然被 tasklet_schedule 調度, 但是它的執行被延後直到這個 tasklet 被再次使能. 如果這個 tasklet 當前在運行, 這個函數忙等待直到這個tasklet退出; 因此, 在調用 tasklet_disable 後, 你可以確保這個 tasklet 在系統任何地方都不在運行.</p></dd>
+<dt><span class="term"><span>void tasklet_disable_nosync(struct tasklet_struct *t);</span></span></dt>
+<dd><p>禁止這個 tasklet, 但是沒有等待任何當前運行的函數退出. 當它返回, 這個 tasklt 被禁止並且不會在以後被調度直到重新使能, 但是它可能仍然運行在另一個 CPU 當這個函數返回時.</p></dd>
+<dt><span class="term"><span>void tasklet_enable(struct tasklet_struct *t);</span></span></dt>
+<dd><p>使能一個之前被禁止的 tasklet. 如果這個 tasklet 已經被調度, 它會很快運行. 一個對 tasklet_enable 的調用必須匹配每個對 tasklet_disable 的調用, 因為內核跟蹤每個 tasklet 的"禁止次數". </p></dd>
+<dt><span class="term"><span>void tasklet_schedule(struct tasklet_struct *t);</span></span></dt>
+<dd><p>調度 tasklet 執行. 如果一個 tasklet 被再次調度在它有機會運行前, 它只運行一次. 但是, 如果他在運行中被調度, 它在完成後再次運行; 這保證了在其他事件被處理當中發生的事件收到應有的注意. 這個做法也允許一個 tasklet 重新調度它自己.</p></dd>
+<dt><span class="term"><span>void tasklet_hi_schedule(struct tasklet_struct *t);</span></span></dt>
+<dd><p>調度 tasklet 在更高優先級執行. 當軟中斷處理運行時, 它處理高優先級 tasklet 在其他軟中斷之前, 包括"正常的" tasklet. 理想地, 只有具有低響應週期要求( 例如填充音頻緩衝 )應當使用這個函數, 為避免其他軟件中斷處理引入的附加週期. 實際上, /proc/jitasklethi 沒有顯示可見的與 /proc/jitasklet 的區別.</p></dd>
+<dt><span class="term"><span>void tasklet_kill(struct tasklet_struct *t);</span></span></dt>
+<dd><p>這個函數確保了這個 tasklet 沒被再次調度來運行; 它常常被調用當一個設備正被關閉或者模塊卸載時. 如果這個 tasklet 被調度來運行, 這個函數等待直到它已執行. 如果這個 tasklet 重新調度它自己, 你必須阻止在調用 tasklet_kill 前它重新調度它自己, 如同使用 del_timer_sync.</p></dd>
+</dl></div>
+<p>tasklet 在 kernel/softirq.c 中實現. 2 個 tasklet 鏈表( 正常和高優先級 )被聲明為每-CPU數據結構, 使用和內核定時器相同的 CPU-親和 機制. 在 tasklet 管理中的數據結構是簡單的鏈表, 因為 tasklet 沒有內核定時器的分類請求.</p>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch07s04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch07.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch07s06.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">7.4.&#160;內核定時器&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;7.6.&#160;工作隊列</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch07s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

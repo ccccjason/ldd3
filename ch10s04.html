@@ -1,0 +1,132 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch10s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>10.4.&#160;中斷共享-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch10.html" title="第&#160;10&#160;章&#160;中斷處理">
+<link rel="prev" href="ch10s03.html" title="10.3.&#160;前和後半部">
+<link rel="next" href="ch10s05.html" title="10.5.&#160;中斷驅動 I/O">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">10.4.&#160;中斷共享</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch10s03.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;10&#160;章&#160;中斷處理</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch10s05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="InterruptSharing.sect"></a>10.4.&#160;中斷共享</h2></div></div></div>
+<p>中斷衝突的概念幾乎是 PC 體系的同義詞. 過去, 在 PC 上的 IRQ 線不能服務多於一個設備, 並且它們從不足夠. 結果, 失望的用戶花費大量時間開著它們的計算機, 盡力找到一個方法來使它們所有的外設一起工作.</p>
+<p>現代的硬件, 當然, 已經設計來允許中斷共享; PCI 總線要求它. 因此, Linux 內核支持在所有總線上中斷共享, 甚至是那些(例如 ISA 總線)傳統上不被支持的. 2.6 內核的設備驅動應當編寫來使用共享中斷, 如果目標硬件能夠支持這個操作模式. 幸運的是, 使用共享中斷在大部分時間是容易的.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="InstallingaSharedHandler.sect"></a>10.4.1.&#160;安裝一個共享的處理者</h3></div></div></div>
+<p>共享中斷通過 request_irq 來安裝就像不共享的一樣, 但是有 2 個不同:</p>
+<div class="itemizedlist"><ul type="disc">
+<li>SA_SHIRQ 位必須在 flags 參數中指定, 當請求中斷時.<p></p>
+</li>
+<li><p>dev_id 參數必須是獨特的. 任何模塊地址空間的指針都行, 但是 dev_id 明確地不能設置為 NULL.</p></li>
+</ul></div>
+<p>內核保持著一個與中斷相關聯的共享處理者列表, 並且 dev_id 可認為是區別它們的簽名. 如果 2 個驅動要在同一個中斷上註冊 NULL 作為它們的簽名, 在卸載時事情可能就亂了, 在中斷到的時候引發內核 oops. 由於這個理由, 如果在註冊共享中斷時傳給了一個 NULL dev_id , 現代內核會大聲抱怨. 當請求一個共享的中斷, request_irq 成功, 如果下列之一是真:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>中斷線空閒.</p></li>
+<li><p>所有這條線的已經註冊的處理者也指定共享這個 IRQ.</p></li>
+</ul></div>
+<p>無論何時 2 個或多個驅動在共享中斷線, 並且硬件中斷在這條線上中斷處理器, 內核為這個中斷調用每個註冊的處理者, 傳遞它的 dev_id 給每個. 因此, 一個共享的處理者必須能夠識別它自己的中斷並且應當快速退出當它自己的設備沒有被中斷時. 確認返回 IRQ_NONE 無論何時你的處理者被調用並且發現設備沒被中斷.</p>
+<p>如果你需要探測你的設備, 在請求 IRQ 線之前, 內核無法幫你. 沒有探測函數可給共享處理者使用. 標準的探測機制有效如果使用的線是空閒的, 但是如果這條線已經被另一個有共享能力的驅動持有, 探測失敗, 即便你的驅動已正常工作. 幸運的是, 大部分設計為中斷共享的硬件能夠告知處理器它在使用哪個中斷, 因此減少明顯的探測的需要.</p>
+<p>釋放處理者以正常方式進行, 使用 free_irq. 這裡 dev_id 參數用來從這個中斷的共享處理者列表中選擇正確的處理者來釋放. 這就是為什麼 dev_id 指針必須是獨特的.</p>
+<p>一個使用共享處理者的驅動需要小心多一件事: 它不能使用 enable_irq 或者 disable_irq. 如果它用了, 對其他共享這條線的設備就亂了; 禁止另一個設備的中斷即便短時間也可能產生延時, 這對這個設備和它的用戶是有問題的. 通常, 程序員必須記住, 他的驅動不擁有這個 IRQ, 並且它的行為應當比它擁有這個中斷線更加"社會性".</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RunningtheHandler.sect"></a>10.4.2.&#160;運行處理者</h3></div></div></div>
+<p>如同前面建議的, 當內核收到一個中斷, 所有的註冊的處理者被調用. 一個共享的處理者必須能夠在它需要的處理的中斷和其他設備產生的中斷之間區分.</p>
+<p>使用 shared=1 選項來加載 short 安裝了下列處理者來代替缺省的:</p>
+<pre class="programlisting">
+irqreturn_t short_sh_interrupt(int irq, void *dev_id, struct pt_regs *regs) 
+{
+        int value, written;
+        struct timeval tv;
+        /* If it wasn't short, return immediately */
+        value = inb(short_base);
+        if (!(value &amp; 0x80))
+                return IRQ_NONE;
+        /* clear the interrupting bit */
+        outb(value &amp; 0x7F, short_base);
+        /* the rest is unchanged */
+        do_gettimeofday(&amp;tv);
+        written = sprintf((char *)short_head,"%08u.%06u\n",
+                          (int)(tv.tv_sec % 100000000), (int)(tv.tv_usec));
+        short_incr_bp(&amp;short_head, written);
+        wake_up_interruptible(&amp;short_queue); /* awake any reading process */
+        return IRQ_HANDLED;
+}
+</pre>
+<p>這裡應該有個解釋. 因為並口沒有"中斷掛起"位來檢查, 處理者使用 ACK 位作此目的. 如果這個位是高, 正報告的中斷是給 short, 並且這個處理者清除這個位.</p>
+<p>處理者通過並口數據端口的清零來復位這個位 -- short 假設管腳 9 和 10 連在一起. 如果其他一個和 short 共享這個 IRQ 的設備產生一個中斷, short 看到它的線仍然非激活並且什麼不作.</p>
+<p>當然, 一個功能齊全的驅動可能將工作劃分位前和後半部, 但是容易添加並且不會有任何影響實現共享的代碼. 一個真實驅動還可能使用 dev_id 參數來決定, 在很多可能的中, 哪個設備在中斷.</p>
+<p>注意, 如果你使用打印機(代替跳線)來測試使用 short 的中斷管理, 這個共享的處理者不像所說的一樣工作,因為打印機協議不允許共享, 並且驅動不知道是否這個中斷是來自打印機.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheprocInterfaceandShardInterrupts.sect"></a>10.4.3.&#160;/proc 接口和共享中斷</h3></div></div></div>
+<p>在系統中安裝共享處理者不影響 /proc/stat, 它甚至不知道處理者. 但是, /proc/interrupts 稍稍變化.</p>
+<p>所有同一個中斷號的安裝的處理者出現在 /proc/interrupts 的同一行. 下列輸出( 從一個 x86_64 系統)顯示了共享中斷處理是如何顯示的:</p>
+<pre class="screen">
+ CPU0
+ 0: 892335412 XT-PIC timer
+ 1: 453971 XT-PIC i8042
+ 2: 0 XT-PIC cascade
+ 5: 0 XT-PIC libata, ehci_hcd
+ 8: 0 XT-PIC rtc
+ 9: 0 XT-PIC acpi
+ 10: 11365067 XT-PIC ide2, uhci_hcd, uhci_hcd, SysKonnect SK-98xx, EMU10K1
+ 11: 4391962 XT-PIC uhci_hcd, uhci_hcd
+ 12: 224 XT-PIC i8042
+ 14: 2787721 XT-PIC ide0
+ 15: 203048 XT-PIC ide1
+NMI: 41234
+LOC: 892193503
+ERR: 102
+MIS: 0
+</pre>
+<p>這個系統有幾個共享中斷線. IRQ 5 用來給串行 ATA 和 IEEE 1394 控制器; IRQ 10 有幾個設備, 包括一個 IDE 控制器, 2 個 USB 控制器, 一個以太網接口, 以及一個聲卡; 並且 IRQ 11 也被 2 個 USB 控制器使用.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch10s03.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch10.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch10s05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">10.3.&#160;前和後半部&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;10.5.&#160;中斷驅動 I/O</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch10s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

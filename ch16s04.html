@@ -1,0 +1,116 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch16s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:42 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>16.4.&#160;一些其他的細節-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch16.html" title="第&#160;16&#160;章&#160;塊驅動">
+<link rel="prev" href="ch16s03.html" title="16.3.&#160;請求處理">
+<link rel="next" href="ch16s05.html" title="16.5.&#160;快速參考">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">16.4.&#160;一些其他的細節</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch16s03.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;16&#160;章&#160;塊驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch16s05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="SomeOtherDetails.sect1"></a>16.4.&#160;一些其他的細節</h2></div></div></div>
+<p>本節涵蓋塊層的幾個其他的方面, 對於高級讀者可能有興趣. 對於編寫一個正確的驅動下面的內容都不需要, 但是它們在某些情況下可能是有用的.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="CommandPrePreparation.sect2"></a>16.4.1.&#160;命令預準備</h3></div></div></div>
+<p>塊層為驅動提供一個進制來檢查和預處理請求, 在它們被從 elv_next_request 返回前. 這個機制允許驅動提前設立真正的驅動器命令, 決定是否這個請求可被完全處理, 或者進行其他的維護工作.</p>
+<p>如果你想使用這個特性, 創建一個命令準備函數, 它要適應這個原型:</p>
+<pre class="programlisting">
+typedef int (prep_rq_fn) (request_queue_t *queue, struct request *req); 
+</pre>
+<p>請求結構包含一個成員 cmd, 它是一個 BLK_MAX_CDB 字節的數組; 這個數組可被這個準備函數用來存儲實際的硬件命令(或者任何其他的有用信息). 這個函數應當返回一個下列的值:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>BLKPREP_OK </span></span></dt>
+<dd><p>命令準備正常進行, 並且這個請求可被傳遞給你的驅動的請求函數.</p></dd>
+<dt><span class="term"><span>BLKPREP_KILL </span></span></dt>
+<dd><p>這個請求不能完成; 它帶有一個錯誤碼而失敗.</p></dd>
+<dt><span class="term"><span>BLKPREP_DEFER </span></span></dt>
+<dd><p>這個請求這次無法完成. 它位於隊列的前面, 但是不能傳遞給請求函數.</p></dd>
+</dl></div>
+<p>準備函數被 elv_next_request 在請求返回到你的驅動之前立刻調用. 如果這個函數返回 BLKPREP_DEFER, 從 elv_next_request 返回給你的驅動的返回值是 NULL. 這個操作描述可能是有用的, 如果, 例如你的設備已達到它能夠等候的請求的最大數目.</p>
+<p>為使塊層調用你的準備函數, 傳遞它到:</p>
+<pre class="programlisting">
+void blk_queue_prep_rq(request_queue_t *queue, prep_rq_fn *func); 
+</pre>
+<p>缺省地, 請求隊列沒有準備函數.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TaggedCommandQueueing.sect2"></a>16.4.2.&#160;被標識的命令排隊</h3></div></div></div>
+<p>可同時有多個請求被激活的硬件, 常常支持某種被標識的命令排隊(TCQ). TCQ 簡單地說是關聯一個整數 "tag" 到每個請求的技術, 注意當驅動器完成每個請求時, 他可告知驅動是哪一個. 在以前的內核版本, 實現 TCQ 的塊驅動不得不自己做所有的工作; 在2.6, 一個 TCQ 支持框架已經被添加到塊層, 以給所有的驅動來使用.</p>
+<p>如果你的驅動器進行標記命令排隊, 你應當在初始化時通知內核這個事實, 使用:</p>
+<pre class="programlisting">
+int blk_queue_init_tags(request_queue_t *queue, int depth, struct blk_queue_tag *tags);
+</pre>
+<p>這裡, queue 是你的請求隊列, 而 depth 是你的設備能夠在任何時間擁有的等待的標記請求的數目. tags 是一個可選的指針指向一個 struct blk_queue_tag 結構數組; 必須有 depth 個. 正常地, tags 可用 NULL, 並且 blk_queue_init_tags 分配這個 數組. 如果, 但是, 你需要和多個設備分享通用的 tags, 你可傳遞這個標記數組指針(存儲在 queue_tags 成員)從另一個請求隊列. 你應當從不真正自己分配這個標記數組; 塊層需要初始化這個數組並且不輸出這個初始化函數給模塊.</p>
+<p>因為 blk_queue_init_tags 分配內存, 它可能失敗. 在那個情況下它返回一個負的錯誤碼給調用者.</p>
+<p>如果你的設備可處理的標記的數目改變了, 你可通知內核, 使用:</p>
+<pre class="programlisting">
+int blk_queue_resize_tags(request_queue_t *queue, int new_depth); 
+</pre>
+<p>這個隊列鎖必須在這個調用期間被持有. 這個調用可能失敗, 返回一個負錯誤碼.</p>
+<p>一個標記和一個請求結構的關聯被 blk_queue_start_tag 來完成, 它必須在成員隊列鎖被持有時調用:</p>
+<pre class="programlisting">
+int blk_queue_start_tag(request_queue_t *queue, struct request *req); 
+</pre>
+<p>如果一個 tag 可用, 這個函數分配它給這個請求, 存儲這個標識號在 req-&gt;tag, 並且返回 0. 它還從隊列中解除這個請求, 並且連接它到它自己的標識跟蹤結構, 因此你的驅動應當小心不從隊列中解除這個請求, 如果在使用標識. 如果沒有標識可用, blk_queue_start_tag 將這個請求留在隊列並且返回一個非零值.</p>
+<p>當一個給定的請求的所有的傳送都已完成, 你的驅動應當返回標識, 使用:</p>
+<pre class="programlisting">
+void blk_queue_end_tag(request_queue_t *queue, struct request *req); 
+</pre>
+<p>再一次, 你必須持有隊列鎖, 在調用這個函數之前. 這個調用應當在 end_that_request_first 返回 0 之後進行(意味著這個請求完成), 但要在調用 end_that_request_last 之前. 記住這個請求已經從隊列中解除, 因此它對於你的驅動在此點這樣做可能是一個錯誤.</p>
+<p>如果你需要找到關聯到一個給定標識上的請求(當驅動器報告完成, 例如), 使用 blk_queue_find_tag:</p>
+<pre class="programlisting">
+struct request *blk_queue_find_tag(request_queue_t *qeue, int tag);
+</pre>
+<p>返回值是關聯的請求結構, 除非有些事情已經真的出錯了.</p>
+<p>如果事情真地出錯了, 你的請求可能發現它自己不得不復位或者對其中一個它的設備進行一些其他的大動作. 在這種情況下, 任何等待中的標識命令將不會完成. 塊層提供一個函數可用幫助在這種情況下恢復:</p>
+<pre class="programlisting">
+void blk_queue_invalidate_tags(request_queue_t *queue); 
+</pre>
+<p>這個函數返回所有的等待的標識給這個池, 並且將關聯的請求放回請求隊列. 你調用這個函數時必須持有隊列鎖.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch16s03.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch16.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch16s05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">16.3.&#160;請求處理&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;16.5.&#160;快速參考</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch16s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:42 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

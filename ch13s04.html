@@ -1,0 +1,384 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch13s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>13.4.&#160;編寫一個 USB 驅動-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch13.html" title="第&#160;13&#160;章&#160;USB 驅動">
+<link rel="prev" href="ch13s03.html" title="13.3.&#160;USB 的 Urbs">
+<link rel="next" href="ch13s05.html" title="13.5.&#160;無 urb 的 USB 傳送">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">13.4.&#160;編寫一個 USB 驅動</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch13s03.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;13&#160;章&#160;USB 驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch13s05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="WritingaUSBDriver.sect1"></a>13.4.&#160;編寫一個 USB 驅動</h2></div></div></div>
+<p>編寫一個 USB 設備驅動的方法類似於一個 pci 驅動: 驅動註冊它的驅動對像到 USB 子系統並且之後使用供應商和設備標識來告知是否它的硬件已經安裝.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="WhatDevicesDoestheDriverSupport.sect2"></a>13.4.1.&#160;驅動支持什麼設備</h3></div></div></div>
+<p>struct usb_device_id 結構提供了這個驅動支持的一個不同類型 USB 設備的列表. 這個列表被USB 核心用來決定給設備哪個驅動, 並且通過熱插拔腳本來決定哪個驅動自動加載, 當特定設備被插入系統時.</p>
+<p>struct usb_device_id 結構定義有下面的成員:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>__u16 match_flags </span></span></dt>
+<dd><p>決定設備應當匹配結構中下列的哪個成員. 這是一個位成員, 由在 include/linux/mod_devicetable.h 文件中指定的不同的 USB_DEVICE_ID_MATCH_* 值所定義. 這個成員常常從不直接設置, 但是由 USB_DEVICE 類型宏來初始化.</p></dd>
+<dt><span class="term"><span>__u16 idVendor </span></span></dt>
+<dd><p>這個設備的 USB 供應商 ID. 這個數由 USB 論壇分配給它的成員並且不能由任何別的構成.</p></dd>
+<dt><span class="term"><span>__u16 idProduct </span></span></dt>
+<dd><p>這個設備的 USB 產品 ID. 所有的有分配給他們的供應商 ID 的供應商可以隨意管理它們的產品 ID.</p></dd>
+<dt><span class="term"><span>__u16 bcdDevice_lo</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__u16 bcdDevice_hi </span></span></dt>
+<dd><p>定義供應商分配的產品版本號的高低範圍. bcdDevice_hi 值包括其中; 它的值是最高編號的設備號. 這 2 個值以BCD 方式編碼. 這些變量, 連同 idVendor 和 idProduct, 用來定義一個特定的設備版本.</p></dd>
+<dt><span class="term"><span>__u8 bDeviceClass</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__u8 bDeviceSubClass</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__u8 bDeviceProtocol </span></span></dt>
+<dd><p>定義類, 子類, 和設備協議, 分別地. 這些值被 USB 論壇分配並且定義在 USB 規範中. 這些值指定這個設備的行為, 包括設備上所有的接口.</p></dd>
+<dt><span class="term"><span>__u8 bInterfaceClass</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__u8 bInterfaceSubClass</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__u8 bInterfaceProtocol </span></span></dt>
+<dd><p>非常像上面的設備特定值, 這些定義了類, 子類, 和單個接口協議, 分別地. 這些值由 USB 論壇指定並且定義在 USB 規範中.</p></dd>
+<dt><span class="term"><span>kernel_ulong_t driver_info </span></span></dt>
+<dd><p>這個值不用來匹配, 但是它持有信息, 驅動可用來在 USB 驅動的探測回調函數區分不同的設備.</p></dd>
+</dl></div>
+<p>至於 PCI 設備, 有幾個宏可用來初始化這個結構:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>USB_DEVICE(vendor, product)</span></span></dt>
+<dd><p>創建一個 struct usb_device_id, 可用來只匹配特定供應商和產品 ID 值. 這是非常普遍用的, 對於需要特定驅動的 USB 設備.</p></dd>
+<dt><span class="term"><span>USB_DEVICE_VER(vendor, product, lo, hi)</span></span></dt>
+<dd><p>創建一個 struct usb_device_id, 用來在一個版本範圍中只匹配特定供應商和產品 ID 值.</p></dd>
+<dt><span class="term"><span>USB_DEVICE_INFO(class, subclass, protocol)</span></span></dt>
+<dd><p>創建一個 struct usb_device_id, 可用來只匹配一個特定類的 USB 設備.</p></dd>
+<dt><span class="term"><span>USB_INTERFACE_INFO(class, subclass, protocol)</span></span></dt>
+<dd><p>創建一個 struct usb_device_id, 可用來只匹配一個特定類的 USB 接口.</p></dd>
+</dl></div>
+<p>對於一個簡單的 USB 設備驅動, 只控制來自一個供應商的一個單一 USB 設備, struct usb_device_id 表可定義如:</p>
+<pre class="programlisting">
+/* table of devices that work with this driver */ 
+static struct usb_device_id skel_table [] = {
+ { USB_DEVICE(USB_SKEL_VENDOR_ID, USB_SKEL_PRODUCT_ID) },
+ { } /* Terminating entry */
+};
+MODULE_DEVICE_TABLE (usb, skel_table);
+</pre>
+<p>至於 PCI 驅動, MODULE_DEVICE_TABLE 宏有必要允許用戶空間工具來發現這個驅動可控制什麼設備. 但是對於 USB 驅動, 字符串 usb 必須是在這個宏中的第一個值.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RegisteringaUSBDriver.sect2"></a>13.4.2.&#160;註冊一個 USB 驅動</h3></div></div></div>
+<p>所有 USB 驅動必須創建的主要結構是 struct usb_driver. 這個結構必須被 USB 驅動填充並且包含多個函數回調和變量, 來向 USB 核心代碼描述 USB 驅動:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct module *owner </span></span></dt>
+<dd><p>指向這個驅動的模塊擁有者的指針. USB 核心使用它正確地引用計數這個 USB 驅動, 以便它不被在不合適的時刻卸載. 這個變量應當設置到 THIS_MODULE 宏.</p></dd>
+<dt><span class="term"><span>const char *name </span></span></dt>
+<dd><p>指向驅動名子的指針. 它必須在內核 USB 驅動中是唯一的並且通常被設置為和驅動的模塊名相同. 它出現在 sysfs 中在 /sys/bus/usb/drivers/ 之下, 當驅動在內核中時.</p></dd>
+<dt><span class="term"><span>const struct usb_device_id *id_table </span></span></dt>
+<dd>
+<p>指向 struct usb_device_id 表的指針, 包含這個驅動可接受的所有不同類型 USB 設備的列表. 如果這個變量沒被設置, USB 驅動中的探測回調函數不會被調用. 如果你需要你的驅動給系統中每個 USB 設備一直被調用, 創建一個只設置這個 driver_info 成員的入口項:</p>
+<pre class="programlisting">
+static struct usb_device_id usb_ids[] = {
+ {.driver_info = 42},
+    {} 
+};
+</pre>
+</dd>
+<dt><span class="term"><span>int (*probe) (struct usb_interface *intf, const struct usb_device_id *id)</span></span></dt>
+<dd><p>指向 USB 驅動中探測函數的指針. 這個函數(在"探測和去連接的細節"一節中描述)被 USB 核心調用當它認為它有一個這個驅動可處理的 struct usb_interface. 一個指向 USB 核心用來做決定的 struct usb_device_id 的指針也被傳遞到這個函數. 如果這個 USB 驅動主張傳遞給它的 struct usb_interface, 它應當正確地初始化設備並且返回 0. 如果驅動不想主張這個設備, 或者發生一個錯誤, 它應當返回一個負錯誤值.</p></dd>
+<dt><span class="term"><span>void (*disconnect) (struct usb_interface *intf)</span></span></dt>
+<dd><p>指向 USB 驅動的去連接函數的指針. 這個函數(在"探測和去連接的細節"一節中描述)被 USB 核心調用, 當 struct usb_interface 已被從系統中清除或者當驅動被從 USB 核心卸載.</p></dd>
+</dl></div>
+<p>為創建一個值 struct usb_driver 結構, 只有 5 個成員需要被初始化:</p>
+<pre class="programlisting">
+static struct usb_driver skel_driver = {
+ .owner = THIS_MODULE,
+ .name = "skeleton",
+ .id_table = skel_table,
+ .probe = skel_probe,
+ .disconnect = skel_disconnect, 
+}; 
+</pre>
+<p>struct usb_driver 確實包含更多幾個回調, 它們通常不經常用到, 並且不被要求使 USB 驅動正確工作:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int (*ioctl) (struct usb_interface *intf, unsigned int code, void *buf) </span></span></dt>
+<dd><p>指向 USB 驅動的 ioctl 函數的指針. 如果它出現, 在用戶空間程序對一個關聯到 USB 設備的 usbfs 文件系統設備入口, 做一個 ioctl 調用時被調用. 實際上, 只有 USB 集線器驅動使用這個 ioctl, 因為沒有其他的真實需要對於任何其他 USB 驅動要使用.</p></dd>
+<dt><span class="term"><span>int (*suspend) (struct usb_interface *intf, u32 state)</span></span></dt>
+<dd><p>指向 USB 驅動中的懸掛函數的指針. 當設備要被 USB 核心懸掛時被調用.</p></dd>
+<dt><span class="term"><span>int (*resume) (struct usb_interface *intf)</span></span></dt>
+<dd><p>指向 USB 驅動中的恢復函數的指針. 當設備正被 USB 核心恢復時被調用.</p></dd>
+</dl></div>
+<p>為註冊 struct usb_driver 到 USB 核心, 一個調用 usb_register_driver 帶一個指向 struct usb_driver 的指針. 傳統上在 USB 驅動的模塊初始化代碼做這個:</p>
+<pre class="programlisting">
+static int __init usb_skel_init(void)
+{
+        int result;
+        /* register this driver with the USB subsystem */
+        result = usb_register(&amp;skel_driver);
+        if (result)
+                err("usb_register failed. Error number %d", result);
+        return result;
+}
+</pre>
+<p>當 USB 驅動被卸載, struct usb_driver 需要從內核註銷. 使用對 usb_deregister_driver 的調用做這個. 當這個調用發生, 任何當前綁定到這個驅動的 USB 接口被去連接, 並且去連接函數為它們而被調用.</p>
+<pre class="programlisting">
+static void __exit usb_skel_exit(void)
+{
+        /* deregister this driver with the USB subsystem */
+        usb_deregister(&amp;skel_driver);
+}
+</pre>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="probeanddisconnectinDetail.sect3"></a>13.4.2.1.&#160;探測和去連接的細節</h4></div></div></div>
+<p>在之前章節描述的 struct usb_driver 結構中, 驅動指定 2 個 USB 核心在合適的時候調用的函數. 探測函數被調用, 當設備被安裝時, USB 核心認為這個驅動應當處理; 探測函數應當進行檢查傳遞給它的關於設備的信息, 並且決定是否驅動真正合適那個設備. 去連接函數被調用當驅動應當不再控制設備, 由於某些理由, 並且可做清理.</p>
+<p>探測和去連接函數回調都在 USB 集線器內核線程上下文中被調用, 因此它們中睡眠是合法的. 但是, 建議如果有可能大部分工作應當在設備被用戶打開時完成. 為了保持 USB 探測時間為最小. 這是因為 USB 核心處理 USB 設備的添加和去除在一個線程中, 因此任何慢設備驅動可導致 USB 設備探測時間慢下來並且用戶可注意到.</p>
+<p>在探測函數回調中, USB 驅動應當初始化任何它可能使用來管理 USB 設備的本地結構. 它還應當保存任何它需要的關於設備的信息到本地結構, 因為在此時做這些通常更容易. 作為一個例子, USB 驅動常常想為設備探測端點地址和緩衝大小是什麼, 因為和設備通訊需要它們. 這裡是一些例子代碼, 它探測 BULK 類型的 IN 和 OUT 端點, 並且保存一些關於它們的信息在一個本地設備結構中:</p>
+<pre class="programlisting">
+/* set up the endpoint information */
+/* use only the first bulk-in and bulk-out endpoints */
+iface_desc = interface-&gt;cur_altsetting;
+for (i = 0; i &lt; iface_desc-&gt;desc.bNumEndpoints; ++i)
+{
+
+        endpoint = &amp;iface_desc-&gt;endpoint[i].desc;
+        if (!dev-&gt;bulk_in_endpointAddr &amp;&amp;
+                        (endpoint-&gt;bEndpointAddress &amp; USB_DIR_IN) &amp;&amp;
+                        ((endpoint-&gt;bmAttributes &amp; USB_ENDPOINT_XFERTYPE_MASK)
+
+                         == USB_ENDPOINT_XFER_BULK)) { /* we found a bulk in endpoint */ buffer_size = endpoint-&gt;wMaxPacketSize;
+                dev-&gt;bulk_in_size = buffer_size;
+                dev-&gt;bulk_in_endpointAddr = endpoint-&gt;bEndpointAddress;
+                dev-&gt;bulk_in_buffer = kmalloc(buffer_size, GFP_KERNEL);
+                if (!dev-&gt;bulk_in_buffer) {
+                        err("Could not allocate bulk_in_buffer");
+                        goto error;
+                }
+        }
+
+        if (!dev-&gt;bulk_out_endpointAddr &amp;&amp;
+                        !(endpoint-&gt;bEndpointAddress &amp; USB_DIR_IN) &amp;&amp;
+                        ((endpoint-&gt;bmAttributes &amp; USB_ENDPOINT_XFERTYPE_MASK)
+                         == USB_ENDPOINT_XFER_BULK)) { /* we found a bulk out endpoint */ dev-&gt;bulk_out_endpointAddr = endpoint-&gt;bEndpointAddress;
+        }
+}
+if (!(dev-&gt;bulk_in_endpointAddr &amp;&amp; dev-&gt;bulk_out_endpointAddr))
+{
+
+        err("Could not find both bulk-in and bulk-out endpoints");
+        goto error;
+}
+</pre>
+<p>這塊代碼首先循環在這個接口中出現的每個端點, 並且分配一個本地指針到端點結構來使它之後容易存取:</p>
+<pre class="programlisting">
+for (i = 0; i &lt; iface_desc-&gt;desc.bNumEndpoints; ++i) {
+ endpoint = &amp;iface_desc-&gt;endpoint[i].desc;
+</pre>
+<p>那麼, 在我們有了一個端點後, 我們還沒有發現一個塊 IN 類型端點, 我們看是否這個端點的方向是 IN. 那個可被測試通過看是否位掩碼 USB_DIR_IN 被包含在 bEndpointAddress 端點變量中. 如果這是真, 我們決定是否端點類型是塊, 通過使用 USB_ENDPOINT_XFERTYPE_MASK 位掩碼首先掩去 bmAttributes 變量, 並且接著檢查是否它匹配值 USB_ENDPOINT_XFER_BULK:</p>
+<pre class="programlisting">
+if (!dev-&gt;bulk_in_endpointAddr &amp;&amp;
+                (endpoint-&gt;bEndpointAddress &amp; USB_DIR_IN) &amp;&amp;
+                ((endpoint-&gt;bmAttributes &amp; USB_ENDPOINT_XFERTYPE_MASK)
+
+                 == USB_ENDPOINT_XFER_BULK))
+{
+</pre>
+<p>如果所有的這些檢查都是真, 驅動知道它發現了正確的端點類型, 並且可保存關於端點的信息到本地結構中, 它後來將需要這些信息和它通訊.</p>
+<pre class="programlisting">
+/* we found a bulk in endpoint */
+buffer_size = endpoint-&gt;wMaxPacketSize;
+dev-&gt;bulk_in_size = buffer_size;
+dev-&gt;bulk_in_endpointAddr = endpoint-&gt;bEndpointAddress;
+dev-&gt;bulk_in_buffer = kmalloc(buffer_size, GFP_KERNEL);
+if (!dev-&gt;bulk_in_buffer)
+{
+        err("Could not allocate bulk_in_buffer");
+        goto error;
+}
+</pre>
+<p>因為 USB 驅動需要獲取在設備的生命週期後期和這個 struct usb_interface 關聯的本地數據結構, 函數 usb_set_intfdata 可被調用:</p>
+<pre class="programlisting">
+/* save our data pointer in this interface device */
+usb_set_intfdata(interface, dev);
+</pre>
+<p>這個函數接受一個指向任何數據類型的指針, 並且保存它到 struct usb_interface 結構為後面的存取. 為獲取這個數據, 函數 usb_get_intfdata 應當被調用:</p>
+<pre class="programlisting">
+struct usb_skel *dev;
+struct usb_interface *interface;
+int subminor;
+int retval = 0;
+
+subminor = iminor(inode);
+interface = usb_find_interface(&amp;skel_driver, subminor);
+if (!interface)
+{
+        err ("%s - error, can't find device for minor %d",
+             __FUNCTION__, subminor);
+        retval = -ENODEV;
+        goto exit;
+}
+
+dev = usb_get_intfdata(interface);
+if (!dev)
+{
+        retval = -ENODEV;
+        goto exit;
+}
+</pre>
+<p>usb_get_intfdata 常常被調用, 在 USB 驅動的 open 函數和在去連接函數. 感謝這 2 個函數, USB 驅動不需要保持一個靜態指針數組來保存單個設備結構為系統中所有當前的設備. 對設備信息的非直接引用允許一個無限數目的設備被任何 USB 驅動支持.</p>
+<p>如果 USB 驅動沒有和另一種處理用戶和設備交互的子系統(例如 input, tty, video, 等待)關聯, 驅動可使用 USB 主編號為了使用傳統的和用戶空間之間的字符驅動接口. 為此, USB 驅動必須在探測函數中調用 usb_register_dev 函數, 當它想註冊一個設備到 USB 核心. 確認設備和驅動處於正確的狀態, 來處理一個想在調用這個函數時盡快存取這個設備的用戶.</p>
+<pre class="programlisting">
+/* we can register the device now, as it is ready */
+retval = usb_register_dev(interface, &amp;skel_class);
+if (retval)
+{
+        /* something prevented us from registering this driver */
+        err("Not able to get a minor for this device.");
+        usb_set_intfdata(interface, NULL);
+        goto error;
+}
+</pre>
+<p>usb_register_dev 函數要求一個指向 struct usb_interface 的指針和指向 struct usb_class_driver 的指針. struct -usb_class_driver 用來定義許多不同的參數, 當註冊一個次編號USB 驅動要 USB 核心知道這些參數. 這個結構包括下列變量:.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>char *name </span></span></dt>
+<dd><p>sysfs 用來描述設備的名子. 一個前導路徑名, 如果存在, 只用在 devfs 並且本書不涉及. 如果設備號需要在這個名子中, 字符 %d 應當在名子串中. 例如, 位創建 devfs 名子 usb/foo1 和 sysfs 類名 foo1, 名子串應當設置為 usb/foo%d.</p></dd>
+<dt><span class="term"><span>struct file_operations *fops; </span></span></dt>
+<dd><p>指向 struct file_operations 的結構的指針, 這個驅動已定義來註冊為字符設備. 這個結構的更多信息見第 3 章.</p></dd>
+<dt><span class="term"><span>mode_t mode; </span></span></dt>
+<dd><p>給這個驅動的要被創建的 devfs 文件的模式; 否則不使用. 這個變量的典型設置是值 S_IRUSR 和 值 S_IWUSR 的結合, 它將只提供這個設備文件的擁有者讀和寫存取.</p></dd>
+<dt><span class="term"><span>int minor_base; </span></span></dt>
+<dd><p>這是給這個驅動安排的次編號的開始. 所有和這個驅動相關的設備被創建為從這個值開始的唯一的, 遞增的次編號. 只有 16 個設備被允許在任何時刻和這個驅動關聯, 除非 CONFIG_USB_DYNAMIC_MINORS 配置選項被打開. 如果這樣, 忽略這個變量, 並且這個設備的所有的次編號被以先來先服務的方式分配. 建議打開了這個選項的系統使用一個程序例如 udev 來關聯繫統中的設備節點, 因為一個靜態的 /dev 樹不會正確工作.</p></dd>
+</dl></div>
+<p>當 USB 設備斷開, 所有的關聯到這個設備的資源應當被清除, 如果可能. 在此時, 如果 usb_register_dev 已被在探測函數中調用來分配一個 USB 設備的次編號, 函數 usb_deregister_dev 必須被調用來將次編號給回 USB 核心.</p>
+<p>在斷開函數中, 也重要的是從接口獲取之前調用 usb_set_intfdata 所設置的數據. 接著設置數據指針在 struct us_interface 結構為 NULL 來阻止在不正確存取數據中的任何進一步的錯誤.</p>
+<pre class="programlisting">
+static void skel_disconnect(struct usb_interface *interface)
+{
+        struct usb_skel *dev;
+        int minor = interface-&gt;minor;
+        /* prevent skel_open() from racing skel_disconnect( ) */
+        lock_kernel();
+
+        dev = usb_get_intfdata(interface);
+        usb_set_intfdata(interface, NULL);
+        /* give back our minor */
+        usb_deregister_dev(interface, &amp;skel_class);
+
+        unlock_kernel(); /* decrement our usage count */
+
+        kref_put(&amp;dev-&gt;kref, skel_delete);
+        info("USB Skeleton #%d now disconnected", minor);
+}
+</pre>
+<p>注意在之前代碼片段中的調用 lock_kernel. 它獲取了 bigkernel 鎖, 以至於 disconnect 回調不會遇到一個競爭情況, 在使用 open 調用試圖獲取一個指向正確接口數據結構的指針. 因為 open 在 bigkernel 鎖獲取情況下被調用, 如果 disconnect 也獲取同一個鎖, 只有驅動的一部分可存取並且接著設置接口數據指針.</p>
+<p>就在 disconnect 函數為一個 USB 設備被調用, 所有的當前在被傳送的 urb 可被 USB 核心取消, 因此驅動不必明確為這些 urb 調用 usb_kill_urb. 如果一個驅動試圖提交一個 urb 給 USB 設備, 在調用 usb_submit_urb 被斷開之後, 這個任務會失敗, 錯誤值為-EPIPE.</p>
+</div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="SubmittingandControllingaUrb.sect2"></a>13.4.3.&#160;提交和控制一個 urb</h3></div></div></div>
+<p>當驅動有數據發送到 USB 設備(如同在驅動的 write 函數中發生的), 一個 urb 必須被分配來傳送數據到設備.</p>
+<pre class="programlisting">
+urb = usb_alloc_urb(0, GFP_KERNEL);
+if (!urb)
+{
+        retval = -ENOMEM;
+        goto error;
+}
+</pre>
+<p>在 urb 被成功分配後, 一個 DMA 緩衝也應當被創建來發送數據到設備以最有效的方式, 並且被傳遞到驅動的數據應當被拷貝到緩衝:</p>
+<pre class="programlisting">
+buf = usb_buffer_alloc(dev-&gt;udev, count, GFP_KERNEL, &amp;urb-&gt;transfer_dma);
+if (!buf)
+{
+        retval = -ENOMEM;
+        goto error;
+}
+if (copy_from_user(buf, user_buffer, count))
+{
+        retval = -EFAULT;
+        goto error;
+}
+</pre>
+<p>應當數據被正確地從用戶空間拷貝到本地緩衝, urb 在它可被提交給 USB 核心之前必須被正確初始化:</p>
+<pre class="programlisting">
+/* initialize the urb properly */
+usb_fill_bulk_urb(urb, dev-&gt;udev,
+                  usb_sndbulkpipe(dev-&gt;udev, dev-&gt;bulk_out_endpointAddr),
+                  buf, count, skel_write_bulk_callback, dev);
+urb-&gt;transfer_flags |= URB_NO_TRANSFER_DMA_MAP;
+</pre>
+<p>現在 urb 被正確分配, 數據被正確拷貝, 並且 urb 被正確初始化, 它可被提交給 USB 核心來傳遞給設備.</p>
+<pre class="programlisting">
+/* send the data out the bulk port */
+retval = usb_submit_urb(urb, GFP_KERNEL);
+if (retval)
+{
+        err("%s - failed submitting write urb, error %d", __FUNCTION__, retval);
+        goto error;
+}
+</pre>
+<p>在urb被成功傳遞到 USB 設備(或者在傳輸中發生了什麼), urb 回調被 USB 核心調用. 在我們的例子中, 我們初始化 urb 來指向函數 skel_write_bulk_callback, 並且那就是被調用的函數:</p>
+<pre class="programlisting">
+static void skel_write_bulk_callback(struct urb *urb, struct pt_regs *regs)
+{
+        /* sync/async unlink faults aren't errors */
+        if (urb-&gt;status &amp;&amp;
+
+                        !(urb-&gt;status == -ENOENT ||
+                          urb-&gt;status == -ECONNRESET ||
+                          urb-&gt;status == -ESHUTDOWN)){
+                dbg("%s - nonzero write bulk status received: %d",
+                    __FUNCTION__, urb-&gt;status);
+        }
+
+        /* free up our allocated buffer */
+        usb_buffer_free(urb-&gt;dev, urb-&gt;transfer_buffer_length,
+                        urb-&gt;transfer_buffer, urb-&gt;transfer_dma);
+}
+</pre>
+<p>回調函數做的第一件事是檢查 urb 的狀態來決定是否這個 urb 成功完成或沒有. 錯誤值, -ENOENT, -ECONNRESET, 和 -ESHUTDOWN 不是真正的傳送錯誤, 只是報告伴隨成功傳送的情況. (見 urb 的可能錯誤的列表, 在"結構 struct urb"一節中詳細列出). 接著這個回調釋放安排給這個 urb 傳送的已分配的緩衝.</p>
+<p>在 urb 的回調函數在運行時另一個 urb 被提交給設備是普遍的. 當流數據到設備時是有用的. 記住 urb 回調是在中斷上下文運行, 因此它不應當做任何內存分配, 持有任何旗標, 或者任何可導致進程睡眠的事情. 當從回調中提交 urb, 使用 GFP_ATOMIC 標誌來告知 USB 核心不要睡眠, 如果它需要分配新內存塊在提交過程中.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch13s03.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch13.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch13s05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">13.3.&#160;USB 的 Urbs&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;13.5.&#160;無 urb 的 USB 傳送</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch13s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

@@ -1,0 +1,138 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;4&#160;章&#160;調試技術-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch03s09.html" title="3.9.&#160;快速參考">
+<link rel="next" href="ch04s02.html" title="4.2.&#160;用打印調試">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;4&#160;章&#160;調試技術</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch03s09.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch04s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="DebuggingTechniques.chapter"></a>第&#160;4&#160;章&#160;調試技術</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch04.html#DebuggingSupportintheKernel.sect">4.1. 內核中的調試支持</a></span></dt>
+<dt><span class="sect1"><a href="ch04s02.html">4.2. 用打印調試</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch04s02.html#printk">4.2.1. printk</a></span></dt>
+<dt><span class="sect2"><a href="ch04s02.html#RedirectingConsoleMessages">4.2.2. 重定向控制台消息</a></span></dt>
+<dt><span class="sect2"><a href="ch04s02.html#HowMessageGetLogged">4.2.3. 消息是如何記錄的</a></span></dt>
+<dt><span class="sect2"><a href="ch04s02.html#TurningtheMessagesOnandOff">4.2.4. 打開和關閉消息</a></span></dt>
+<dt><span class="sect2"><a href="ch04s02.html#RateLimiting">4.2.5. 速率限制</a></span></dt>
+<dt><span class="sect2"><a href="ch04s02.html#PrintingDeviceNumbers">4.2.6. 打印設備編號</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch04s03.html">4.3. 用查詢來調試</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch04s03.html#UsingtheprocFilesystem">4.3.1. 使用 /proc 文件系統</a></span></dt>
+<dt><span class="sect2"><a href="ch04s03.html#TheioctlMethod.sect">4.3.2. ioctl 方法</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch04s04.html">4.4. 使用觀察來調試</a></span></dt>
+<dt><span class="sect1"><a href="ch04s05.html">4.5. 調試系統故障</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch04s05.html#OopsMessages.scet">4.5.1. oops 消息</a></span></dt>
+<dt><span class="sect2"><a href="ch04s05.html#SystemHange.sect">4.5.2. 系統掛起</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch04s06.html">4.6. 調試器和相關工具</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch04s06.html#Usinggdb.sect">4.6.1. 使用 gdb</a></span></dt>
+<dt><span class="sect2"><a href="ch04s06.html#ThekdbKernelDebugger.sect">4.6.2. kdb 內核調試器</a></span></dt>
+<dt><span class="sect2"><a href="ch04s06.html#ThekgdbPatches.sect">4.6.3. kgdb 補丁</a></span></dt>
+<dt><span class="sect2"><a href="ch04s06.html#TheUserModeLinuxPort.sect">4.6.4. 用戶模式 Linux 移植</a></span></dt>
+<dt><span class="sect2"><a href="ch04s06.html#TheLinuxTraceToolkit.sect">4.6.5. Linux 追蹤工具</a></span></dt>
+<dt><span class="sect2"><a href="ch04s06.html#DynamicProbes.sect">4.6.6. 動態探針</a></span></dt>
+</dl></dd>
+</dl>
+</div>
+<p>內核編程帶有它自己的, 獨特的調試挑戰性. 內核代碼無法輕易地在一個調試器下運行, 也無法輕易的被跟蹤, 因為它是一套沒有與特定進程相關連的功能的集合. 內核代碼錯誤也特別難以重現, 它們會牽連整個系統與它們一起失效, 從而破壞了大量的能用來追蹤錯誤的證據.</p>
+<p>本章介紹了在如此艱難情況下能夠用以監視內核代碼和跟蹤錯誤的技術. </p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="DebuggingSupportintheKernel.sect"></a>4.1.&#160;內核中的調試支持</h2></div></div></div>
+<p>在第 2 章, 我們建議你建立並安裝你自己的內核, 而不是運行來自你的發佈商的現成的內核. 運行你自己的內核的最充分的理由之一是內核開發者已經在內核自身中構建了多個調試特性. 這些特性能產生額外的輸出並降低性能, 因此發佈商的產品內核中往往不會使能它們. 作為一個內核開發者, 但是, 你有不同的優先權並且會樂於接收這些格外的內核調試支持帶來的開銷.</p>
+<p>這裡, 我們列出用來開發的內核應當激活的配置選項. 除了另外指出的, 所有的這些選項都在 "kernel hacking" 菜單, 不管什麼樣的你喜歡的內核配置工具. 注意有些選項不是所有體系都支持. </p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>CONFIG_DEBUG_KERNEL</span></span></dt>
+<dd><p>這個選項只是使其他調試選項可用; 它應當打開, 但是它自己不激活任何的特性.</p></dd>
+<dt><span class="term"><span>CONFIG_DEBUG_SLAB</span></span></dt>
+<dd><p>這個重要的選項打開了內核內存分配函數的幾類檢查; 激活這些檢查, 就可能探測到一些內存覆蓋和遺漏初始化的錯誤. 被分配的每一個字節在遞交給調用者之前都設成 0xa5, 隨後在釋放時被設成 0x6b. 你在任何時候如果見到任一個這種"壞"模式重複出現在你的驅動輸出(或者常常在一個 oops 的列表), 你會確切知道去找什麼類型的錯誤. 當激活調試, 內核還會在每個分配的內存對象的前後放置特別的守護值; 如果這些值曾被改動, 內核知道有人已覆蓋了一個內存分配區, 它大聲抱怨. 各種的對更模糊的問題的檢查也給激活了.</p></dd>
+<dt><span class="term"><span>CONFIG_DEBUG_PAGEALLOC</span></span></dt>
+<dd><p>滿的頁在釋放時被從內核地址空間去除. 這個選項會顯著拖慢系統, 但是它也能快速指出某些類型的內存損壞錯誤.</p></dd>
+<dt><span class="term"><span>CONFIG_DEBUG_SPINLOCK</span></span></dt>
+<dd><p>激活這個選項, 內核捕捉對未初始化的自旋鎖的操作, 以及各種其他的錯誤( 例如 2 次解鎖同一個鎖 ).</p></dd>
+<dt><span class="term"><span>CONFIG_DEBUG_SPINLOCK_SLEEP</span></span></dt>
+<dd><p>這個選項激活對持有自旋鎖時進入睡眠的檢查. 實際上, 如果你調用一個可能會睡眠的函數, 它就抱怨, 即便這個有疑問的調用沒有睡眠.</p></dd>
+<dt><span class="term"><span>CONFIG_INIT_DEBUG</span></span></dt>
+<dd><p>用__init (或者 __initdata) 標誌的項在系統初始化或者模塊加載後都被丟棄. 這個選項激活了對代碼的檢查, 這些代碼試圖在初始化完成後存取初始化時內存.</p></dd>
+<dt><span class="term"><span>CONFIG_DEBUG_INFO</span></span></dt>
+<dd><p>這個選項使得內核在建立時包含完整的調試信息. 如果你想使用 gdb 調試內核, 你將需要這些信息. 如果你打算使用 gdb, 你還要激活 CONFIG_FRAME_POINTER.</p></dd>
+<dt><span class="term"><span>CONFIG_MAGIC_SYSRQ</span></span></dt>
+<dd><p>激活"魔術 SysRq"鍵. 我們在本章後面的"系統掛起"一節查看這個鍵.</p></dd>
+<dt><span class="term"><span>CONFIG_DEBUG_STACKOVERFLOW</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>CONFIG_DEBUG_STACK_USAGE</span></span></dt>
+<dd><p>這些選項能幫助跟蹤內核堆棧溢出. 堆棧溢出的確證是一個 oops 輸出, 但是沒有任何形式的合理的回溯. 第一個選項給內核增加了明確的溢出檢查; 第 2 個使得內核監測堆棧使用並作一些統計, 這些統計可以用魔術 SysRq 鍵得到.</p></dd>
+<dt><span class="term"><span>CONFIG_KALLSYMS</span></span></dt>
+<dd><p>這個選項(在"Generl setup/Standard features"下)使得內核符號信息建在內核中; 缺省是激活的. 符號選項用在調試上下文中; 沒有它, 一個 oops 列表只能以 16 進制格式給你一個內核回溯, 這不是很有用.</p></dd>
+<dt><span class="term"><span>CONFIG_IKCONFIG</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>CONFIG_IKCONFIG_PROC</span></span></dt>
+<dd><p>這些選項(在"Generl setup"菜單)使得完整的內核配置狀態被建立到內核中, 可以通過 /proc 來使其可用. 大部分內核開發者知道他們使用的哪個配置, 並不需要這些選項(會使得內核更大). 但是如果你試著調試由其他人建立的內核中的問題, 它們可能有用.</p></dd>
+<dt><span class="term"><span>CONFIG_ACPI_DEBUG</span></span></dt>
+<dd><p>在"Power management/ACPI"下. 這個選項打開詳細的 ACPI (Advanced Configuration and Power Interface) 調試信息, 它可能有用如果你懷疑一個問題和 ACPI 相關.</p></dd>
+<dt><span class="term"><span>CONFIG_DEBUG_DRIVER</span></span></dt>
+<dd><p>在"Device drivers"下. 打開了驅動核心的調試信息, 可用以追蹤低層支持代碼的問題. 我們在第 14 章查看驅動核心.</p></dd>
+<dt><span class="term"><span>CONFIG_SCSI_CONSTANTS</span></span></dt>
+<dd><p>這個選項, 在"Device drivers/SCSI device support"下, 建立詳細的 SCSI 錯誤消息的信息. 如果你在使用 SCSI 驅動, 你可能需要這個選項.</p></dd>
+<dt><span class="term"><span>CONFIG_INPUT_EVBUG</span></span></dt>
+<dd><p>這個選項(在"Device drivers/Input device support"下)打開輸入事件的詳細日誌. 如果你使用一個輸入設備的驅動, 這個選項可能會有用. 然而要小心這個選項的安全性的隱含意義: 它記錄了你鍵入的任何東西, 包括你的密碼.</p></dd>
+<dt><span class="term"><span>CONFIG_PROFILING</span></span></dt>
+<dd><p>這個選項位於"Profiling support"之下. 剖析通常用在系統性能調整, 但是在追蹤一些內核掛起和相關問題上也有用.</p></dd>
+</dl></div>
+<p>我們會再次遇到一些上面的選項, 當我們查看各種方法來追蹤內核問題時. 但是首先, 我們要看一下經典的調試技術: print 語句.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch03s09.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch04s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">3.9.&#160;快速參考&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;4.2.&#160;用打印調試</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

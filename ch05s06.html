@@ -1,0 +1,86 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>5.6.&#160;鎖陷阱-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch05.html" title="第&#160;5&#160;章&#160;並發和競爭情況">
+<link rel="prev" href="ch05s05.html" title="5.5.&#160;自旋鎖">
+<link rel="next" href="ch05s07.html" title="5.7.&#160;加鎖的各種選擇">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">5.6.&#160;鎖陷阱</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch05s05.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;5&#160;章&#160;並發和競爭情況</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch05s07.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="LockingTraps.sect"></a>5.6.&#160;鎖陷阱</h2></div></div></div>
+<p>多年使用鎖的經驗 -- 早於 Linux 的經驗 -- 已經表明加鎖可能是非常難於正確的. 管理並發是一個固有的技巧性的事情, 有很多出錯的方式. 在這一節, 我們快速看一下可能出錯的東西.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AmbiguousRules.sect"></a>5.6.1.&#160;模糊的規則</h3></div></div></div>
+<p>如同上面已經說過的, 一個正確的加鎖機制需要清晰和明確的規則. 當你創建一個可以被並發存取的資源時, 你應當定義哪個鎖將控制存取. 加鎖應當真正在開始處進行; 事後更改會是難的事情. 開始時花費的時間常常在調試時獲得回報.</p>
+<p>當你編寫你的代碼, 你會毫無疑問遇到幾個函數需要存取通過一個特定鎖保護的結構. 在此, 你必須小心: 如果一個函數需要一個鎖並且接著調用另一個函數也試圖請求這個鎖, 你的代碼死鎖. 不論旗標還是自旋鎖都不允許一個持鎖者第 2 次請求鎖; 如果你試圖這樣做, 事情就簡單地完了.</p>
+<p>為使的加鎖正確工作, 你不得不編寫一些函數, 假定它們的調用者已經獲取了相關的鎖. 常常地, 只有你的內部的, 靜態函數能夠這樣編寫; 從外部調用的函數必須明確處理加鎖. 當你編寫內部函數對加鎖做了假設, 方便自己(和其他使用你的代碼的人)並且明確記錄這些假設. 在幾個月後可能很難回來並記起是否你需要持有一個鎖來調用一個特殊函數.</p>
+<p>在 sucll 的例子裡, 採用的設計決定是要求所有的函數直接從系統調用裡調用, 來請求應用到被存取的設備結構上的旗標. 所有的內部函數, 那些只是從其他 scull 函數里調用的, 可以因此假設旗標已經正確獲得.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="LockOrderingRules.sect"></a>5.6.2.&#160;加鎖順序規則</h3></div></div></div>
+<p>在有大量鎖的系統中(並且內核在成為這樣一個系統), 一次需要持有多於一個鎖, 對代碼是不尋常的. 如果某類計算必須使用 2 個不同的資源進行, 每個有它自己的鎖, 常常沒有選擇只能獲取 2 個鎖.</p>
+<p>獲得多個鎖可能是危險的, 然而. 如果你有 2 個鎖, 稱為 Lock1 和 Lock2, 代碼需要同時都獲取, 你有一個潛在的死鎖. 僅僅想像一個線程鎖住 Lock1 而另一個同時獲得 Lock2. 接著每個線程試圖得到它沒有的那個. 2 個線程都會死鎖.</p>
+<p>這個問題的解決方法常常是簡單的: 當多個鎖必須獲得時, 它們應當一直以同樣順序獲得. 只要遵照這個慣例, 象上面描述的簡單死鎖能夠避免. 然而, 遵照加鎖順序規則是做比說難. 非常少見這樣的規則真正在任何地方被寫下. 常常你能做的最好的是看看別的代碼如何做的.</p>
+<p>一些經驗規則能幫上忙. 如果你必須獲得一個對你的代碼來說的本地鎖(假如, 一個設備鎖), 以及一個屬於內核更中心部分的鎖, 先獲取你的. 如果你有一個旗標和自旋鎖的組合, 你必須, 當然, 先獲得旗標; 調用 down (可能睡眠) 在持有一個自旋鎖時是一個嚴重的錯誤. 但是最重要的, 盡力避免需要多於一個鎖的情況.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="FineVersusCoarseGrainedLocking.sect"></a>5.6.3.&#160;細 -粗- 粒度加鎖</h3></div></div></div>
+<p>第一個支持多處理器系統的 Linux 內核是 2.0; 它只含有一個自旋鎖. 這個大內核鎖將整個內核變為一個大的臨界區; 在任何時候只有一個 CPU 能夠執行內核代碼. 這個鎖足夠好地解決了並發問題以允許內核開發者從事所有其他的開發 SMP 所包含的問題. 但是它不是擴充地很好. 甚至一個 2 個處理器的系統可能花費可觀數量的時間只是等待這個大內核鎖. 一個 4 個處理器的系統的性能甚至不接近 4 個獨立的機器的性能.</p>
+<p>因此, 後續的內核發佈已經包含了更細粒度的加鎖. 在 2.2 中, 一個自旋鎖控制對塊 I/O 子系統的存取; 另一個為網絡而工作, 等等. 一個現代的內核能包含幾千個鎖, 每個保護一個小的資源. 這種細粒度的加鎖可能對伸縮性是好的; 它允許每個處理器在它自己特定的任務上工作而不必競爭其他處理器使用的鎖. 很少人忘記大內核鎖.<sup>[<a name="id428542" href="#ftn.id428542">19</a>]</sup></p>
+<p>但是, 細粒度加鎖帶有開銷. 在有幾千個鎖的內核中, 很難知道你需要那個鎖 -- 以及你應當以什麼順序獲取它們 -- 來進行一個特定的操作. 記住加鎖錯誤可能非常難發現; 更多的鎖提供了更多的機會使真正有害的加鎖 bug 鑽進內核中. 細粒度加鎖能帶來一定水平的複雜性, 長期來, 對內核的可維護性有一個大的, 不利的效果.</p>
+<p>在一個設備驅動中加鎖常常是相對直接的; 你可以用一個鎖來涵蓋你做的所有東西, 或者你可以給你管理的每個設備創建一個鎖. 作為一個通用的規則, 你應當從相對粗的加鎖開始, 除非你有確實的理由相信競爭可能是一個問題. 忍住慫恿去過早地優化; 真實地性能約束常常表現在想不到的地方.</p>
+<p>如果你確實懷疑鎖競爭在損壞性能, 你可能發現 lockmeter 工具有用. 這個補丁(從 http://oss.sgi.com/projects/lockmeter/ 可得到) 裝備內核來測量在鎖等待花費的時間. 通過看這個報告, 你能夠很快知道是否鎖競爭真的是問題.</p>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id428542" href="#id428542">19</a>] </sup>這個鎖仍然存在於 2.6, 幾個它現在覆蓋內核非常小的部分. 如果你偶然發現一個 lock_kernel 調用, 你已找到了這個大內核鎖. 但是, 想都不要想在任何新代碼中使用它.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch05s05.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch05.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch05s07.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">5.5.&#160;自旋鎖&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;5.7.&#160;加鎖的各種選擇</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

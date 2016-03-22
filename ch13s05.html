@@ -1,0 +1,192 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch13s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>13.5.&#160;無 urb 的 USB 傳送-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch13.html" title="第&#160;13&#160;章&#160;USB 驅動">
+<link rel="prev" href="ch13s04.html" title="13.4.&#160;編寫一個 USB 驅動">
+<link rel="next" href="ch13s06.html" title="13.6.&#160;快速參考">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">13.5.&#160;無 urb 的 USB 傳送</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch13s04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;13&#160;章&#160;USB 驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch13s06.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="USBTransfersWithoutUrbs.sect1"></a>13.5.&#160;無 urb 的 USB 傳送</h2></div></div></div>
+<p>有時一個 USB 驅動必須經過所有的步驟創建一個 struct urb, 初始化它, 再等待 urb 完成函數運行, 只是要發送或者接受一些簡單的 USB 數據. 有 2 個函數用來提供一個簡單的接口.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="usb_bulk_msg.sect2"></a>13.5.1.&#160;usb_bulk_msg 接口</h3></div></div></div>
+<p>usb_bulk_msg 創建一個 USB 塊 urb 並且發送它到特定的設備, 接著在返回到調用者之前等待完成. 它定義為:</p>
+<pre class="programlisting">
+int usb_bulk_msg(struct usb_device *usb_dev, unsigned int pipe,
+                 void *data, int len, int *actual_length,
+                 int timeout);
+</pre>
+<p>這個函數的參數是:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct usb_device *usb_dev </span></span></dt>
+<dd><p>發送塊消息去的 USB 設備的指針</p></dd>
+<dt><span class="term"><span>unsigned int pipe </span></span></dt>
+<dd><p>這個塊消息要發送到的 USB 設備的特定端點. 這個值被創建, 使用一個對 usb_sndbulkpipe 或者usb_rcvbulkpipe 的調用.</p></dd>
+<dt><span class="term"><span>void *data </span></span></dt>
+<dd><p>如果這是一個 OUT 端點, 指向要發送到設備的數據的指針. 如果是一個 IN 端點, 這是一個在被從設備讀出後數據應當被放置的地方的指針.</p></dd>
+<dt><span class="term"><span>int len </span></span></dt>
+<dd><p>被 data 參數指向的緩衝的長度</p></dd>
+<dt><span class="term"><span>int *actual_length </span></span></dt>
+<dd><p>指向函數放置真實字節數的指針, 這些字節要麼被發送到設備要麼從設備中獲取, 根據端點方向.</p></dd>
+<dt><span class="term"><span>int timeout </span></span></dt>
+<dd><p>時間量, 以嘀噠計, 應當在超時前等待的. 如果這個值是 0, 函數永遠等待消息完成.</p></dd>
+</dl></div>
+<p>如果函數成功, 返回值是 0; 否則, 一個負錯誤值被返回. 這錯誤號匹配之前在"urb結構"一節中描述的錯誤號. 如果成功, actual_length 參數包含被傳送或從消息中獲取的字節數.</p>
+<p>下面是一個使用這個函數調用的例子:</p>
+<pre class="programlisting">
+/* do a blocking bulk read to get data from the device */
+retval = usb_bulk_msg(dev-&gt;udev,
+                      usb_rcvbulkpipe(dev-&gt;udev, dev-&gt;bulk_in_endpointAddr),
+                      dev-&gt;bulk_in_buffer,
+                      min(dev-&gt;bulk_in_size, count),
+                      &amp;count, HZ*10);
+
+/* if the read was successful, copy the data to user space */
+if (!retval) {
+        if (copy_to_user(buffer, dev-&gt;bulk_in_buffer, count))
+                retval = -EFAULT;
+        else
+                retval = count;
+}
+</pre>
+<p>這個例子展示了一個簡單的從一個 IN 端點的塊讀. 如果讀取成功, 數據接著被拷貝到用戶空間. 這個典型地是在 USB 驅動的讀函數中完成.</p>
+<p>usb_bulk_msg 函數不能被從中斷上下文調用, 或者持有一個自旋鎖. 還有, 這個函數不能被任何其他函數取消, 因此當使用它時小心; 確認你的驅動的去連接知道足夠多來等待調用結束, 在允許它自己被從內存中卸載之前.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="usb_control_msg.sect2"></a>13.5.2.&#160;usb_control_msg 接口</h3></div></div></div>
+<p>usb_control_msg 函數就像 usb_bulk_msg 函數, 除了它允許一個驅動發送和結束 USB 控制信息:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int usb_control_msg(struct usb_device *dev, unsigned int pipe,
+ __u8 request, __u8 requesttype,
+ __u16 value, __u16 index,
+ void *data, __u16 size, int timeout);</span></span></dt>
+<dd><p>這個函數的參數幾乎和 usb_bulk_msg 的相同, 有幾個這樣的不同:</p></dd>
+<dt><span class="term"><span>struct usb_device *dev 
+</span></span></dt>
+<dd><p>指向發送控制消息去的 USB 設備的指針.</p></dd>
+<dt><span class="term"><span>unsigned int pipe 
+</span></span></dt>
+<dd><p>控制消息要發送到的 USB 設備的特定端點. 這個值在 usb_sndctrlpipe 或者 usb_rcvctrlpipe 函數中被創建.</p></dd>
+<dt><span class="term"><span>__u8 request 
+</span></span></dt>
+<dd><p>這個控制消息的 USB 請求值.</p></dd>
+<dt><span class="term"><span>__u8 requesttype 
+</span></span></dt>
+<dd><p>這個控制消息的 USB 請求類型.</p></dd>
+<dt><span class="term"><span>__u16 value 
+</span></span></dt>
+<dd><p>這個控制消息的 USB 消息值.</p></dd>
+<dt><span class="term"><span>__u16 index 
+</span></span></dt>
+<dd><p>這個控制消息的 USB 消息索引值.</p></dd>
+<dt><span class="term"><span>void *data 
+</span></span></dt>
+<dd><p>如果是一個 OUT 端點, 是一個指向要發送到設備的數據的指針. 如果是一個 IN 端點, 是一個在被從設備讀取後數據被放置的地方的指針.</p></dd>
+<dt><span class="term"><span>__u16 size 
+</span></span></dt>
+<dd><p>被 data 參數指向的緩衝的大小.</p></dd>
+<dt><span class="term"><span>int timeout 
+</span></span></dt>
+<dd><p>時間量, 以嘀噠計, 應當在超時前等待的. 如果這個值是 0, 這個函數將等待消息結束.</p></dd>
+</dl></div>
+<p>如果函數是成功的, 它返回被傳送到或從這個設備的字節數. 如果它不成功, 它返回一個負錯誤碼.</p>
+<p>參數 request, requesttype, value, 和 index 都直接映射到 USB 規範給一個 USB 控制消息如何被定義. 對於更多的關於這些參數的有效值的信息和它們如何被使用, 見 USB 規範的第 9 章.</p>
+<p>象 usb_bulk_msg 函數, 函數 usb_control_msg 不能被從中斷上下文或者持有自旋鎖中被調用. 還有, 這個函數不能被任何其他函數取消, 所以當使用它時要小心; 確認你的驅動的 disconnect 函數瞭解足夠多, 在允許它自己被從內存卸載之前完成等待調用.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="OtherUSBDataFunctions.sect2"></a>13.5.3.&#160;使用 USB 數據函數</h3></div></div></div>
+<p>USB 核心中的幾個幫忙函數可用來從所有的 USB 設備中存取標準信息. 這些函數不能從中斷上下文或者持有自旋鎖時調用.</p>
+<p>函數 usb_get_descriptor 獲取指定的 USB 描述符從特定的設備. 這個函數被定義為:</p>
+<pre class="programlisting">
+int usb_get_descriptor(struct usb_device *dev, unsigned char type, unsigned char index, void *buf, int size);
+</pre>
+<p>這個函數可被一個 USB 驅動用來從 struct usb_device 結構中, 獲取任何還沒有在 struct usb_device 和 struct usb_interface 結構中出現的設備描述符, 例如聲音描述符或者其他類的特定消息. 這個函數的參數是: </p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct usb_device *usb_dev </span></span></dt>
+<dd><p>指向應當從中獲取描述符的 USB 設備的指針</p></dd>
+<dt><span class="term"><span>unsigned char type </span></span></dt>
+<dd>
+<p>描述符類型. 這個類型在 USB 規範中描述, 並且是下列類型之一:</p>
+<p>
+USB_DT_DEVICE
+USB_DT_CONFIG
+USB_DT_STRING
+USB_DT_INTERFACE
+USB_DT_ENDPOINT
+USB_DT_DEVICE_QUALIFIER
+USB_DT_OTHER_SPEED_CONFIG
+USB_DT_INTERFACE_POWER
+USB_DT_OTG
+USB_DT_DEBUG
+USB_DT_INTERFACE_ASSOCIATION
+USB_DT_CS_DEVICE
+USB_DT_CS_CONFIG
+USB_DT_CS_STRING
+USB_DT_CS_INTERFACE
+USB_DT_CS_ENDPOINT
+</p>
+</dd>
+<dt><span class="term"><span>unsigned char index </span></span></dt>
+<dd><p>應當從設備獲取的描述符的數目.</p></dd>
+<dt><span class="term"><span>void *buf </span></span></dt>
+<dd><p>你拷貝描述符到的緩衝的指針.</p></dd>
+<dt><span class="term"><span>int size</span></span></dt>
+<dd><p>由 buf 變量指向的內存的大小.</p></dd>
+</dl></div>
+<p>如果這個函數成功, 它返回從設備讀取的字節數, 否則, 它返回由它所調用的底層函數 usb_control_msg 所返回的一個負錯誤值.</p>
+<p>usb_get_descripter 調用的一項最普遍的用法是從 USB 設備獲取一個字符串. 因為這個是非常普遍, 有一個幫忙函數稱為 usb_get_string:</p>
+<pre class="programlisting">
+int usb_get_string(struct usb_device *dev, unsigned short langid, unsigned char index, void *buf, int size);
+</pre>
+<p>如果成功, 這個函數返回設備收到的給這個字符串的字節數. 否則, 它返回一個由這個函數調用的底層函數 usb_control_msg 返回的負錯誤值.</p>
+<p>如果這個函數成功, 它返回一個以 UTF-16LE 格式編碼的字符串(Unicode, 16位每字符, 小端字節序)在 buf 參數指向的緩衝中. 因為這個格式不是非常有用, 有另一個函數, 稱為 usb_string, 它返回一個從一個 USB 設備讀來的字符串, 並且已經轉換為一個 ISO 8859-1 格式字符串. 這個字符集是一個 8 位的 UICODE 的子集, 並且是最普遍的英文和其他西歐字符串格式. 因為這是 USB 設備的字符串的典型格式, 建議 usb_string 函數來替代 usb_get_string 函數.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch13s04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch13.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch13s06.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">13.4.&#160;編寫一個 USB 驅動&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;13.6.&#160;快速參考</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch13s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

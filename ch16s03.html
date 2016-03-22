@@ -1,0 +1,480 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch16s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:41 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>16.3.&#160;請求處理-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch16.html" title="第&#160;16&#160;章&#160;塊驅動">
+<link rel="prev" href="ch16s02.html" title="16.2.&#160;塊設備操作">
+<link rel="next" href="ch16s04.html" title="16.4.&#160;一些其他的細節">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">16.3.&#160;請求處理</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch16s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;16&#160;章&#160;塊驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch16s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="RequestProcessing.sect1"></a>16.3.&#160;請求處理</h2></div></div></div>
+<p>每個塊驅動的核心是它的請求函數. 這個函數是真正做工作的地方 --或者至少開始的地方; 剩下的都是開銷. 因此, 我們花不少時間來看在塊驅動中的請求處理.</p>
+<p>一個磁盤驅動的性能可能是系統整個性能的關鍵部分. 因此, 內核的塊子系統編寫時在性能上考慮了很多; 它做所有可能的事情來使你的驅動從它控制的設備上獲得最多. 這是一個好事情, 其中它盲目地使能快速 I/O. 另一方面, 塊子系統沒必要在驅動 API 中曝露大量複雜性. 有可能編寫一個非常簡單的請求函數( 我們將很快見到 ), 但是如果你的驅動必須在一個高層次上操作複雜的硬件, 它可能是任何樣子.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="IntroductiontotherequestMethod.sect2"></a>16.3.1.&#160;對請求方法的介紹</h3></div></div></div>
+<p>塊驅動的請求方法有下面的原型:</p>
+<pre class="programlisting">
+void request(request_queue_t *queue); 
+</pre>
+<p>這個函數被調用, 無論何時內核認為你的驅動是時候處理對設備的讀, 寫, 或者其他操作. 請求函數在返回之前實際不需要完成所有的在隊列中的請求; 實際上, 它可能不完成它們任何一個, 對大部分真實設備. 它必須, 但是, 驅動這些請求並且確保它們最終被驅動全部處理.</p>
+<p>每個設備有一個請求隊列. 這是因為實際的從和到磁盤的傳輸可能在遠離內核請求它們時發生, 並且因為內核需要這個靈活性來調度每個傳送, 在最好的時刻(將影響磁盤上鄰近扇區的請求集合到一起, 例如). 並且這個請求函數, 你可能記得, 和一個請求隊列相關, 當這個隊列被創建時. 讓我們回顧 sbull 如何創建它的隊列: </p>
+<pre class="programlisting">
+dev-&gt;queue = blk_init_queue(sbull_request, &amp;dev-&gt;lock); 
+</pre>
+<p>這樣, 當這個隊列被創建時, 請求函數和它關聯到一起. 我們還提供了一個自旋鎖作為隊列創建過程的一部分. 無論何時我們的請求函數被調用, 內核持有這個鎖. 結果, 請求函數在原子上下文中運行; 它必須遵循所有的 5 章討論過的原子代碼的通用規則.</p>
+<p>在你的請求函數持有鎖時, 隊列鎖還阻止內核去排隊任何對你的設備的其他請求. 在一些條件下, 你可能考慮在請求函數運行時丟棄這個鎖. 如果你這樣做, 但是, 你必須保證不存取請求隊列, 或者任何其他的被這個鎖保護的數據結構, 在這個鎖不被持有時. 你必須重新請求這個鎖,  在請求函數返回之前. </p>
+<p>最後, 請求函數的啟動(常常地)與任何用戶空間進程之間是完全異步的. 你不能假設內核運行在發起當前請求的進程上下文. 你不知道由這個請求提供的 I/O 緩衝是否在內核或者用戶空間. 因此任何類型的明確存取用戶空間的操作都是錯誤的並且將肯定引起麻煩. 如你將見到的, 你的驅動需要知道的關於請求的所有事情, 都包含在通過請求隊列傳遞給你的結構中.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ASimplerequestMethod.sect2"></a>16.3.2.&#160;一個簡單的請求方法</h3></div></div></div>
+<p>sbull 例子驅動提供了幾個不同的方法給請求處理. 缺省地, sbull 使用一個方法, 稱為 sbull_request, 它打算作為一個最簡單地請求方法的例子. 別忙, 它在這裡:</p>
+<pre class="programlisting">
+static void sbull_request(request_queue_t *q)
+{
+        struct request *req;
+        while ((req = elv_next_request(q)) != NULL) {
+                struct sbull_dev *dev = req-&gt;rq_disk-&gt;private_data;
+                if (! blk_fs_request(req)) {
+
+                        printk (KERN_NOTICE "Skip non-fs request\n");
+                        end_request(req, 0);
+                        continue;
+                }
+                sbull_transfer(dev, req-&gt;sector, req-&gt;current_nr_sectors,
+                               req-&gt;buffer, rq_data_dir(req));
+                end_request(req, 1);
+        }
+}
+</pre>
+<p>這個函數介紹了 struct request 結構. 我們之後將詳細檢查 struct request; 現在, 只需說它表示一個我們要執行的塊 I/O 請求.</p>
+<p>內核提供函數 elv_next_request 來獲得隊列中第一個未完成的請求; 當沒有請求要被處理時這個函數返回 NULL. 注意 elf_next 不從隊列裡去除請求. 如果你連續調用它 2 次, 它 2 次都返回同一個請求結構. 在這個簡單的操作模式中, 請求只在它們完成時被剝離隊列.</p>
+<p>一個塊請求隊列可包含實際上不從磁盤和自磁盤移動塊的請求. 這些請求可包括供應商特定的, 低層的診斷操作或者和特殊設備模式相關的指令, 例如給可記錄介質的報文寫模式. 大部分塊驅動不知道如何處理這樣的請求, 並且簡單地失敗它們; sbull 也以這種方式工作. 對 block_fs_request 的調用告訴我們是否我們在查看一個文件系統請求--一個一旦數據塊的. 如果這個請求不是一個文件系統請求, 我們傳遞它到 end_request:</p>
+<pre class="programlisting">
+void end_request(struct request *req, int succeeded); 
+</pre>
+<p>當我們處理了非文件系統請求, 之後我們傳遞 succeeded 為 0 來指示我們沒有成功完成這個請求. 否則, 我們調用 sbull_transfer 來真正移動數據, 使用一套在請求結構中提供的成員:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>sector_t sector;</span></span></dt>
+<dd><p>我們設備上起始扇區的索引. 記住這個扇區號, 像所有這樣的在內核和驅動之間傳遞的數目, 是以 512-字節扇區來表示的. 如果你的硬件使用一個不同的扇區大小, 你需要相應地調整扇區. 例如, 如果硬件是 2048-字節的扇區, 你需要用 4 來除起始扇區號, 在安放它到對硬件的請求之前.</p></dd>
+<dt><span class="term"><span>unsigned long nr_sectors;</span></span></dt>
+<dd><p>要被傳送的扇區(512-字節)數目.</p></dd>
+<dt><span class="term"><span>char *buffer;</span></span></dt>
+<dd><p>一個指向緩衝的指針, 數據應當被傳送到或者從的緩衝. 這個指針是一個內核虛擬地址並且可被驅動直接解引用, 如果需要.</p></dd>
+<dt><span class="term"><span>rq_data_dir(struct request *req);</span></span></dt>
+<dd><p>這個宏從請求中抽取傳送的方向; 一個 0 返回值表示從設備中讀, 非 0 返回值表示寫入設備.</p></dd>
+</dl></div>
+<p>有了這個信息, sbull 驅動可實現實際的數據傳送, 使用一個簡單的 memcpy 調用 -- 我們數據已經在內存, 畢竟. 進行這個拷貝操作的函數( sbull_transfer ) 也處理扇區大小的調整, 並確保我們沒有拷貝超過我們的虛擬設備的尾.</p>
+<pre class="programlisting">
+static void sbull_transfer(struct sbull_dev *dev, unsigned long sector, unsigned long nsect, char *buffer, int write)
+{
+        unsigned long offset = sector*KERNEL_SECTOR_SIZE;
+        unsigned long nbytes = nsect*KERNEL_SECTOR_SIZE;
+        if ((offset + nbytes) &gt; dev-&gt;size)
+        {
+                printk (KERN_NOTICE "Beyond-end write (%ld %ld)\n", offset, nbytes);
+                return;
+        }
+        if (write)
+                memcpy(dev-&gt;data + offset, buffer, nbytes);
+        else
+                memcpy(buffer, dev-&gt;data + offset, nbytes);
+}
+</pre>
+<p>用這個代碼, sbull 實現了一個完整的, 簡單的基於 RAM 的磁盤設備. 但是, 對於很多類型的設備, 它不是一個實際的驅動, 由於幾個理由.</p>
+<p>這些原因的第一個是 sbull 同步執行請求, 一次一個. 高性能的磁盤設備能夠在同時有很多個請求停留; 磁盤的板上控制器因此可以優化的順序(有人希望)執行它們. 如果我們只處理隊列中的第一個請求, 我們在給定時間不能有多個請求被滿足. 能夠工作於多個請求要求對請求隊列和請求結構的深入理解; 下面幾節會幫助來建立這種理解.</p>
+<p>但是, 有另外一個問題要考慮. 當系統進行大的傳輸, 包含多個在一起的磁盤扇區, 就獲得最好的性能. 磁盤操作的最高開銷常常是讀寫頭的定位; 一旦這個完成, 實際上需要的讀或者寫數據的時間幾乎可忽略. 設計和實現文件系統和虛擬內存子系統的開發者理解這點, 因此他們盡力在磁盤上連續地查找相關的數據, 並且在一次請求中傳送盡可能多扇區. 塊子系統也在這個方面起作用; 請求隊列包含大量邏輯,目的是找到鄰近的請求並且接合它們為更大的操作.</p>
+<p>sbull 驅動, 但是, 採取所有這些工作並且簡單地忽略它. 一次只有一個緩衝被傳送, 意味著最大的單次傳送幾乎從不超過單個頁的大小. 一個塊驅動能做的比那個要好的多, 但是它需要一個對請求結構和bio結構的更深的理解, 請求是從它們建立的.</p>
+<p>下面幾節更深入地研究塊層如何完成它的工作, 已經這些工作導致的數據結構.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RequestQueues.sect2"></a>16.3.3.&#160;請求隊列</h3></div></div></div>
+<p>最簡單的說, 一個塊請求隊列就是: 一個塊 I/O 請求的隊列. 如果你往下查看, 一個請求隊列是一令人吃驚得複雜的數據結構. 幸運的是, 驅動不必擔心大部分的複雜性.</p>
+<p>請求隊列跟蹤等候的塊I/O請求. 但是它們也在這些請求的創建中扮演重要角色. 請求隊列存儲參數, 來描述這個設備能夠支持什麼類型的請求: 它們的最大大小, 多少不同的段可進入一個請求, 硬件扇區大小, 對齊要求, 等等. 如果你的請求隊列被正確配置了, 它應當從不交給你一個你的設備不能處理的請求.</p>
+<p>請求隊列還實現一個插入接口, 這個接口允許使用多 I/O 調度器(或者電梯). 一個 I/O 調度器的工作是提交 I/O 請求給你的驅動, 以最大化性能的方式. 為此, 大部分 I/O 調度器累積批量的 I/O 請求, 排列它們為遞增(或遞減)的塊索引順序, 並且以那個順序提交請求給驅動. 磁頭, 當給定一列排序的請求時, 從磁盤的一頭到另一頭工作, 非常像一個滿載的電梯, 在一個方向移動直到所有它的"請求"(等待出去的人)已被滿足. 2.6 內核包含一個"底線調度器", 它努力確保每個請求在預設的最大時間內被滿足, 以及一個"預測調度器", 它實際上短暫停止設備, 在一個預想中的讀請求之後, 這樣另一個鄰近的讀將幾乎是馬上到達. 到本書為止, 缺省的調度器是預測調度器, 它看來有最好的交互的系統性能.</p>
+<p>I/O 調度器還負責合併鄰近的請求. 當一個新 I/O 請求被提交給調度器, 它在隊列裡搜尋包含鄰近扇區的請求; 如果找到一個, 並且如果結果的請求不是太大, 這 2 個請求被合併.</p>
+<p>請求隊列有一個 struct request_queue 或者 request_queue_t 類型. 這個類型, 和許多操作它的函數, 定義在 &lt;linux/blkdev.h&gt;. 如果你對請求隊列的實現感興趣, 你可找到大部分代碼在 drivers/block/ll_rw_block.c 和 elevator.c.</p>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Queuecreationanddeletion.sect3"></a>16.3.3.1.&#160;隊列的創建和刪除</h4></div></div></div>
+<p>如同我們在我們的例子代碼中見到的, 一個請求隊列是一個動態的數據結構, 它必須被塊 I/O 子系統創建. 這個創建和初始化一個隊列的函數是:</p>
+<pre class="programlisting">
+request_queue_t *blk_init_queue(request_fn_proc *request, spinlock_t *lock); 
+</pre>
+<p>當然, 參數是, 這個隊列的請求函數和一個控制對隊列存取的自旋鎖. 這個函數分配內存(實際上, 不少內存)並且可能失敗因為這個; 你應當一直檢查返回值, 在試圖使用這個隊列之前.</p>
+<p>作為初始化一個請求隊列的一部分, 你可設置成員 queuedata(它是一個 void * 指針 )為任何你喜歡的值. 這個成員是請求隊列的對於我們在其他結構中見到的 private_data 的對等體.</p>
+<p>為返回一個請求隊列給系統(在模塊卸載時間, 通常), 調用 blk_cleanup_queue:</p>
+<pre class="programlisting">
+void blk_cleanup_queue(request_queue_t *); 
+</pre>
+<p>這個調用後, 你的驅動從給定的隊列中不再看到請求,並且不應當再次引用它.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Queueingfunctions.sect3"></a>16.3.3.2.&#160;排隊函數</h4></div></div></div>
+<p>有非常少的函數來操作隊列中的請求 -- 至少, 考慮到驅動. 你必須持有隊列鎖, 在你調用這些函數之前.</p>
+<p>返回要處理的下一個請求的函數是 elv_next_request:</p>
+<pre class="programlisting">
+struct request *elv_next_request(request_queue_t *queue); 
+</pre>
+<p>我們已經在簡單的 sbull 例子中見到這個函數. 它返回一個指向下一個要處理的請求的指針(由 I/O 調度器所決定的)或者 NULL 如果沒有請求要處理. elv_next_request 留這個請求在隊列上, 但是標識它為活動的; 這個標識阻止了 I/O 調度器試圖合併其他的請求到這些你開始執行的.</p>
+<p>為實際上從一個隊列中去除一個請求, 使用 blkdev_dequeue_request:</p>
+<pre class="programlisting">
+void blkdev_dequeue_request(struct request *req); 
+</pre>
+<p>如果你的驅動同時從同一個隊列中操作多個請求, 它必須以這樣的方式將它們解出隊列.</p>
+<p>如果你由於同樣的理由需要放置一個出列請求回到隊列中, 你可以調用:</p>
+<pre class="programlisting">
+void elv_requeue_request(request_queue_t *queue, struct request *req); 
+</pre>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Queuecontrolfunctions.sect3"></a>16.3.3.3.&#160;隊列控制函數</h4></div></div></div>
+<p>塊層輸出了一套函數, 可被驅動用來控制一個請求隊列如何操作. 這些函數包括:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>void blk_stop_queue(request_queue_t *queue);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_start_queue(request_queue_t *queue);</span></span></dt>
+<dd><p>如果你的設備已到到達一個狀態, 它不能處理等候的命令, 你可調用 blk_stop_queue 來告知塊層. 在這個調用之後, 你的請求函數將不被調用直到你調用 blk_start_queue. 不用說, 你不應當忘記重啟隊列, 當你的設備可處理更多請求時. 隊列鎖必須被持有當調用任何一個這些函數時.</p></dd>
+<dt><span class="term"><span>void blk_queue_bounce_limit(request_queue_t *queue, u64 dma_addr);</span></span></dt>
+<dd><p>告知內核你的設備可進行 DMA 的最高物理地址的函數. 如果一個請求包含一個超出這個限制的內存引用, 一個反彈緩衝將被用來給這個操作; 當然, 這是一個進行塊 I/O 的昂貴方式, 並且應當盡量避免. 你可在這個參數中提供任何可能的值, 或者使用預先定義的符號 BLK_BOUNCE_HIGH(使用反彈緩衝給高內存頁), BLK_BOUNCE_ISA (驅動只可 DMA 到 16MB 的 ISA 區), 或者BLK_BOUCE_ANY(驅動可進行 DMA 到任何地址). 缺省值是 BLK_BOUNCE_HIGH.</p></dd>
+<dt><span class="term"><span>void blk_queue_max_sectors(request_queue_t *queue, unsigned short max);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_max_phys_segments(request_queue_t *queue, unsigned short max);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_max_hw_segments(request_queue_t *queue, unsigned short max);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_max_segment_size(request_queue_t *queue, unsigned int max);</span></span></dt>
+<dd><p>設置參數的函數, 這些參數描述可被設備滿足的請求. blk_queue_max 可用來以扇區方式設置任一請求的最大的大小; 缺省是 255. blk_queue_max_phys_segments 和 blk_queue_max_hw_segments 都控制多少物理段(系統內存中不相鄰的區)可包含在一個請求中. 使用 blk_queue_max_phys_segments 來說你的驅動準備處理多少段; 例如, 這可能是一個靜態分配的散佈表的大小. blk_queue_max_hw_segments, 相反, 是設備可處理的最多的段數. 這 2 個參數缺省都是 128. 最後, blk_queue_max_segment_size 告知內核任一個請求的段可能是多大字節; 缺省是 65,536 字節.</p></dd>
+<dt><span class="term"><span>blk_queue_segment_boundary(request_queue_t *queue, unsigned long mask);</span></span></dt>
+<dd><p>一些設備無法處理跨越一個特殊大小內存邊界的請求; 如果你的設備是其中之一, 使用這個函數來告知內核這個邊界. 例如, 如果你的設備處理跨 4-MB 邊界的請求有困難, 傳遞一個 0x3fffff 掩碼. 缺省的掩碼是 0xffffffff.</p></dd>
+<dt><span class="term"><span>void blk_queue_dma_alignment(request_queue_t *queue, int mask);</span></span></dt>
+<dd><p>告知內核關於你的設備施加於 DMA 傳送的內存對齊限制的函數. 所有的請求被創建有給定的對齊, 並且請求的長度也匹配這個對齊. 缺省的掩碼是 0x1ff, 它導致所有的請求被對齊到 512-字節邊界. </p></dd>
+<dt><span class="term"><span>void blk_queue_hardsect_size(request_queue_t *queue, unsigned short max);</span></span></dt>
+<dd><p>告知內核你的設備的硬件扇區大小. 所有由內核產生的請求是這個大小的倍數並且被正確對齊. 所有的在塊層和驅動之間的通訊繼續以 512-字節扇區來表達, 但是.</p></dd>
+</dl></div>
+</div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheAnatomyofaRequest.sect2"></a>16.3.4.&#160;請求的分析</h3></div></div></div>
+<p>在我們的簡單例子裡, 我們遇到了這個請求結構. 但是, 我們未曾接觸這個複雜的數據結構. 在本節, 我們看, 詳細地, 塊 I/O 請求在 Linux 內核中如何被表示.</p>
+<p>每個請求結構代表一個塊 I/O 請求, 儘管它可能是由幾個獨立的請求在更高層次合併而成. 對任何特殊的請求而傳送的扇區可能分佈在整個主內存, 儘管它們常常對應塊設備中的多個連續的扇區. 這個請求被表示為多個段, 每個對應一個內存中的緩衝. 內核可能合併多個涉及磁盤上鄰近扇區的請求, 但是它從不合並在單個請求結構中的讀和寫操作. 內核還確保不合並請求, 如果結果會破壞任何的在前面章節中描述的請求隊列限制.</p>
+<p>基本上, 一個請求結構被實現為一個 bio 結構的鏈表, 結合一些維護信息來使驅動可以跟蹤它的位置, 當它在完成這個請求中. 這個 bio 結構是一個塊 I/O 請求移植的低級描述; 我們現在看看它.</p>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Thebiostructure.sect3"></a>16.3.4.1.&#160;bio 結構</h4></div></div></div>
+<p>當內核, 以一個文件系統的形式, 虛擬文件子系統, 或者一個系統調用, 決定一組塊必須傳送到或從一個塊 I/O 設備; 它裝配一個 bio 結構來描述那個操作. 那個結構接著被遞給這個塊 I/O 代碼, 這個代碼合併它到一個存在的請求結構, 或者, 如果需要, 創建一個新的. 這個 bio 結構包含一個塊驅動需要來進行請求的任何東西, 而不必涉及使這個請求啟動的用戶空間進程.</p>
+<p>bio 結構, 在 &lt;linux/bio.h&gt; 中定義, 包含許多成員對驅動作者是有用的:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>sector_t bi_sector;</span></span></dt>
+<dd><p>這個 bio 要被傳送的第一個(512字節)扇區.</p></dd>
+<dt><span class="term"><span>unsigned int bi_size;</span></span></dt>
+<dd><p>被傳送的數據大小, 以字節計. 相反, 常常更易使用 bio_sectors(bio), 一個給定以扇區計的大小的宏.</p></dd>
+<dt><span class="term"><span>unsigned long bi_flags;</span></span></dt>
+<dd><p>一組描述 bio 的標誌; 最低有效位被置位如果這是一個寫請求(儘管宏 bio_data_dir(bio)應當用來代替直接加鎖這個標誌).</p></dd>
+<dt><span class="term"><span>unsigned short bio_phys_segments;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned short bio_hw_segments;</span></span></dt>
+<dd><p>包含在這個 BIO 中的物理段的數目, 和在 DMA 映射完成後被硬件看到的段數目, 分別地.</p></dd>
+</dl></div>
+<p>一個 bio 的核心, 但是, 是一個稱為 bi_io_vec 的數組, 它由下列結構組成:</p>
+<pre class="programlisting">
+struct bio_vec {
+ struct page  *bv_page; 
+ unsigned int  bv_len; 
+ unsigned int  bv_offset;  
+};  
+</pre>
+<p>圖 <a href="ch16s03.html#ldd3-16-1.fig" title="圖&#160;16.1.&#160;bio 結構">bio 結構</a>顯示了這些結構如何結合在一起. 如同你所見到的, 在一個塊 I/O 請求被轉換為一個 bio 結構後, 它已被分為單獨的物理內存頁. 所有的一個驅動需要做的事情是步進全部這個結構數組(它們有 bi_vcnt 個), 和在每個頁內傳遞數據(但是只 len 字節, 從 offset 開始).</p>
+<div class="figure">
+<a name="ldd3-16-1.fig"></a><p class="title"><b>圖&#160;16.1.&#160;bio 結構</b></p>
+<div><img src="images/snagitldd3/ldd3-16-1.png" alt="bio 結構"></div>
+</div>
+<p>直接使用 bi_io_vec 數組不被推薦, 為了內核開發者可以在以後改變 bio 結構而不會引起破壞. 為此, 一組宏被提供來簡化使用 bio 結構. 開始的地方是 bio_for_each_segment, 它簡單地循環 bi_io_vec 數組中每個未被處理的項. 這個宏應當如下用: </p>
+<pre class="programlisting">
+int segno;
+struct bio_vec *bvec;
+
+bio_for_each_segment(bvec, bio, segno) {
+ /* Do something with this segment
+}
+</pre>
+<p>在這個循環中, bvec 指向當前的 bio_vec 項, 並且 segno 是當前的段號. 這些值可被用來設置 DMA 發送器(一個使用 blk_rq_map_sg 的替代方法在"塊請求和 DMA"一節中描述). 如果你需要直接存取頁, 你應當首先確保一個正確的內核虛擬地址存在; 為此, 你可使用:</p>
+<pre class="programlisting">
+char *__bio_kmap_atomic(struct bio *bio, int i, enum km_type type); 
+void __bio_kunmap_atomic(char *buffer, enum km_type type);
+</pre>
+<p>這個底層的函數允許你直接映射在一個給定的 bio_vec 中找到的緩衝, 由索引 i 所指定的. 一個原子的 kmap 被創建; 調用者必須提供合適的來使用的槽位(如同在 15 章的"內存映射和 struct page"一節中描述的).</p>
+<p>塊層還維護一組位於 bio 結構的指針來跟蹤請求處理的當前狀態. 幾個宏來提供對這個狀態的存取:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct page *bio_page(struct bio *bio);</span></span></dt>
+<dd><p>返回一個指向頁結構的指針, 表示下一個被傳送的頁.</p></dd>
+<dt><span class="term"><span>int bio_offset(struct bio *bio);</span></span></dt>
+<dd><p>返回頁內的被傳送的數據的偏移.</p></dd>
+<dt><span class="term"><span>int bio_cur_sectors(struct bio *bio);</span></span></dt>
+<dd><p>返回要被傳送出當前頁的扇區數.</p></dd>
+<dt><span class="term"><span>char *bio_data(struct bio *bio);</span></span></dt>
+<dd><p>返回一個內核邏輯地址, 指向被傳送的數據. 注意這個地址可用僅當請求的頁不在高內存中; 在其他情況下調用它是一個錯誤. 缺省地, 塊子系統不傳遞高內存緩衝到你的驅動, 但是如果你已使用 blk_queue_bounce_limit 改變設置, 你可能不該使用 bio_data.</p></dd>
+<dt><span class="term"><span>char *bio_kmap_irq(struct bio *bio, unsigned long *flags);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void bio_kunmap_irq(char *buffer, unsigned long *flags);</span></span></dt>
+<dd><p>bio_kmap_irq 給任何緩衝返回一個內核虛擬地址, 不管它是否在高或低內存. 一個原子 kmap 被使用, 因此你的驅動在這個映射被激活時不能睡眠. 使用 bio_kunmap_irq 來去映射緩衝. 注意因為使用一個原子 kmap, 你不能一次映射多於一個段.</p></dd>
+</dl></div>
+<p>剛剛描述的所有函數都存取當前緩衝 -- 還未被傳送的第一個緩衝, 只要內核知道. 驅動常常想使用 bio 中的幾個緩衝, 在它們任何一個指出完成之前(使用 end_that_request_first, 馬上就講到), 因此這些函數常常沒有用. 幾個其他的宏存在來使用 bio 結構的內部接口(詳情見 &lt;linux/bio.h&gt;).</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Requeststructurefields.sect3"></a>16.3.4.2.&#160;請求結構成員</h4></div></div></div>
+<p>現在我們有了 bio 結構如何工作的概念, 我們可以深入 struct request 並且看請求處理如何工作. 這個結構的成員包括:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>sector_t hard_sector;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned long hard_nr_sectors;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned int hard_cur_sectors;</span></span></dt>
+<dd><p>追蹤請求硬件完成的扇區的成員. 第一個尚未被傳送的扇區被存儲到 hard_sector, 已經傳送的扇區總數在 hard_nr_sectors, 並且在當前 bio 中剩餘的扇區數是 hard_cur_sectors. 這些成員打算只用在塊子系統; 驅動不應當使用它們.</p></dd>
+<dt><span class="term"><span>struct bio *bio;</span></span></dt>
+<dd><p>bio 是給這個請求的 bio 結構的鏈表. 你不應當直接存取這個成員; 使用 rq_for_each_bio(後面描述) 代替.</p></dd>
+<dt><span class="term"><span>char *buffer;</span></span></dt>
+<dd><p>在本章前面的簡單驅動例子使用這個成員來找到傳送的緩衝. 隨著我們的深入理解, 我們現在可見到這個成員僅僅是在當前 bio 上調用 bio_data 的結果.</p></dd>
+<dt><span class="term"><span>unsigned short nr_phys_segments;</span></span></dt>
+<dd><p>被這個請求在物理內存中佔用的獨特段的數目, 在鄰近頁已被合併後.</p></dd>
+<dt><span class="term"><span>struct list_head queuelist;</span></span></dt>
+<dd><p>鏈表結構(如同在 11 章中"鏈表"一節中描述的), 連接這個請求到請求隊列. 如果(並且只是)你從隊列中去除 blkdev_dequeue_request, 你可能使用這個列表頭來跟蹤這個請求, 在一個被你的驅動維護的內部列表中.</p></dd>
+</dl></div>
+<p>圖 <a href="ch16s03.html#ldd3-16-2.fig" title="圖&#160;16.2.&#160;一個帶有一個部分被處理的請求的請求隊列">一個帶有一個部分被處理的請求的請求隊列</a> 展示了請求隊列和它的組件 bio 結構如何對應到一起. 在圖中, 這個請求已被部分滿足. cbio 和 buffer 處於指向尚未傳送的第一個 bio.</p>
+<div class="figure">
+<a name="ldd3-16-2.fig"></a><p class="title"><b>圖&#160;16.2.&#160;一個帶有一個部分被處理的請求的請求隊列</b></p>
+<div><img src="images/snagitldd3/ldd3-16-2.png" alt="一個帶有一個部分被處理的請求的請求隊列"></div>
+</div>
+<p>有許多不同的字段在請求結構中, 但是本節中的列表應當對大部分驅動編寫者是足夠的.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Barrierrequests.sect3"></a>16.3.4.3.&#160;屏障請求</h4></div></div></div>
+<p>塊層在你的驅動見到它們之前重新排序來提高 I/O 性能. 你的驅動, 也可以重新排序請求, 如果有理由這樣做. 常常地, 這種重新排序通過傳遞多個請求到驅動並且使硬件考慮優化的順序來實現. 但是, 對於不嚴格的請求順序有一個問題: 有些應用程序要求保證某些操作在其他的啟動前完成. 例如, 關係數據庫管理者, 必須絕對確保它們的日誌信息刷新到驅動器, 在執行在數據庫內容上的一次交易之前. 日誌式文件系統, 現在在大部分 Linux 系統中使用, 有非常類似的排序限制. 如果錯誤的操作被重新排序, 結果可能是嚴重的, 無法探測的數據破壞.</p>
+<p>2.6 塊層解決這個問題通過一個屏障請求的概念. 如果一個請求被標識為 REQ_HARDBARRER 標誌, 它必須被寫入驅動器在任何後續的請求被初始化之前. "被寫入設備", 我們意思是數據必須實際位於並且是持久的在物理介質中. 許多的驅動器進行寫請求的緩存; 這個緩存提高了性能, 但是它可能使屏障請求的目的失敗. 如果一個電力失效在關鍵數據仍然在驅動器的緩存中時發生, 數據仍然被丟失即便驅動器報告完成. 因此一個實現屏障請求的驅動器必須採取步驟來強制驅動器真正寫這些數據到介質中.</p>
+<p>如果你的驅動器尊敬屏障請求, 第一步是通知塊層這個事實. 屏障處理是另一個請求隊列; 它被設置為:</p>
+<pre class="programlisting">
+void blk_queue_ordered(request_queue_t *queue, int flag);
+</pre>
+<p>為指示你的驅動實現了屏障請求, 設置 flag 參數為一個非零值.</p>
+<p>實際的屏障請求實現是簡單地測試在請求結構中關聯的標誌. 已經提供了一個宏來進行這個測試:</p>
+<pre class="programlisting">
+int blk_barrier_rq(struct request *req); 
+</pre>
+<p>如果這個宏返回一個非零值, 這個請求是一個屏障請求. 根據你的硬件如何工作, 你可能必須停止從隊列中獲取請求, 直到屏障請求已經完成. 另外的驅動器能理解屏障請求; 在這個情況中, 你的驅動所有的必須做的是對這些驅動器發出正確的操作.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Nonretryablerequests.sect3"></a>16.3.4.4.&#160;不可重入請求</h4></div></div></div>
+<p>塊驅動常常試圖重試第一次失敗的請求. 這個做法可產生一個更加可靠的系統並且幫助來避免數據丟失. 內核, 但是, 有時標識請求為不可重入的. 這樣的請求應當完全盡快失敗, 如果它們無法在第一次試的時候執行.</p>
+<p>如果你的驅動在考慮重試一個失敗的請求, 他應當首先調用:</p>
+<pre class="programlisting">
+int blk_noretry_request(struct request *req); 
+</pre>
+<p>如果這個宏返回非零值, 你的驅動應當放棄這個請求, 使用一個錯誤碼來代替重試它.</p>
+</div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RequestCompletionFunctions.sect2"></a>16.3.5.&#160;請求完成函數</h3></div></div></div>
+<p>如同我們將見到的, 有幾個不同的方式來使用一個請求結構. 它們所有的都使用幾個通用的函數, 但是, 它們處理一個 I/O 請求或者部分請求的完成. 這 2 個函數都是原子的並且可從一個原子上下文被安全地調用.</p>
+<p>當你的設備已經完成傳送一些或者全部扇區, 在一個 I/O 請求中, 它必須通知塊子系統, 使用:</p>
+<pre class="programlisting">
+int end_that_request_first(struct request *req, int success, int count); 
+</pre>
+<p>這個函數告知塊代碼, 你的驅動已經完成 count 個扇區地傳送, 從你最後留下的地方開始. 如果 I/O 是成功的, 傳遞 success 為 1; 否則傳遞 0. 注意你必須指出完成, 按照從第一個扇區到最後一個的順序; 如果你的驅動和設備有些共謀來亂序完成請求, 你必須存儲這個亂序的完成狀態直到介入的扇區已經被傳遞.</p>
+<p>從 end_that_request_first 的返回值是一個指示, 指示是否所有的這個請求中的扇區已經被傳送或者沒有. 一個 0 返回值表示所有的扇區已經被傳送並且這個請求完成. 在這點, 你必須使用 blkdev_dequeue_request 來從隊列中解除請求(如果你還沒有這樣做)並且傳遞它到:</p>
+<pre class="programlisting">
+void end_that_request_last(struct request *req); 
+</pre>
+<p>end_that_request_last 通知任何在等待這個請求的人, 這個請求已經完成並且回收這個請求結構; 它必須在持有隊列鎖時被調用.</p>
+<p>在我們的簡單的 sbull 例子裡, 我們不使用任何上面的函數. 相反, 那個例子, 被稱為 end_request. 為顯示這個調用的效果, 這裡有整個的 end_request 函數, 如果在 2.6.10 內核中見到的:</p>
+<pre class="programlisting">
+void end_request(struct request *req, int uptodate)
+{
+
+ if (!end_that_request_first(req, uptodate, req-&gt;hard_cur_sectors)) {
+ add_disk_randomness(req-&gt;rq_disk);
+ blkdev_dequeue_request(req);
+ end_that_request_last(req);
+ }
+}
+</pre>
+<p>函數 add_disk_randomness 使用塊 I/O 請求的定時來貢獻熵給系統的隨機數池; 它應當被調用僅當磁盤的定時是真正的隨機的. 對大部分的機械設備這是真的, 但是對一個基於內存的虛擬設備它不是真的, 例如 sbull. 因此, 下一節中更複雜的 sbull 版本不調用 add_disk_randomness.</p>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Workingwithbios.sect3"></a>16.3.5.1.&#160;使用 bio</h4></div></div></div>
+<p>現在你瞭解了足夠多的來編寫一個塊驅動, 可直接使用組成一個請求的 bio 結構. 但是, 一個例子可能會有幫助. 如果這個 sbull 驅動被加載為 request_mode 參數被設為 1, 它註冊一個知道 bio 的請求函數來代替我們上面見到的簡單函數. 那個函數看來如此:</p>
+<pre class="programlisting">
+static void sbull_full_request(request_queue_t *q)
+{
+        struct request *req;
+        int sectors_xferred;
+        struct sbull_dev *dev = q-&gt;queuedata;
+        while ((req = elv_next_request(q)) != NULL) {
+                if (! blk_fs_request(req)) {
+                        printk (KERN_NOTICE "Skip non-fs request\n");
+
+                        end_request(req, 0);
+                        continue;
+                }
+                sectors_xferred = sbull_xfer_request(dev, req);
+                if (! end_that_request_first(req, 1, sectors_xferred)) {
+                        blkdev_dequeue_request(req);
+                        end_that_request_last(req);
+                }
+        }
+}
+</pre>
+<p>這個函數簡單地獲取每個請求, 傳遞它到 sbull_xfer_request, 接著使用 end_that_request_first 和, 如果需要, end_that_request_last 來完成它. 因此, 這個函數在處理高級隊列並且請求管理部分問題. 真正執行一個請求的工作, 但是, 落入 sbull_xfer_request:</p>
+<pre class="programlisting">
+static int sbull_xfer_request(struct sbull_dev *dev, struct request *req)
+{
+        struct bio *bio;
+        int nsect = 0;
+
+        rq_for_each_bio(bio, req)
+        {
+                sbull_xfer_bio(dev, bio);
+                nsect += bio-&gt;bi_size/KERNEL_SECTOR_SIZE;
+
+        }
+        return nsect;
+}
+</pre>
+<p>這裡我們介紹另一個宏: rq_for_each_bio. 如同你可能期望的, 這個宏簡單地步入請求中的每個 bio 結構, 給我們一個可傳遞給 sbull_xfer_bio 用於傳輸的指針. 那個函數看來如此:</p>
+<pre class="programlisting">
+static int sbull_xfer_bio(struct sbull_dev *dev, struct bio *bio)
+{
+        int i;
+        struct bio_vec *bvec;
+        sector_t sector = bio-&gt;bi_sector;
+
+        /* Do each segment independently. */
+        bio_for_each_segment(bvec, bio, i)
+        {
+                char *buffer = __bio_kmap_atomic(bio, i, KM_USER0);
+                sbull_transfer(dev, sector, bio_cur_sectors(bio),
+
+                               buffer, bio_data_dir(bio) == WRITE);
+                sector += bio_cur_sectors(bio);
+                __bio_kunmap_atomic(bio, KM_USER0);
+
+        }
+        return 0; /* Always "succeed" */
+}
+</pre>
+<p>這個函數簡單地步入每個 bio 結構中的段, 獲得一個內核虛擬地址來存取緩衝, 接著調用之前我們見到的同樣的 sbull_transfer 函數來拷貝數據.</p>
+<p>每個設備有它自己的需要, 但是, 作為一個通用的規則, 剛剛展示的代碼應當作為一個模型, 給許多的需要深入 bio 結構的情形.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="BlockrequestsandDMA.sect3"></a>16.3.5.2.&#160;塊請求和 DMA</h4></div></div></div>
+<p>如果你工作在一個高性能塊驅動上, 你有機會使用 DMA 來進行真正的數據傳輸. 一個塊驅動當然可步入 bio 結構, 如同上面描述的, 為每一個創建一個 DMA 映射, 並且傳遞結構給設備. 但是, 有一個更容易的方法, 如果你的驅動可進行發散/匯聚 I/O. 函數:</p>
+<pre class="programlisting">
+int blk_rq_map_sg(request_queue_t *queue, struct request *req, struct scatterlist *list);
+</pre>
+<p>使用來自給定請求的全部段填充給定的列表. 內存中鄰近的段在插入散佈表之前被接合, 因此你不需要自己探測它們. 返回值是列表中的項數. 這個函數還回傳, 在它第 3 個參數, 一個適合傳遞給 dma_map_sg 的散佈表.(關於 dma_map_sg 的更多信息見 15 章的"發散-匯聚映射"一節). </p>
+<p>你的驅動必須在調用 blk_rq_map_sg 之前給散佈表分配存儲. 這個列表必須能夠至少持有這個請求有的物理段那麼多的項; struct request 成員 nr_phys_segments 持有那個數量, 它不能超過由 blk_queue_max_phys_segments 指定的物理段的最大數目.</p>
+<p>如果你不想 blk_rq_map_sg 來接合鄰近的段, 你可改變這個缺省的行為, 使用一個調用諸如:</p>
+<pre class="programlisting">
+clear_bit(QUEUE_FLAG_CLUSTER, &amp;queue-&gt;queue_flags); 
+</pre>
+<p>一些 SCSI 磁盤驅動用這樣的方式標識它們的請求隊列, 因為它們沒有從接合請求中獲益.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Doingwithoutarequestqueue.sect3"></a>16.3.5.3.&#160;不用一個請求隊列</h4></div></div></div>
+<p>前面, 我們已經討論了內核所作的在隊列中優化請求順序的工作; 這個工作包括排列請求和, 或許, 甚至延遲隊列來允許一個預期的請求到達. 這些技術在處理一個真正的旋轉的磁盤驅動器時有助於系統的性能. 但是, 使用一個象 sbull 的設備它們是完全浪費了. 許多面向塊的設備, 例如閃存陣列, 用於數字相機的存儲卡的讀取器, 並且 RAM 盤真正地有隨機存取的性能, 包含從高級的請求隊列邏輯中獲益. 其他設備, 例如軟件 RAID 陣列或者被邏輯卷管理者創建的虛擬磁盤, 沒有這個塊層的請求隊列被優化的性能特徵. 對於這類設備, 它最好直接從塊層接收請求, 並且根本不去煩請求隊列.</p>
+<p>對於這些情況, 塊層支持"無隊列"的操作模式. 為使用這個模式, 你的驅動必須提供一個"製作請求"函數, 而不是一個請求函數. make_request 函數有這個原型:</p>
+<pre class="programlisting">
+typedef int (make_request_fn) (request_queue_t *q, struct bio *bio); 
+</pre>
+<p>注意一個請求隊列仍然存在, 即便它從不會真正有任何請求. make_request 函數用一個 bio 結構作為它的主要參數, 這個 bio 結構表示一個或多個要傳送的緩衝. make_request 函數做 2 個事情之一: 它可或者直接進行傳輸, 或者重定向這個請求到另一個設備.</p>
+<p>直接進行傳送只是使用我們前面描述的存取者方法來完成這個 bio. 因為沒有使用請求結構, 但是, 你的函數應當通知這個 bio 結構的創建者直接指出完成, 使用對 bio_endio 的調用:</p>
+<pre class="programlisting">
+void bio_endio(struct bio *bio, unsigned int bytes, int error);
+</pre>
+<p>這裡, bytes 是你至今已經傳送的字節數. 它可小於由這個 bio 整體所代表的字節數; 在這個方式中, 你可指示部分完成, 並且更新在 bio 中的內部的"當前緩衝"指針. 你應當再次調用 bio_endio 在你的設備進行進一步處理時, 或者當你不能完成這個請求指出一個錯誤. 錯誤是通過提供一個非零值給 error 參數來指示的; 這個值通常是一個錯誤碼, 例如 -EIO. make_request 應當返回 0, 不管這個 I/O 是否成功.</p>
+<p>如果 sbull 用 request_mode=2 加載, 它操作一個 make_request 函數. 因為 sbull 已經有一個函數看傳送單個 bio, 這個 make_request 函數簡單:</p>
+<pre class="programlisting">
+static int sbull_make_request(request_queue_t *q, struct bio *bio)
+{
+        struct sbull_dev *dev = q-&gt;queuedata;
+        int status;
+        status = sbull_xfer_bio(dev, bio);
+        bio_endio(bio, bio-&gt;bi_size, status);
+        return 0;
+}
+</pre>
+<p>請注意你應當從不調用 bio_endio 從一個通常的請求函數; 那個工作由 end_that_request_first 代替來處理.</p>
+<p>一些塊驅動, 例如那些實現卷管理者和軟件 RAID 陣列的, 真正需要重定向請求到另一個設備來處理真正的 I/O. 編寫這樣的一個驅動超出了本書的範圍. 我們, 但是, 注意如果 make_request 函數返回一個非零值, bio 被再次提交. 一個"堆疊"驅動, 可, 因此, 修改 bi_bdev 成員來指向一個不同的設備, 改變起始扇區值, 接著返回; 塊系統接著傳遞 bio 到新設備. 還有一個 bio_split 調用來劃分一個 bio 到多個塊以提交給多個設備. 儘管如果隊列參數被之前設置, 劃分一個  bio 幾乎從不需要.</p>
+<p>任何一個方式, 你都必須告知塊子系統, 你的驅動在使用一個自定義的 make_request 函數. 為此, 你必須分配一個請求隊列, 使用:</p>
+<pre class="programlisting">
+request_queue_t *blk_alloc_queue(int flags); 
+</pre>
+<p>這個函數不同於 blk_init_queue, 它不真正建立隊列來持有請求. flags 參數是一組分配標誌被用來為隊列分配內存; 常常地正確值是 GFP_KERNEL. 一旦你有一個隊列, 傳遞它和你的 make_request 函數到 blk_queue_make_request:</p>
+<pre class="programlisting">
+void blk_queue_make_request(request_queue_t *queue, make_request_fn *func); 
+</pre>
+<p>sbull 代碼來設置 make_request 函數, 象:</p>
+<pre class="programlisting">
+dev-&gt;queue = blk_alloc_queue(GFP_KERNEL);
+if (dev-&gt;queue == NULL)
+        goto out_vfree;
+blk_queue_make_request(dev-&gt;queue, sbull_make_request);
+</pre>
+<p>對於好奇的人, 花些時間深入 drivers/block/ll_rw_block.c 會發現, 所有的隊列都有一個 make_request 函數. 缺省的版本, generic_make_request, 處理 bio 和一個請求結構的結合. 通過提供一個它自己的 make_request 函數, 一個驅動真正只覆蓋一個特定的請求隊列方法, 並且排序大部分工作.</p>
+</div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch16s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch16.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch16s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">16.2.&#160;塊設備操作&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;16.4.&#160;一些其他的細節</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch16s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:41 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

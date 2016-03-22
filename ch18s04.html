@@ -1,0 +1,172 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch18s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:43 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>18.4.&#160;ioctls 函數-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch18.html" title="第&#160;18&#160;章&#160;TTY 驅動">
+<link rel="prev" href="ch18s03.html" title="18.3.&#160;TTY 線路設置">
+<link rel="next" href="ch18s05.html" title="18.5.&#160;TTY 設備的 proc 和 sysfs 處理">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">18.4.&#160;ioctls 函數</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch18s03.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;18&#160;章&#160;TTY 驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch18s05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="ioctl.sect"></a>18.4.&#160;ioctls 函數</h2></div></div></div>
+<p>在 struct tty_driver 中的 ioctl 函數被 tty 核心調用當 ioctl(2) 被在設備節點上調用. 如果這個 tty 驅動不知道如何處理傳遞給它的 ioctl 值, 它應當返回 -ENOIOCTLCMD 來試圖讓 tty 核心實現一個通用的調用版本.</p>
+<p>2.6 內核定義了大約 70 個不同的 tty ioctls, 可被用來發送給一個 tty 驅動. 大部分的 tty 驅動不處理它們全部, 但是只有一個小的更普通的子集. 這是一個更通用的 tty ioctls 列表, 它們的含義, 以及如何實現它們:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>TIOCSERGETLSR </span></span></dt>
+<dd><p>獲得這個 tty 設備的線路狀態寄存器( LSR )的值.</p></dd>
+<dt><span class="term"><span>TIOCGSERIAL </span></span></dt>
+<dd>
+<p>獲得串口線信息. 調用者可以潛在地從 tty 設備獲得許多串口線路信息, 在這個調用中一次全部. 一些程序( 例如 setserial 和 dip) 調用這個函數來確保波特率被正確設置, 以及來獲得通常的關於驅動控制的設備類型信息. 調用者傳遞一個指向一個大的 serial_struct 結構的指針, 這個結構應當由 tty 驅動填充正確的值. 這是一個如何實現這個的例子:</p>
+<pre class="programlisting">
+static int tiny_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd, unsigned long arg)
+{
+        struct tiny_serial *tiny = tty-&gt;driver_data;
+        if (cmd == TIOCGSERIAL)
+        {
+                struct serial_struct tmp;
+                if (!arg)
+                        return -EFAULT;
+                memset(&amp;tmp, 0, sizeof(tmp));
+                tmp.type  = tiny-&gt;serial.type;
+                tmp.line  = tiny-&gt;serial.line;
+                tmp.port  = tiny-&gt;serial.port;
+                tmp.irq  = tiny-&gt;serial.irq;
+                tmp.flags  = ASYNC_SKIP_TEST | ASYNC_AUTO_IRQ;
+
+                tmp.xmit_fifo_size = tiny-&gt;serial.xmit_fifo_size;
+                tmp.baud_base = tiny-&gt;serial.baud_base;
+                tmp.close_delay = 5*HZ;
+                tmp.closing_wait = 30*HZ;
+                tmp.custom_divisor = tiny-&gt;serial.custom_divisor;
+                tmp.hub6 = tiny-&gt;serial.hub6;
+                tmp.io_type = tiny-&gt;serial.io_type;
+                if (copy_to_user((void __user *)arg, &amp;tmp, sizeof(tmp)))
+
+                        return -EFAULT;
+                return 0;
+        }
+        return -ENOIOCTLCMD;
+}
+</pre>
+</dd>
+<dt><span class="term"><span>TIOCSSERIAL</span></span></dt>
+<dd><p>設置串口線路信息. 這是 IOCGSERIAL 的反面, 並且允許用戶一次全部設置 tty 設備的串口線狀態. 一個指向 struct serial_struct 的指針被傳遞給這個調用, 填滿這個 tty 設備應當被設置的數據. 如果這個 tty 驅動沒有實現這個調用, 大部分程序仍然正確工作.</p></dd>
+<dt><span class="term"><span>TIOCMIWAIT </span></span></dt>
+<dd>
+<p>等待 MSR 改變. 用戶在非尋常的情況下請求這個 ioctl, 它想在內核中睡眠直到這個 tty 設備的 MSR 寄存器發生某些事情. arg 參數包含用戶在等待的事件類型. 這通常用來等待直到一個狀態線變化, 指示有更多的數據發送給設備.</p>
+<p>當實現這個 ioctl 時要小心, 並且不要使用 interruptible_sleep_on 調用, 因為它是不安全的(有很多不好的競爭條件涉及它). 相反, 一個 wait_queue 應當用來避免這個問題. 這是一個如何實現這個 ioctl 的例子:</p>
+<pre class="programlisting">
+static int tiny_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd, unsigned long arg)
+{
+        struct tiny_serial *tiny = tty-&gt;driver_data;
+        if (cmd == TIOCMIWAIT)
+        {
+
+                DECLARE_WAITQUEUE(wait, current);
+                struct async_icount cnow;
+                struct async_icount cprev;
+                cprev = tiny-&gt;icount;
+                while (1) {
+
+                        add_wait_queue(&amp;tiny-&gt;wait, &amp;wait);
+                        set_current_state(TASK_INTERRUPTIBLE);
+                        schedule();
+                        remove_wait_queue(&amp;tiny-&gt;wait, &amp;wait); /* see if a signal woke us up */
+                        if (signal_pending(current))
+                                return -ERESTARTSYS;
+                        cnow = tiny-&gt;icount;
+                        if (cnow.rng == cprev.rng &amp;&amp; cnow.dsr == cprev.dsr &amp;&amp;
+                                        cnow.dcd == cprev.dcd &amp;&amp; cnow.cts == cprev.cts)
+                                return -EIO; /* no change =&gt; error */
+                        if (((arg &amp; TIOCM_RNG) &amp;&amp; (cnow.rng != cprev.rng)) || ((arg &amp; TIOCM_DSR) &amp;&amp; (cnow.dsr != cprev.dsr)) || ((arg &amp; TIOCM_CD) &amp;&amp; (cnow.dcd != cprev.dcd)) || ((arg &amp; TIOCM_CTS) &amp;&amp; (cnow.cts != cprev.cts)) ) {
+                                return 0;
+                        }
+                        cprev = cnow;
+
+                }
+        }
+        return -ENOIOCTLCMD;
+
+}
+</pre>
+<p>在 tty 驅動的代碼中能知道 MSR 寄存器改變的某些地方, 下面的代碼行必須調用以便這個代碼能正常工作:</p>
+<pre class="programlisting">
+wake_up_interruptible(&amp;tp-&gt;wait);
+</pre>
+</dd>
+<dt><span class="term"><span>TIOCGICOUNT</span></span></dt>
+<dd><p>獲得中斷計數. 當用戶要知道已經產生多少串口線中斷時調用. 如果驅動有一個中斷處理, 它應當定義一個內部計數器結構來跟蹤這些統計和遞增適當的計數器, 每次這個函數被內核運行時.</p></dd>
+</dl></div>
+<p>這個 ioctl 調用傳遞內核一個指向結構 serial_icounter_struct 的指針, 它應當被 tty 驅動填充. 這個調用常常和之前的 IOCMIWAIT ioctl 調用結合使用. 如果 tty 驅動跟蹤所有的這些中斷在驅動操作時, 實現這個調用的代碼會非常簡單:</p>
+<pre class="programlisting">
+static int tiny_ioctl(struct tty_struct *tty, struct file *file, unsigned int cmd, unsigned long arg)
+{
+        struct tiny_serial *tiny = tty-&gt;driver_data;
+        if (cmd == TIOCGICOUNT)
+        {
+                struct async_icount cnow = tiny-&gt;icount;
+                struct serial_icounter_struct icount;
+                icount.cts = cnow.cts;
+                icount.dsr = cnow.dsr;
+                icount.rng = cnow.rng;
+                icount.dcd = cnow.dcd;
+                icount.rx = cnow.rx;
+                icount.tx = cnow.tx;
+                icount.frame = cnow.frame;
+                icount.overrun = cnow.overrun;
+                icount.parity = cnow.parity;
+                icount.brk = cnow.brk;
+                icount.buf_overrun = cnow.buf_overrun;
+                if (copy_to_user((void __user *)arg, &amp;icount, sizeof(icount)))
+
+                        return -EFAULT;
+                return 0;
+        }
+        return -ENOIOCTLCMD;
+}
+</pre>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch18s03.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch18.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch18s05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">18.3.&#160;TTY 線路設置&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;18.5.&#160;TTY 設備的 proc 和 sysfs 處理</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch18s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:43 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

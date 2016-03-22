@@ -1,0 +1,60 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch12s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>12.5.&#160;SBus-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch12.html" title="第&#160;12&#160;章&#160;PCI 驅動">
+<link rel="prev" href="ch12s04.html" title="12.4.&#160;其他的 PC 總線">
+<link rel="next" href="ch12s06.html" title="12.6.&#160;NuBus 總線">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">12.5.&#160;SBus</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch12s04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;12&#160;章&#160;PCI 驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch12s06.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="SBus.sect1"></a>12.5.&#160;SBus</h2></div></div></div>
+<p>當大部分計算機配備有 PCI 或 ISA 接口總線, 大部分老式的基於 SPARC 的工作站使用 SBus 來連接它們的外設.</p>
+<p>SBus 使一個非常先進的設計, 儘管它已出現很長時間. 它意圖是處理器獨立的(儘管只有 SPARC 計算機使用它)並且為 I/O 外設板做了優化. 換句話說, 你不能插入額外的 RAM 到 SBus 槽位( RAM 擴展板即便在 ISA 世界也已被忘記很長時間了, 並且 PCI 不再支持它們). 這個優化打算來簡化硬件設備和系統軟件的設計, 代價是主板的一些增加的複雜性.</p>
+<p>這個總線的 I/O 偏好導致了使用虛擬地址來傳送數據的外設, 因此不必分配一個連續的 DMA 緩衝. 主板負責解碼虛擬地址並映射它們到物理地址. 這要求連接一個 MMU(內存管理單元)到總線; 負責這個任務的芯片組稱為 IOMMU. 儘管比在接口總線上使用物理地址更複雜, 這個設計被很大地簡化, 由於 SPARC 處理器一直設計為保持 MMU 內核和 CPU 內核獨立(要麼是物理上地, 要麼至少在概念上). 實際上, 這個設計選擇被其他的智能處理器設計所共享並且全面受益. 這個總線的另一個特性是設備板採用大塊地理式尋址, 因此沒有必要實現一個地址解碼器在每個外設或者處理地址衝突.</p>
+<p>SBus 外設使用 Forth 語言在它們的 PROM 中來初始化它們自己. 選擇 Forth 是因為解釋器是輕量級的, 並且因此, 可輕易在任何一個計算機系統固件中實現. 另外, SBus 規範規定了驅動處理, 使兼容的 I/O 設備輕易適用到系統中並且在系統啟動時被識別. 這是一個大的步驟來支持多平台設備; 相比我們熟悉的以 PC 為中心的 ISA 之類它是一個完全不同的世界. 但是, 它不能成功, 因為許多商業的原因.</p>
+<p>儘管當前的內核版本提供了對 SBus 設備的很多全特性的支持, 這個總線現在用的很少, 以至於在這裡它不值得詳細描述. 感興趣的讀者可查看源代碼 arch/sparc/kernel 和arch/sparc/mm</p>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch12s04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch12.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch12s06.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">12.4.&#160;其他的 PC 總線&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;12.6.&#160;NuBus 總線</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch12s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

@@ -1,0 +1,182 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s07.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>2.7.&#160;初始化和關停-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch02.html" title="第&#160;2&#160;章&#160;建立和運行模塊">
+<link rel="prev" href="ch02s06.html" title="2.6.&#160;預備知識">
+<link rel="next" href="ch02s08.html" title="2.8.&#160;模塊參數">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">2.7.&#160;初始化和關停</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch02s06.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;2&#160;章&#160;建立和運行模塊</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch02s08.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="InitializationandShutdown.sect1"></a>2.7.&#160;初始化和關停</h2></div></div></div>
+<p> 如已提到的, 模塊初始化函數註冊模塊提供的任何功能. 這些功能, 我們指的是新功能, 可以由應用程序存取的或者一整個驅動或者一個新軟件抽像. 實際的初始化函數定義常常如: </p>
+<pre class="programlisting">
+static int __init initialization_function(void)
+{
+
+ /* Initialization code here */
+}
+module_init(initialization_function);
+</pre>
+<p> 初始化函數應當聲明成靜態的, 因為它們不會在特定文件之外可見; 沒有硬性規定這個, 然而, 因為沒有函數能輸出給內核其他部分, 除非明確請求. 聲明中的 __init 標誌可能看起來有點怪; 它是一個給內核的暗示, 給定的函數只是在初始化使用. 模塊加載者在模塊加載後會丟掉這個初始化函數, 使它的內存可做其他用途. 一個類似的標籤 (__initdata) 給只在初始化時用的數據. 使用 __init 和 __initdata 是可選的, 但是它帶來的麻煩是值得的. 只是要確認不要用在那些在初始化完成後還使用的函數(或者數據結構)上. 你可能還會遇到 __devinit 和 __devinitdata 在內核源碼裡; 這些只在內核沒有配置支持 hotplug 設備時轉換成 __init 和 _initdata. 我們會在 14 章談論 hotplug 支持.  </p>
+<p> 使用 moudle_init 是強制的. 這個宏定義增加了特別的段到模塊目標代碼中, 表明在哪裡找到模塊的初始化函數. 沒有這個定義, 你的初始化函數不會被調用.</p>
+<p> 模塊可以註冊許多的不同設施, 包括不同類型的設備, 文件系統, 加密轉換, 以及更多. 對每一個設施, 有一個特定的內核函數來完成這個註冊. 傳給內核註冊函數的參數常常是一些數據結構的指針, 描述新設施以及要註冊的新設施的名子. 數據結構常常包含模塊函數指針, 模塊中的函數就是這樣被調用的.  </p>
+<p> 能夠註冊的項目遠遠超出第 1 章中提到的設備類型列表. 它們包括, 其他的, 串口, 多樣設備, sysfs 入口, /proc 文件, 執行域, 鏈路規程. 這些可註冊項的大部分都支持不直接和硬件相關的函數, 但是處於"軟件抽像"區域裡. 這些項可以註冊, 是因為它們以各種方式(例如象 /proc 文件和鏈路規程)集成在驅動的功能中.  
+</p>
+<p> 對某些驅動有其他的設施可以註冊作為補充, 但它們的使用太特別, 所以不值得討論它們. 它們使用堆疊技術, 在"內核符號表"一節中講過. 如果你想深入探求, 你可以在內核源碼裡查找 EXPORT_SYMBOL , 找到由不同驅動提供的入口點. 大部分註冊函數以 register_ 做前綴, 因此找到它們的另外一個方法是在內核源碼裡查找 register_ .  </p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheCleanupFunction.sect2"></a>2.7.1.&#160;清理函數</h3></div></div></div>
+<p> 每個非試驗性的模塊也要求有一個清理函數, 它註銷接口, 在模塊被去除之前返回所有資源給系統. 這個函數定義為:</p>
+<pre class="programlisting">
+static void __exit cleanup_function(void)
+{
+ /* Cleanup code here */
+}
+
+module_exit(cleanup_function);
+</pre>
+<p> 清理函數沒有返回值, 因此它被聲明為 void. __exit 修飾符標識這個代碼是只用於模塊卸載( 通過使編譯器把它放在特殊的 ELF 段). 如果你的模塊直接建立在內核裡, 或者如果你的內核配置成不允許模塊卸載, 標識為 __exit 的函數被簡單地丟棄. 因為這個原因, 一個標識 __exit 的函數只在模塊卸載或者系統停止時調用; 任何別的使用是錯的. 再一次, moudle_exit 聲明對於使得內核能夠找到你的清理函數是必要的.</p>
+<p> 如果你的模塊沒有定義一個清理函數, 內核不會允許它被卸載.  
+</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ErrorHandlingDuringInitialization.sect2"></a>2.7.2.&#160;初始化中的錯誤處理</h3></div></div></div>
+<p> 你必須記住一件事, 在註冊內核設施時, 註冊可能失敗. 即便最簡單的動作常常需要內存分配, 分配的內存可能不可用. 因此模塊代碼必須一直檢查返回值, 並且確認要求的操作實際上已經成功.  </p>
+<p> 如果在你註冊工具時發生任何錯誤, 首先第一的事情是決定模塊是否能夠無論如何繼續初始化它自己. 常常, 在一個註冊失敗後模塊可以繼續操作, 如果需要可以功能降級. 在任何可能的時候, 你的模塊應當盡力向前, 並提供事情失敗後具備的能力.</p>
+<p> 如果證實你的模塊在一個特別類型的失敗後完全不能加載, 你必須取消任何在失敗前註冊的動作. 內核不保留已經註冊的設施的每模塊註冊, 因此如果初始化在某個點失敗, 模塊必須能自己退回所有東西. 如果你無法註銷你獲取的東西, 內核就被置於一個不穩定狀態; 它包含了不存在的代碼的內部指針. 這種情況下, 經常地, 唯一的方法就是重啟系統. 在初始化錯誤發生時, 你確實要小心地將事情做正確. </p>
+<p> 錯誤恢復有時用 goto 語句處理是最好的. 我們通常不願使用 goto, 但是在我們的觀念裡, 這是一個它有用的地方. 在錯誤情形下小心使用 goto 可以去掉大量的複雜, 過度對齊的, "結構形" 的邏輯. 因此, 在內核裡, goto 是處理錯誤經常用到, 如這裡顯示的.  </p>
+<p> 下面例子代碼( 使用設施註冊和註銷函數)在初始化在任何點失敗時做得正確: </p>
+<pre class="programlisting">
+int __init my_init_function(void)
+{
+        int err;
+        /* registration takes a pointer and a name */
+        err = register_this(ptr1, "skull");
+        if (err)
+                goto fail_this;
+        err = register_that(ptr2, "skull");
+        if (err)
+                goto fail_that;
+        err = register_those(ptr3, "skull");
+        if (err)
+                goto fail_those;
+        return 0; /* success */
+fail_those:
+        unregister_that(ptr2, "skull");
+fail_that:
+        unregister_this(ptr1, "skull");
+fail_this:
+        return err; /* propagate the error */
+
+}
+</pre>
+<p> 這段代碼試圖註冊 3 個(虛構的)設施. goto 語句在失敗情況下使用, 在事情變壞之前只對之前已經成功註冊的設施進行註銷.  </p>
+<p> 另一個選項, 不需要繁多的 goto 語句, 是跟蹤已經成功註冊的, 並且在任何出錯情況下調用你的模塊的清理函數. 清理函數只回捲那些已經成功完成的步驟. 然而這種選擇, 需要更多代碼和更多 CPU 時間, 因此在快速途徑下, 你仍然依賴於 goto 作為最好的錯誤恢復工具.  </p>
+<p> my_init_function 的返回值, err, 是一個錯誤碼. 在 Linux 內核裡, 錯誤碼是負數, 屬於定義於 &lt;linux/errno.h&gt; 的集合. 如果你需要產生你自己的錯誤碼代替你從其他函數得到的返回值, 你應當包含 &lt;linux/errno.h&gt; 以便使用符號式的返回值, 例如 -ENODEV, -ENOMEM, 等等. 返回適當的錯誤碼總是一個好做法, 因為用戶程序能夠把它們轉變為有意義的字串, 使用 perror 或者類似的方法.</p>
+<p> 顯然, 模塊清理函數必須撤銷任何由初始化函數進行的註冊, 並且慣例(但常常不是要求的)是按照註冊時相反的順序註銷設施.  </p>
+<pre class="programlisting">
+void __exit my_cleanup_function(void) 
+{
+ unregister_those(ptr3, "skull");
+ unregister_that(ptr2, "skull");
+ unregister_this(ptr1, "skull");
+ return;
+
+} 
+</pre>
+<p> 如果你的初始化和清理比處理幾項複雜, goto 方法可能變得難於管理, 因為所有的清理代碼必須在初始化函數里重複, 包括幾個混合的標號. 有時, 因此, 一種不同的代碼排布證明更成功.  </p>
+<p> 使代碼重複最小和所有東西流線化, 你應當做的是無論何時發生錯誤都從初始化裡調用清理函數. 清理函數接著必須在撤銷它的註冊前檢查每一項的狀態. 以最簡單的形式, 代碼看起來像這樣: </p>
+<pre class="programlisting">
+struct something *item1;
+struct somethingelse *item2;
+int stuff_ok;
+
+void my_cleanup(void)
+{
+        if (item1)
+                release_thing(item1);
+        if (item2)
+                release_thing2(item2);
+        if (stuff_ok)
+                unregister_stuff();
+        return;
+}
+
+int __init my_init(void)
+{
+        int err = -ENOMEM;
+
+        item1 = allocate_thing(arguments);
+        item2 = allocate_thing2(arguments2);
+        if (!item2 || !item2)
+                goto fail;
+
+        err = register_stuff(item1, item2);
+        if (!err)
+                stuff_ok = 1;
+        else
+                goto fail;
+        return 0; /* success */
+
+fail:
+        my_cleanup();
+        return err;
+}
+</pre>
+<p> 如這段代碼所示, 你也許需要, 也許不要外部的標誌來標識初始化步驟的成功, 要依賴你調用的註冊/分配函數的語義. 不管要不要標誌, 這種初始化會變得包含大量的項, 常常比之前展示的技術要好. 注意, 但是, 清理函數當由非退出代碼調用時不能標誌為 __exit, 如同前面的例子.  
+</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ModuleLoadingRaces.sect2"></a>2.7.3.&#160;模塊加載競爭</h3></div></div></div>
+<p> 到目前, 我們的討論已來到一個模塊加載的重要方面: 競爭情況. 如果你在如何編寫你的初始化函數上不小心, 你可能造成威脅到整個系統的穩定的情形. 我們將在本書稍後討論競爭情況; 現在, 快速提幾點就足夠了: </p>
+<p> 首先時你應該一直記住, 內核的某些別的部分會在註冊完成之後馬上使用任何你註冊的設施. 這是完全可能的, 換句話說, 內核將調用進你的模塊, 在你的初始化函數仍然在運行時. 所以你的代碼必須準備好被調用, 一旦它完成了它的第一個註冊. 不要註冊任何設施, 直到所有的需要支持那個設施的你的內部初始化已經完成.  </p>
+<p> 你也必須考慮到如果你的初始化函數決定失敗會發生什麼, 但是內核的一部分已經在使用你的模塊已註冊的設施. 如果這種情況對你的模塊是可能的, 你應當認真考慮根本不要使初始化失敗. 畢竟, 模塊已清楚地成功輸出一些有用的東西. 如果初始化必須失敗, 必須小心地處理任何可能的在內核別處發生的操作, 直到這些操作已完成.  
+</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch02s06.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch02.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch02s08.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">2.6.&#160;預備知識&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;2.8.&#160;模塊參數</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s07.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

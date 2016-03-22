@@ -1,0 +1,104 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:31 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>2.2.&#160;Hello World 模塊-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch02.html" title="第&#160;2&#160;章&#160;建立和運行模塊">
+<link rel="prev" href="ch02.html" title="第&#160;2&#160;章&#160;建立和運行模塊">
+<link rel="next" href="ch02s03.html" title="2.3.&#160;內核模塊相比於應用程序">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">2.2.&#160;Hello World 模塊</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;2&#160;章&#160;建立和運行模塊</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch02s03.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="TheHelloWorldModule.sect1"></a>2.2.&#160;Hello World 模塊</h2></div></div></div>
+<p> 許多編程書籍從一個 "hello world" 例子開始, 作為一個展示可能的最簡單的程序的方法. 本書涉及的是內核模塊而不是程序; 因此, 對無耐心的讀者, 下面的代碼是一個完整的 "hello world"模塊: </p>
+<pre class="programlisting">
+#include &lt;linux/init.h&gt;
+#include &lt;linux/module.h&gt;
+MODULE_LICENSE("Dual BSD/GPL");
+
+static int hello_init(void)
+{
+        printk(KERN_ALERT "Hello, world\n");
+        return 0;
+}
+static void hello_exit(void)
+{
+
+        printk(KERN_ALERT "Goodbye, cruel world\n");
+}
+
+module_init(hello_init);
+module_exit(hello_exit);
+</pre>
+<p> 這個模塊定義了兩個函數, 一個在模塊加載到內核時被調用( hello_init )以及一個在模塊被去除時被調用( hello_exit ). moudle_init 和 module_exit 這幾行使用了特別的內核宏來指出這兩個函數的角色. 另一個特別的宏 (MODULE_LICENSE) 是用來告知內核, 該模塊帶有一個自由的許可證; 沒有這樣的說明, 在模塊加載時內核會抱怨.  
+</p>
+<p> printk 函數在 Linux 內核中定義並且對模塊可用; 它與標準 C 庫函數 printf 的行為相似. 內核需要它自己的打印函數, 因為它靠自己運行, 沒有 C 庫的幫助. 模塊能夠調用 printk 是因為, 在 insmod 加載了它之後, 模塊被連接到內核並且可存取內核的公用符號 (函數和變量, 下一節詳述). 字串 KERN_ALERT 是消息的優先級. <sup>[<a name="id408271" href="#ftn.id408271">3</a>]</sup></p>
+<p>我們在此模塊中指定了一個高優先級, 因為使用缺省優先級的消息可能不會在任何有用的地方顯示, 這依賴於你運行的內核版本, klogd 守護進程的版本, 以及你的配置. 現在你可以忽略這個因素; 我們在第 4 章講解它.  </p>
+<p> 你可以用 insmod 和 rmmod 工具來測試這個模塊. 注意只有超級用戶可以加載和卸載模塊.  </p>
+<pre class="screen">
+% make 
+make[1]: Entering directory `/usr/src/linux-2.6.10'
+ CC [M] /home/ldd3/src/misc-modules/hello.o
+ Building modules, stage 2.
+ MODPOST
+ CC /home/ldd3/src/misc-modules/hello.mod.o
+ LD [M] /home/ldd3/src/misc-modules/hello.ko 
+make[1]: Leaving directory `/usr/src/linux-2.6.10'
+% su
+root# insmod ./hello.ko
+Hello, world
+root# rmmod hello
+Goodbye cruel world
+root#
+</pre>
+<p> 請再一次注意, 為使上面的操作命令順序工作, 你必須在某個地方有正確配置和建立的內核樹, 在那裡可以找到 makefile (/usr/src/linux-2.6.10, 在展示的例子裡面 ). 我們在 "編譯和加載" 這一節深入模塊建立的細節.  </p>
+<p> 依據你的系統用來遞交消息行的機制, 你的輸出可能不同. 特別地, 前面的屏幕輸出是來自一個字符控制台; 如果你從一個終端模擬器或者在窗口系統中運行 insmod 和 rmmod, 你不會在你的屏幕上看到任何東西. 消息進入了其中一個系統日誌文件中, 例如 /var/log/messages (實際文件名子隨 Linux 發佈而變化). 內核遞交消息的機制在第 4 章描述.  </p>
+<p> 如你能見到的, 編寫一個模塊不是如你想像的困難 -- 至少, 在模塊沒有要求做任何有用的事情時. 困難的部分是理解你的設備, 以及如何獲得最高性能. 通過本章我們深入模塊化內部並且將設備相關的問題留到後續章節.  
+</p>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id408271" href="#id408271">3</a>] </sup> 優先級只是一個字串, 例如 &lt;1&gt;, 前綴於 printk 格式串之前. 注意在 KERN_ALERT 之後缺少一個逗號; 添加一個逗號在那裡是一個普通的討厭的錯誤 ( 幸運的是, 編譯器會捕捉到 ).</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch02.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch02s03.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">第&#160;2&#160;章&#160;建立和運行模塊&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;2.3.&#160;內核模塊相比於應用程序</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:31 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

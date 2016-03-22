@@ -1,0 +1,58 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch12s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>12.6.&#160;NuBus 總線-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch12.html" title="第&#160;12&#160;章&#160;PCI 驅動">
+<link rel="prev" href="ch12s05.html" title="12.5.&#160;SBus">
+<link rel="next" href="ch12s07.html" title="12.7.&#160;外部總線">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">12.6.&#160;NuBus 總線</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch12s05.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;12&#160;章&#160;PCI 驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch12s07.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="NuBus.sect1"></a>12.6.&#160;NuBus 總線</h2></div></div></div>
+<p>另一個有趣的, 但是幾乎被忘記的, 接口總線是 NuBus. 它被發現於老的 Mac 計算機(那些有 M68K CPU 家族的).</p>
+<p>所有的這個總線是內存映射的(象 M68K 的所有東西), 並且設備只被地理式尋址. 這對 Apple 是好的和典型的, 因為更老的 Apple II 已經有一個類似的總線佈局. 不好的是幾乎不可能找到 NuBus 的文檔, 因為 Apple 對於它的 Mac 計算機一直遵循的封鎖任何東西的政策(不像之前的 Apple II, 它的源碼和原理圖用很少的代價即可得到).</p>
+<p>文件 drivers/nubus/nubus.c 包括幾乎我們知道的關於這個總線的全部, 並且讀起來是有趣的; 它顯示了有多少難的反向過程需要開發者來做.</p>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch12s05.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch12.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch12s07.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">12.5.&#160;SBus&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;12.7.&#160;外部總線</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch12s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

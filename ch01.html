@@ -1,0 +1,88 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch01.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:30 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;1&#160;章&#160;第一章 設備驅動簡介-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="next" href="ch01s02.html" title="1.2.&#160;劃分內核">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;1&#160;章&#160;第一章 設備驅動簡介</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="index-2.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch01s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="AnIntroductiontoDeviceDrivers.chap"></a>第&#160;1&#160;章&#160;第一章 設備驅動簡介</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch01.html#TheRoleoftheDeviceDriver.sect1">1.1. 驅動程序的角色</a></span></dt>
+<dt><span class="sect1"><a href="ch01s02.html">1.2. 劃分內核</a></span></dt>
+<dd><dl><dt><span class="sect2"><a href="ch01s02.html#LoadableModules.sect2">1.2.1. 可加載模塊</a></span></dt></dl></dd>
+<dt><span class="sect1"><a href="ch01s03.html">1.3. 設備和模塊的分類</a></span></dt>
+<dt><span class="sect1"><a href="ch01s04.html">1.4. 安全問題</a></span></dt>
+<dt><span class="sect1"><a href="ch01s05.html">1.5. 版本編號</a></span></dt>
+<dt><span class="sect1"><a href="ch01s06.html">1.6. 版權條款</a></span></dt>
+<dt><span class="sect1"><a href="ch01s07.html">1.7. 加入內核開發社團</a></span></dt>
+<dt><span class="sect1"><a href="ch01s08.html">1.8. 本書的內容</a></span></dt>
+</dl>
+</div>
+<p>以 Linux 為代表的自由操作系統的很多優點之一, 是它們的內部是開放給所有人看的. 操作系統, 曾經是一個隱藏的神秘的地方, 它的代碼只局限於少數的程序員, 現在已準備好讓任何具備必要技能的人來檢查, 理解以及修改. Linux 已經幫助使操作系統民主化. Linux 內核保留有大量的複雜的代碼, 但是, 那些想要成為內核 hacker 的人需要一個入口點, 這樣他們可以進入代碼中, 不會被代碼的複雜性壓倒. 通常, 設備驅動提供了這樣的門路.</p>
+<p>驅動程序在 Linux 內核裡扮演著特殊的角色. 它們是截然不同的"黑盒子", 使硬件的特殊的一部分響應定義好的內部編程接口. 它們完全隱藏了設備工作的細節. 用戶的活動通過一套標準化的調用來進行, 這些調用與特別的驅動是獨立的; 設備驅動的角色就是將這些調用映射到作用於實際硬件的和設備相關的操作上. 這個編程接口是這樣, 驅動可以與內核的其他部分分開建立, 並在需要的時候在運行時"插入". 這種模塊化使得 Linux 驅動易寫, 以致於目前有幾百個驅動可用.</p>
+<p>編寫 Linux 設備驅動有許多理由讓人感興趣. 可用的新硬件出現的速率(以及陳舊的速率)就確保了驅動編寫者在可見的將來內是忙碌的. 個別人可能需要瞭解驅動以便存取一個他們感興趣的特殊設備. 硬件供應商, 通過為他們的產品開發 Linux 驅動, 可以給他們的潛在市場增加大量的正在擴張的 Linux 用戶基數. 還有 Linux 系統的開放源碼性質意味著如果驅動編寫者願意, 驅動源碼能夠快速地散佈到幾百萬用戶.</p>
+<p>本書指導你如何編寫你自己的驅動, 以及如何利用內核相關的部分. 我們採用一種設備-獨立的方法; 編程技術和接口, 在任何可能的時候, 不會捆綁到任何特定的設備. 每一個驅動都是不同的; 作為一個驅動編寫者, 你需要深入理解你的特定設備. 但是大部分的原則和基本技術對所有驅動都是一樣的. 本書無法教你關於你的設備的東西, 但是它給予你所需要的使你的設備運行起來的背景知識的指導.</p>
+<p>在你學習編寫驅動時, 你通常會發現大量有關 Linux 內核的東西. 這也許會幫助你理解你的機器是如何工作的, 以及為什麼事情不是如你所願的快, 或者不是如你所要的進行. 我們會逐步介紹新概念, 由非常簡單的驅動開始並建立它們; 每一個新概念都伴有例子代碼, 這樣的代碼不需要特別的硬件來測試.</p>
+<p>本章不會真正進入編寫代碼. 但是, 我們介紹一些 Linux 內核的背景概念, 這樣在以後我們動手編程時, 你會感到樂於知道這些.</p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="TheRoleoftheDeviceDriver.sect1"></a>1.1.&#160;驅動程序的角色</h2></div></div></div>
+<p>作為一個程序員, 你能夠對你的驅動作出你自己的選擇, 並且在所需的編程時間和結果的靈活性之間, 選擇一個可接受的平衡. 儘管說一個驅動是"靈活"的, 聽起來有些奇怪, 但是我們喜歡這個字眼, 因為它強調了一個驅動程序的角色是提供機制, 而不是策略.</p>
+<p>機制和策略的區分是其中一個在 Unix 設計背後的最好觀念. 大部分的編程問題其實可以劃分為 2 部分:" 提供什麼能力"(機制) 和 "如何使用這些能力"(策略). 如果這兩方面由程序的不同部分來表達, 或者甚至由不同的程序共同表達, 軟件包是非常容易開發和適應特殊的需求.</p>
+<p>例如, 圖形顯示的 Unix 管理劃分為 X 服務器, 它理解硬件以及提供了統一的接口給用戶程序, 還有窗口和會話管理器, 它實現了一個特別的策略, 而對硬件一無所知. 人們可以在不同的硬件上使用相同的窗口管理器, 而且不同的用戶可以在同一台工作站上運行不同的配置. 甚至完全不同的桌面環境, 例如 KDE 和 GNOME, 可以在同一系統中共存. 另一個例子是 TCP/IP 網絡的分層結構: 操作系統提供 socket 抽像層, 它對要傳送的數據而言不實現策略, 而不同的服務器負責各種服務( 以及它們的相關策略). 而且, 一個服務器, 例如 ftpd 提供文件傳輸機制, 同時用戶可以使用任何他們喜歡的客戶端; 無論命令行還是圖形客戶端都存在, 並且任何人都能編寫一個新的用戶接口來傳輸文件.</p>
+<p>在驅動相關的地方, 機制和策略之間的同樣的區分都適用. 軟驅驅動是不含策略的--它的角色僅僅是將磁盤表現為一個數據塊的連續陣列. 系統的更高級部分提供了策略, 例如誰可以存取軟驅驅動, 這個軟驅是直接存取還是要通過一個文件系統, 以及用戶是否可以加載文件系統到這個軟驅. 因為不同的環境常常需要不同的使用硬件的方式, 盡可能對策略透明是非常重要的.</p>
+<p>在編寫驅動時, 程序員應當特別注意這個基礎的概念: 編寫內核代碼來存取硬件, 但是不能強加特別的策略給用戶, 因為不同的用戶有不同的需求. 驅動應當做到使硬件可用, 將所有關於如何使用硬件的事情留給應用程序. 一個驅動, 這樣, 就是靈活的, 如果它提供了對硬件能力的存取, 沒有增加約束. 然而, 有時必須作出一些策略的決定. 例如, 一個數字 I/O 驅動也許只提供對硬件的字符存取, 以便避免額外的代碼處理單個位. </p>
+<p>你也可以從不同的角度看你的驅動: 它是一個存在於應用程序和實際設備間的軟件層. 驅動的這種特權的角色允許驅動程序員y嚴密地選擇設備應該如何表現: 不同的驅動可以提供不同的能力, 甚至是同一個設備. 實際的驅動設計應當是在許多不同考慮中的平衡. 例如, 一個單個設備可能由不同的程序並發使用, 驅動程序員有完全的自由來決定如何處理並發性. 你能在設備上實現內存映射而不依賴它的硬件能力, 或者你能提供一個用戶庫來幫助應用程序員在可用的原語之上實現新策略, 等等. 一個主要的考慮是在展現給用戶盡可能多的選項, 和你不得不花費的編寫驅動的時間之間做出平衡, 還有需要保持事情簡單以避免錯誤潛入.</p>
+<p>對策略透明的驅動有一些典型的特徵. 這些包括支持同步和異步操作, 可以多次打開的能力, 利用硬件全部能力, 沒有軟件層來"簡化事情"或者提供策略相關的操作. 這樣的驅動不但對他們的最終用戶好用, 而且證明也是易寫易維護的. 成為策略透明的實際是一個共同的目標, 對軟件設計者來說.</p>
+<p>許多設備驅動, 確實, 是與用戶程序一起發行的, 以便幫助配置和存取目標設備. 這些程序包括簡單的工具到完全的圖形應用. 例子包括 tunelp 程序, 它調整並口打印機驅動如何操作, 還有圖形的 cardctl 工具, 它是 PCMCIA 驅動包的一部分. 經常會提供一個客戶庫, 它提供了不需要驅動自身實現的功能.</p>
+<p>本書的範圍是內核, 因此我們盡力不涉及策略問題, 應用程序, 以及支持庫. 有時我們談論不同的策略以及如何支持他們, 但是我們不會進入太多有關使用設備的程序的細節, 或者是他們強加的策略的細節. 但是, 你應當理解, 用戶程序是一個軟件包的構成部分, 並且就算是對策略透明的軟件包在發行時也會帶有配置文件, 來對底層的機制應用缺省的動作.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="index-2.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch01s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">Linux 設備驅動 Edition 3&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;1.2.&#160;劃分內核</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch01.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:30 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

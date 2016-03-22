@@ -1,0 +1,214 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch04s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>4.6.&#160;調試器和相關工具-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch04.html" title="第&#160;4&#160;章&#160;調試技術">
+<link rel="prev" href="ch04s05.html" title="4.5.&#160;調試系統故障">
+<link rel="next" href="ch05.html" title="第&#160;5&#160;章&#160;並發和競爭情況">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">4.6.&#160;調試器和相關工具</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch04s05.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;4&#160;章&#160;調試技術</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="DebuggerandRelatedTools.sect"></a>4.6.&#160;調試器和相關工具</h2></div></div></div>
+<p>調試模塊的最後手段是使用調試器來單步調試代碼, 查看變量值和機器寄存器. 這個方法費時, 應當盡量避免. 但是, 通過調試器獲得的代碼的細粒度視角有時是很有價值的.</p>
+<p>在內核上使用一個交互式調試器是一個挑戰. 內核代表系統中的所有進程運行在自己的地址空間. 結果, 用戶空間調試器所提供的一些普通功能, 例如斷點和單步, 在內核中更難得到. 本節中, 我們看一下幾個調試內核的方法; 每個都有缺點和優點.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Usinggdb.sect"></a>4.6.1.&#160;使用 gdb</h3></div></div></div>
+<p>gdb 對於看系統內部是非常有用. 在這個級別精通調試器的使用要求對 gdb 命令有信心, 需要理解目標平台的彙編代碼, 以及對應源碼和優化的彙編碼的能力.</p>
+<p>調試器必須把內核作為一個應用程序來調用. 除了指定內核映像的文件名之外, 你需要在命令行提供一個核心文件的名子. 對於一個運行的內核, 核心文件是內核核心映像, /proc/kcore. 一個典型的 gdb 調用看來如下:</p>
+<pre class="screen">
+gdb /usr/src/linux/vmlinux /proc/kcore 
+</pre>
+<p>第一個參數是非壓縮的 ELF 內核可執行文件的名子, 不是 zImage 或者 bzImage 或者給啟動環境特別編譯的任何東東.</p>
+<p>gdb 命令行的第二個參數是核心文件的名子. 如同任何 /proc 中的文件, /proc/kcore 是在被讀的時候產生的. 當 read 系統調用在 /proc 文件系統中執行時, 它映射到一個數據產生函數,而不是一個數據獲取函數; 我們已經在本章"使用 /proc 文件系統"一節中利用了這個特點. kcore 用來代表內核"可執行文件", 以一個核心文件的形式; 它是一個巨大的文件, 因為他代表整個的內核地址空間, 對應於所有的物理內存. 從 gdb 中, 你可查看內核變量,通過發出標準 gdb 命令. 例如, p jiffies 打印時鐘的從啟動到當前時間的嘀噠數.</p>
+<p>當你從gdb打印數據, 內核仍然在運行, 各種數據項在不同時間有不同的值; 然而, gdb 通過緩存已經讀取的數據來優化對核心文件的存取. 如果你試圖再次查看 jiffies 變量, 你會得到和以前相同的答案. 緩存值來避免額外的磁盤存取對傳統核心文件是正確的做法, 但是在使用一個"動態"核心映像時就不方便. 解決方法是任何時候你需要刷新 gdb 緩存時發出命令 core-file /proc/kcore; 調試器準備好使用新的核心文件並且丟棄任何舊信息. 然而, 你不會一直需要發出 core-file 在讀取一個新數據時; gdb 讀取核心以多個幾KB的塊的方式, 並且只緩存它已經引用的塊.</p>
+<p>gdb 通常提供的不少功能在你使用內核時不可用. 例如, gdb 不能修改內核數據; 它希望在操作內存前在它自己的控制下運行一個被調試的程序. 也不可能設置斷點或觀察點, 或者單步過內核函數.</p>
+<p>注意, 為了給 gdb 符號信息, 你必須設置 CONFIG_DEBUG_INFO 來編譯你的內核. 結果是一個很大的內核映像在磁盤上, 但是, 沒有這個信息, 深入內核變量幾乎不可能.</p>
+<p>有了調試信息, 你可以知道很多內核內部的事情. gdb 愉快地打印出結構, 跟隨指針, 等等. 而有一個事情比較難, 然而, 是檢查 modules. 因為模塊不是傳遞給gdb 的 vmlinux 映像, 調試器對它們一無所知. 幸運的是, 作為 2.6.7 內核, 有可能教給 gdb 需要如何檢查可加載模塊.</p>
+<p>Linux 可加載模塊是 ELF 格式的可執行映像; 這樣, 它們被分成幾個節. 一個典型的模塊可能包含一打或更多節, 但是有 3 個典型的與一次調試會話相關:</p>
+<div class="variablelist"><dl>
+<dt><span class="term">.text<span></span></span></dt>
+<dd><p>這個節包含有模塊的可執行代碼. 調試器必須知道在哪裡以便能夠給出回溯或者設置斷點.( 這些操作都不相關, 當運行一個調試器在 /proc/kcore 上, 但是它們在使用 kgdb 時可能有用, 下面描述).</p></dd>
+<dt><span class="term"><span>.bss</span></span></dt>
+<dd></dd>
+<dt><span class="term">.data <span></span></span></dt>
+<dd><p>這 2 個節持有模塊的變量. 在編譯時不初始化的任何變量在 .bss 中, 而那些要初始化的在 .data 裡.</p></dd>
+</dl></div>
+<p>使 gdb 能夠處理可加載模塊需要通知調試器一個給定模塊的節加載在哪裡. 這個信息在 sysfs 中, 在 /sys/module 下. 例如, 在加載 scull 模塊後, 目錄 /sys/module/scull/sections 包含名子為 .text 的文件; 每個文件的內容是那個節的基地址.</p>
+<p>我們現在該發出一個 gdb 命令來告訴它關於我們的模塊. 我們需要的命令是 add-symble-flile; 這個命令使用模塊目標文件名, .text 基地址作為參數, 以及一系列描述任何其他感興趣的節安放在哪裡的參數. 在深入位於 sysfs 的模塊節數據後, 我們可以構建這樣一個命令:</p>
+<pre class="screen">
+(gdb) add-symbol-file .../scull.ko 0xd0832000 \
+-s .bss 0xd0837100 \
+ -s .data 0xd0836be0
+</pre>
+<p>我們已經包含了一個小腳本在例子代碼裡( gdbline ), 它為給定的模塊可以創建這個命令.</p>
+<p>我們現在使用 gdb 檢查我們的可加載模塊中的變量. 這是一個取自 scull 調試會話的快速例子:</p>
+<pre class="screen">
+(gdb) add-symbol-file scull.ko 0xd0832000 \
+-s .bss 0xd0837100 \
+ -s .data 0xd0836be0
+add symbol table from file "scull.ko" at
+ .text_addr = 0xd0832000
+ .bss_addr = 0xd0837100
+ .data_addr = 0xd0836be0
+(y or n) y
+Reading symbols from scull.ko...done.
+(gdb) p scull_devices[0]
+$1 = {data = 0xcfd66c50,
+ quantum = 4000,
+ qset = 1000,
+ size = 20881,
+ access_key = 0,
+ ...}
+</pre>
+<p>這裡我們看到第一個 scull 設備當前持有 20881 字節. 如果我們想, 我們可以跟隨數據鏈, 或者查看其他任何感興趣的模塊中的東東.</p>
+<p>這是另一個值得知道的有用技巧:</p>
+<pre class="screen">
+(gdb) print *(address)
+</pre>
+<p>這裡, 填充 address 指向的一個 16 進制地址; 輸出是對應那個地址的代碼的文件和行號. 這個技術可能有用, 例如, 來找出一個函數指針真正指向哪裡.</p>
+<p>我們仍然不能進行典型的調試任務, 如設置斷點或者修改數據; 為進行這些操作, 我們需要使用象 kdb( 下面描述 ) 或者 kgdb ( 我們馬上就到 )這樣的工具.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ThekdbKernelDebugger.sect"></a>4.6.2.&#160;kdb 內核調試器</h3></div></div></div>
+<p>許多讀者可能奇怪為什麼內核沒有建立更多高級的調試特性在裡面.答案, 非常簡單, 是 Linus 不相信交互式的調試器. 他擔心它們會導致不好的修改, 這些修改給問題打了補丁而不是找到問題的真正原因. 因此, 沒有內嵌的調試器.</p>
+<p>其他內核開發者, 但是, 見到了交互式調試工具的一個臨時使用. 一個這樣的工具是 kdb 內嵌式內核調試器, 作為來自 oss.sgi.com 的一個非官方補丁. 要使用 kdb, 你必須獲得這個補丁(確認獲得一個匹配你的內核版本的版本), 應用它, 重建並重安裝內核. 注意, 直到本書編寫時, kdb 只在IA-32(x86)系統中運行(儘管一個給 IA-64 的版本在主線內核版本存在了一陣子, 在被去除之前.)</p>
+<p>一旦你運行一個使能了kdb的內核, 有幾個方法進入調試器. 在控制台上按下 Pause(或者 Break) 鍵啟動調試器. kdb 在一個內核 oops 發生時或者命中一個斷點時也啟動, 在任何一種情況下, 你看到像這樣的一個消息:</p>
+<pre class="screen">
+Entering kdb (0xc0347b80) on processor 0 due to Keyboard Entry
+[0]kdb&gt;
+</pre>
+<p>注意, 在kdb運行時內核停止任何東西. 在你調用 kdb 的系統中不應當運行其他東西; 特別, 你不應當打開網絡 -- 除非, 當然, 你在調試一個網絡驅動. 一般地以單用戶模式啟動系統是一個好主意, 如果你將使用 kdb.</p>
+<p>作為一個例子, 考慮一個快速 scull 調試會話. 假設驅動已經加載, 我們可以這樣告訴 kdb 在 sucll_read 中設置一個斷點:</p>
+<pre class="screen">
+[0]kdb&gt; bp scull_read
+Instruction(i) BP #0 at 0xcd087c5dc (scull_read)
+ is enabled globally adjust 1
+[0]kdb&gt; go
+</pre>
+<p>bp 命令告訴 kdb 在下一次內核進入 scull_read 時停止. 你接著鍵入 go 來繼續執行. 在將一些東西放入一個 scull 設備後, 我們可以試著通過在另一個終端的外殼下運行 cat 命令來讀取它, 產生下面:</p>
+<pre class="screen">
+Instruction(i) breakpoint #0 at 0xd087c5dc (adjusted)
+0xd087c5dc scull_read: int3
+
+Entering kdb (current=0xcf09f890, pid 1575) on processor 0 due to
+Breakpoint @ 0xd087c5dc
+[0]kdb&gt;
+</pre>
+<p>我們現在位於 scull_read 的開始. 為看到我們任何到那裡的, 我們可以獲得一個堆棧回溯:</p>
+<pre class="screen">
+[0]kdb&gt; bt
+ ESP EIP Function (args)
+0xcdbddf74 0xd087c5dc [scull]scull_read
+0xcdbddf78 0xc0150718 vfs_read+0xb8
+0xcdbddfa4 0xc01509c2 sys_read+0x42
+0xcdbddfc4 0xc0103fcf syscall_call+0x7
+[0]kdb&gt;
+</pre>
+<p>kdb 試圖打印出調用回溯中每個函數的參數. 然而, 它被編譯器的優化技巧搞糊塗了. 因此, 它無法打印 scull_read 的參數.</p>
+<p>到時候查看一些數據了. mds 命令操作數據; 我們可以查詢 schull_devices 指針的值, 使用這樣一個命令:</p>
+<pre class="screen">
+[0]kdb&gt; mds scull_devices 1 
+0xd0880de8 cf36ac00 ....
+</pre>
+<p>這裡我們要求一個(4字節)字, 起始於 scull_devices 的位置; 答案告訴我們的設備數組在地址 0xd0880de8; 第一個設備結構自己在 0xcf36ac00. 為查看那個設備結構, 我們需要使用這個地址:</p>
+<pre class="screen">
+[0]kdb&gt; mds cf36ac00
+0xcf36ac00 ce137dbc ....
+0xcf36ac04 00000fa0 ....
+0xcf36ac08 000003e8 ....
+0xcf36ac0c 0000009b ....
+0xcf36ac10 00000000 ....
+0xcf36ac14 00000001 ....
+0xcf36ac18 00000000 ....
+0xcf36ac1c 00000001 ....
+</pre>
+<p>這裡的 8 行對應於 scull_dev 結構的開始部分. 因此, 我們看到第一個設備的內存位於 0xce137dbc, quantum 是 4000 (16進制 fa0), 量子集大小是 1000 (16進制 3e8 ), 當前有 155( 16進制 9b) 字節存於設備中.</p>
+<p>kdb 也可以改變數據. 假想我們要截短一些數據從設備中:</p>
+<pre class="screen">
+[0]kdb&gt; mm cf26ac0c 0x50
+0xcf26ac0c = 0x50
+</pre>
+<p>在設備上一個後續的 cat 會返回比之前少的數據.</p>
+<p>kdb 有不少其他功能, 包括單步(指令, 不是 C 源碼的一行), 在數據存取上設置斷點, 反彙編代碼, 步入鏈表, 存取寄存器數據, 還有更多. 在你應用了 kdb 補丁後, 一個完整的手冊頁集能夠在你的源碼樹的 documentation/kdb 下發現.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ThekgdbPatches.sect"></a>4.6.3.&#160;kgdb 補丁</h3></div></div></div>
+<p>目前為止我們看到的 2 個交互式調試方法( 使用 gdb 於 /proc/kcore 和 kdb) 都缺乏應用程序開發者已經熟悉的那種環境. 如果有一個真正的內核調試器支持改變變量, 斷點等特色, 不是很好?</p>
+<p>確實, 有這樣一個解決方案. 在本書編寫時, 2 個分開的補丁在流通中, 它允許 gdb, 具備完全功能, 針對內核運行. 這 2 個補丁都稱為 kgdb. 它們通過分開運行測試內核的系統和運行調試器的系統來工作; 這 2 個系統典型地是通過一個串口線連接起來. 因此, 開發者可以在穩定地桌面系統上運行 gdb, 而操作一個運行在專門測試的盒子中的內核. 這種方式建立 gdb 開始需要一些時間, 但是很快會得到回報,當一個難問題出現時.</p>
+<p>這些補丁目前處於健壯的狀態, 在某些點上可能被合併, 因此我們避免說太多, 除了它們在哪裡以及它們的基本特色. 鼓勵感興趣的讀者去看這些的當前狀態.</p>
+<p>第一個 kgdb 補丁當前在 -mm 內核樹裡 -- 補丁進入 2.6 主線的集結場. 補丁的這個版本支持 x86, SuperH, ia64, x86_64, 和 32位 PPC 體系. 除了通過串口操作的常用模式, 這個版本的 kgdb 可以通過一個局域網通訊. 使能以太網模式並且使用 kgdboe參數指定發出調試命令的 IP 地址來啟動內核. 在 Documentation/i386/kgdb 下的文檔描述了如何建立.<sup>[<a name="id423580" href="#ftn.id423580">16</a>]</sup></p>
+<p>作為一個選擇, 你可使用位於 http://kgdb.sf.net 的kgdb補丁. 這個調試器的版本不支持網絡通訊模式(儘管據說在開發中), 但是它確實有內嵌的使用可加載模塊的支持. 它支持 x86, x86_64, PowerPC, 和 S/390 體系.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheUserModeLinuxPort.sect"></a>4.6.4.&#160;用戶模式 Linux 移植</h3></div></div></div>
+<p>用戶模式 Linux (UML) 是一個有趣的概念. 它被構建為一個分開的 Linux 內核移植, 有它自己的 arch/um 子目錄. 它不在一個新的硬件類型上運行, 但是; 相反, 它運行在一個由 Linux 系統調用接口實現的虛擬機上. 如此, UML 使用 Linux 內核來運行, 作為一個Linux 系統上的獨立的用戶模式進程.</p>
+<p>有一個作為用戶進程運行的內核拷貝有幾個優點. 因為它們運行在一個受限的虛擬的處理器上, 一個錯誤的內核不能破壞"真實的"系統. 可以在同一台盒子輕易的嘗試不同的硬件和軟件配置. 並且, 也許對內核開發者而言, 用戶模式內核可容易地使用 gdb 和 其他調試器操作.</p>
+<p>畢竟, 它只是一個進程. UML 顯然有加快內核開發的潛力.</p>
+<p>然而, UML 有個大的缺點,從驅動編寫者的角度看: 用戶模式內核無法存取主機系統的硬件. 因此, 雖然它對於調試大部分本書的例子驅動是有用的, UML 對於不得不處理真實硬件的驅動的調試還是沒有用處.</p>
+<p>看 http://user-mode-linux.sf.net/ 關於 UML 的更多信息.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheLinuxTraceToolkit.sect"></a>4.6.5.&#160;Linux 追蹤工具</h3></div></div></div>
+<p>Linux Trace Toolkit (LTT) 是一個內核補丁以及一套相關工具, 允許追蹤內核中的事件. 這個追蹤包括時間信息, 可以創建一個給定時間段內發生事情的合理的完整圖像. 因此, 它不僅用來調試也可以追蹤性能問題.</p>
+<p>LTT, 同廣泛的文檔一起, 可以在 <a href="http://www.opersys.com/LTT" target="_top">http://www.opersys.com/LTT</a> 找到.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="DynamicProbes.sect"></a>4.6.6.&#160;動態探針</h3></div></div></div>
+<p>Dynamic Probes ( DProbes ) 是由 IBM 發行的(在 GPL 之下)為 IA-32 體系的 Linux 的調試工具. 它允許安放一個"探針"在幾乎系統中任何地方, 用戶空間和內核空間都可以. 探針由一些代碼組成( 有一個特殊的,面向堆棧的語言寫成), 當控制命中給定的點時執行. 這個代碼可以報告信息給用戶空間, 改變寄存器, 或者做其他很多事情. DProbes 的有用特性是, 一旦這個能力建立到內核中, 探針可以在任何地方插入在一個運行中的系統中, 不用內核建立或者重啟. DProbes 可以和 LTT 一起來插入一個新的跟蹤事件在任意位置.</p>
+<p>DProbes 工具可以從 IBM 的開放源碼網站:<a href="http://oss.sof-ware.ibm.com/" target="_top">http://oss.sof-ware.ibm.com</a> 下載.</p>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id423580" href="#id423580">16</a>] </sup>確實是忽略了指出, 你應當使你的網絡適配卡建立在內核中, 然而, 否則調試器在啟動時找不到它會關掉它自己.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch04s05.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch04.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">4.5.&#160;調試系統故障&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;第&#160;5&#160;章&#160;並發和競爭情況</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch04s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

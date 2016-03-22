@@ -1,0 +1,163 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>5.3.&#160;旗標和互斥體-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch05.html" title="第&#160;5&#160;章&#160;並發和競爭情況">
+<link rel="prev" href="ch05s02.html" title="5.2.&#160;並發和它的管理">
+<link rel="next" href="ch05s04.html" title="5.4.&#160;Completions 機制">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">5.3.&#160;旗標和互斥體</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch05s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;5&#160;章&#160;並發和競爭情況</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch05s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="SemaphoresandMutexes.sect"></a>5.3.&#160;旗標和互斥體</h2></div></div></div>
+<p>讓我們看看我們如何給 scull 加鎖. 我們的目標是使我們對 scull 數據結構的操作原子化, 就是在有其他執行線程的情況下這個操作一次發生. 對於我們的內存洩漏例子, 我們需要保證, 如果一個線程發現必須分配一個特殊的內存塊, 它有機會進行這個分配在其他線程可做測試之前. 為此, 我們必須建立臨界區: 在任何給定時間只有一個線程可以執行的代碼.</p>
+<p>不是所有的臨界區是同樣的, 因此內核提供了不同的原語適用不同的需求. 在這個例子中, 每個對 scull 數據結構的存取都發生在由一個直接用戶請求所產生的進程上下文中; 沒有從中斷處理或者其他異步上下文中的存取. 沒有特別的週期(響應時間)要求; 應用程序程序員理解 I/O 請求常常不是馬上就滿足的. 進一步講, scull 沒有持有任何其他關鍵系統資源, 在它存取它自己的數據結構時. 所有這些意味著如果 scull 驅動在等待輪到它存取數據結構時進入睡眠, 沒人介意.</p>
+<p>"去睡眠" 在這個上下文中是一個明確定義的術語. 當一個 Linux 進程到了一個它無法做進一步處理的地方時, 它去睡眠(或者 "阻塞"), 讓出處理器給別人直到以後某個時間它能夠再做事情. 進程常常在等待 I/O 完成時睡眠. 隨著我們深入內核, 我們會遇到很多情況我們不能睡眠. 然而 scull 中的 write 方法不是其中一個情況. 因此我們可使用一個加鎖機制使進程在等待存取臨界區時睡眠.</p>
+<p>正如重要地, 我們將進行一個可能會睡眠的操作( 使用 kmalloc 分配內存 ) -- 因此睡眠是一個在任何情況下的可能性. 如果我們的臨界區要正確工作, 我們必須使用一個加鎖原語在一個擁有鎖的進程睡眠時起作用. 不是所有的加鎖機制都能夠在可能睡眠的地方使用( 我們在本章後面會看到幾個不可以的 ). 然而, 對我們現在的需要, 最適合的機制時一個旗標. </p>
+<p>旗標在計算機科學中是一個被很好理解的概念. 在它的核心, 一個旗標是一個單個整型值, 結合有一對函數, 典型地稱為 P 和 V. 一個想進入臨界區的進程將在相關旗標上調用 P; 如果旗標的值大於零, 這個值遞減 1 並且進程繼續. 相反, 如果旗標的值是 0 ( 或更小 ), 進程必須等待直到別人釋放旗標. 解鎖一個旗標通過調用 V 完成; 這個函數遞增旗標的值, 並且, 如果需要, 喚醒等待的進程.</p>
+<p>當旗標用作互斥 -- 阻止多個進程同時在同一個臨界區內運行 -- 它們的值將初始化為 1. 這樣的旗標在任何給定時間只能由一個單個進程或者線程持有. 以這種模式使用的旗標有時稱為一個互斥鎖, 就是, 當然, "互斥"的縮寫. 幾乎所有在 Linux 內核中發現的旗標都是用作互斥.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheLinuxSemaphoreImplementation.sect"></a>5.3.1.&#160;Linux 旗標實現</h3></div></div></div>
+<p>Linux 內核提供了一個遵守上面語義的旗標實現, 儘管術語有些不同. 為使用旗標, 內核代碼必須包含 &lt;asm/semaphore.h&gt;. 相關的類型是 struct semaphore; 實際旗標可以用幾種方法來聲明和初始化. 一種是直接創建一個旗標, 接著使用 sema_init 來設定它:</p>
+<pre class="programlisting">
+void sema_init(struct semaphore *sem, int val);
+</pre>
+<p>這裡 val 是安排給旗標的初始值.</p>
+<p>然而, 通常旗標以互斥鎖的模式使用. 為使這個通用的例子更容易些, 內核提供了一套幫助函數和宏定義. 因此, 一個互斥鎖可以聲明和初始化, 使用下面的一種:</p>
+<pre class="programlisting">
+DECLARE_MUTEX(name); 
+DECLARE_MUTEX_LOCKED(name);
+</pre>
+<p>這裡, 結果是一個旗標變量( 稱為 name ), 初始化為 1 ( 使用 DECLARE_MUTEX ) 或者 0 (使用 DECLARE_MUTEX_LOCKED ). 在後一種情況, 互斥鎖開始於上鎖的狀態; 在允許任何線程存取之前將不得不顯式解鎖它.</p>
+<p>如果互斥鎖必須在運行時間初始化( 這是如果動態分配它的情況, 舉例來說), 使用下列中的一個:</p>
+<pre class="programlisting">
+void init_MUTEX(struct semaphore *sem);
+void init_MUTEX_LOCKED(struct semaphore *sem);
+</pre>
+<p>在 Linux 世界中, P 函數稱為 down -- 或者這個名子的某個變體. 這裡, "down" 指的是這樣的事實, 這個函數遞減旗標的值, 並且, 也許在使調用者睡眠一會兒來等待旗標變可用之後, 給予對被保護資源的存取. 有 3 個版本的 down:</p>
+<pre class="programlisting">
+void down(struct semaphore *sem);
+int down_interruptible(struct semaphore *sem);
+int down_trylock(struct semaphore *sem);
+</pre>
+<p>down 遞減旗標值並且等待需要的時間. down_interruptible 同樣, 但是操作是可中斷的. 這個可中斷的版本幾乎一直是你要的那個; 它允許一個在等待一個旗標的用戶空間進程被用戶中斷. 作為一個通用的規則, 你不想使用不可中斷的操作, 除非實在是沒有選擇. 不可中斷操作是一個創建不可殺死的進程( 在 ps 中見到的可怕的 "D 狀態" )和惹惱你的用戶的好方法, 使用 down_interruptible 需要一些格外的小心, 但是, 如果操作是可中斷的, 函數返回一個非零值, 並且調用者不持有旗標. 正確的使用 down_interruptible 需要一直檢查返回值並且針對性地響應.</p>
+<p>最後的版本 ( down_trylock ) 從不睡眠; 如果旗標在調用時不可用, down_trylock 立刻返回一個非零值.</p>
+<p>一旦一個線程已經成功調用 down 各個版本中的一個, 就說它持有著旗標(或者已經"取得"或者"獲得"旗標). 這個線程現在有權力存取這個旗標保護的臨界區. 當這個需要互斥的操作完成時, 旗標必須被返回. V 的 Linux 對應物是 up:</p>
+<pre class="programlisting">
+void up(struct semaphore *sem); 
+</pre>
+<p>一旦 up 被調用, 調用者就不再擁有旗標.</p>
+<p>如你所願, 要求獲取一個旗標的任何線程, 使用一個(且只能一個)對 up 的調用釋放它. 在錯誤路徑中常常需要特別的小心; 如果在持有一個旗標時遇到一個錯誤, 旗標必須在返回錯誤狀態給調用者之前釋放旗標. 沒有釋放旗標是容易犯的一個錯誤; 這個結果( 進程掛在看來無關的地方 )可能是難於重現和跟蹤的.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="UsingSemaphoresinscull.sect"></a>5.3.2.&#160;在 scull 中使用旗標</h3></div></div></div>
+<p>旗標機制給予 scull 一個工具, 可以在存取 scull_dev 數據結構時用來避免競爭情況. 但是正確使用這個工具是我們的責任. 正確使用加鎖原語的關鍵是嚴密地指定要保護哪個資源並且確認每個對這些資源的存取都使用了正確的加鎖方法. 在我們的例子驅動中, 感興趣的所有東西都包含在 scull_dev 結構裡面, 因此它是我們的加鎖體制的邏輯範圍.</p>
+<p>讓我們在看看這個結構:</p>
+<pre class="programlisting">
+struct scull_dev {
+    struct scull_qset *data; /* Pointer to first quantum set */
+    int quantum; /* the current quantum size */
+    int qset; /* the current array size */
+    unsigned long size; /* amount of data stored here */
+    unsigned int access_key; /* used by sculluid and scullpriv */
+    struct semaphore sem; /* mutual exclusion semaphore */
+    struct cdev cdev; /* Char device structure */
+};
+</pre>
+<p>到結構的底部是一個稱為 sem 的成員, 當然, 它是我們的旗標. 我們已經選擇為每個虛擬 scull 設備使用單獨的旗標. 使用一個單個的全局的旗標也可能會是同樣正確. 通常各種 scull 設備不共享資源, 然而, 並且沒有理由使一個進程等待, 而另一個進程在使用不同 scull 設備. 不同設備使用單獨的旗標允許並行進行對不同設備的操作, 因此, 提高了性能.</p>
+<p>旗標在使用前必須初始化. scull 在加載時進行這個初始化, 在這個循環中:</p>
+<pre class="programlisting">
+for (i = 0; i &lt; scull_nr_devs; i++) {
+    scull_devices[i].quantum = scull_quantum;
+    scull_devices[i].qset = scull_qset;
+    init_MUTEX(&amp;scull_devices[i].sem);
+    scull_setup_cdev(&amp;scull_devices[i], i);
+}
+</pre>
+<p>注意, 旗標必須在 scull 設備對系統其他部分可用前初始化. 因此, init_MUTEX 在 scull_setup_cdev 前被調用. 以相反的次序進行這個操作可能產生一個競爭情況, 旗標可能在它準備好之前被存取.</p>
+<p>下一步, 我們必須瀏覽代碼, 並且確認在沒有持有旗標時沒有對 scull_dev 數據結構的存取. 因此, 例如, scull_write 以這個代碼開始:</p>
+<pre class="programlisting">
+if (down_interruptible(&amp;dev-&gt;sem))
+    return -ERESTARTSYS;
+</pre>
+<p>注意對 down_interruptible 返回值的檢查; 如果它返回非零, 操作被打斷了. 在這個情況下通常要做的是返回 -ERESTARTSYS. 看到這個返回值後, 內核的高層要麼從頭重啟這個調用要麼返回這個錯誤給用戶. 如果你返回 -ERESTARTSYS, 你必須首先恢復任何用戶可見的已經做了的改變, 以保證當重試系統調用時正確的事情發生. 如果你不能以這個方式恢復, 你應當替之返回 -EINTR. </p>
+<p>scull_write 必須釋放旗標, 不管它是否能夠成功進行它的其他任務. 如果事事都順利, 執行落到這個函數的最後幾行:</p>
+<pre class="programlisting">
+out:
+ up(&amp;dev-&gt;sem);
+ return retval; 
+</pre>
+<p>這個代碼釋放旗標並且返回任何需要的狀態. 在 scull_write 中有幾個地方可能會出錯; 這些地方包括內存分配失敗或者在試圖從用戶空間拷貝數據時出錯. 在這些情況中, 代碼進行了一個 goto out, 以確保進行正確的清理.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ReaderWriterSemphores.sect"></a>5.3.3.&#160;讀者/寫者旗標</h3></div></div></div>
+<p>旗標為所有調用者進行互斥, 不管每個線程可能想做什麼. 然而, 很多任務分為 2 種清楚的類型: 只需要讀取被保護的數據結構的類型, 和必須做改變的類型. 允許多個並發讀者常常是可能的, 只要沒有人試圖做任何改變. 這樣做能夠顯著提高性能; 只讀的任務可以並行進行它們的工作而不必等待其他讀者退出臨界區.</p>
+<p>Linux 內核為這種情況提供一個特殊的旗標類型稱為 rwsem (或者" reader/writer semaphore"). rwsem 在驅動中的使用相對較少, 但是有時它們有用.</p>
+<p>使用 rwsem 的代碼必須包含 &lt;linux/rwsem.h&gt;. 讀者寫者旗標 的相關數據類型是 struct rw_semaphore; 一個 rwsem 必須在運行時顯式初始化:</p>
+<pre class="programlisting">
+void init_rwsem(struct rw_semaphore *sem); 
+</pre>
+<p>一個新初始化的 rwsem 對出現的下一個任務( 讀者或者寫者 )是可用的. 對需要只讀存取的代碼的接口是:</p>
+<pre class="programlisting">
+void down_read(struct rw_semaphore *sem);
+int down_read_trylock(struct rw_semaphore *sem);
+void up_read(struct rw_semaphore *sem);
+</pre>
+<p>對 down_read 的調用提供了對被保護資源的只讀存取, 與其他讀者可能地並發地存取. 注意 down_read 可能將調用進程置為不可中斷的睡眠. down_read_trylock 如果讀存取是不可用時不會等待; 如果被准予存取它返回非零, 否則是 0. 注意 down_read_trylock 的慣例不同於大部分的內核函數, 返回值 0 指示成功. 一個使用 down_read 獲取的 rwsem 必須最終使用 up_read 釋放.</p>
+<p>讀者的接口類似:</p>
+<pre class="programlisting">
+void down_write(struct rw_semaphore *sem);
+int down_write_trylock(struct rw_semaphore *sem);
+void up_write(struct rw_semaphore *sem);
+void downgrade_write(struct rw_semaphore *sem);
+</pre>
+<p>down_write, down_write_trylock, 和 up_write 全部就像它們的讀者對應部分, 除了, 當然, 它們提供寫存取. 如果你處於這樣的情況, 需要一個寫者鎖來做一個快速改變, 接著一個長時間的只讀存取, 你可以使用 downgrade_write 在一旦你已完成改變後允許其他讀者進入.</p>
+<p>一個 rwsem 允許一個讀者或者不限數目的讀者來持有旗標. 寫者有優先權; 當一個寫者試圖進入臨界區, 就不會允許讀者進入直到所有的寫者完成了它們的工作. 這個實現可能導致讀者飢餓 -- 讀者被長時間拒絕存取 -- 如果你有大量的寫者來競爭旗標. 由於這個原因, rwsem 最好用在很少請求寫的時候, 並且寫者只佔用短時間.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch05s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch05.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch05s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">5.2.&#160;並發和它的管理&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;5.4.&#160;Completions 機制</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

@@ -1,0 +1,154 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch17s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:43 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>17.5.&#160;報文傳送-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch17.html" title="第&#160;17&#160;章&#160;網絡驅動">
+<link rel="prev" href="ch17s04.html" title="17.4.&#160;打開與關閉">
+<link rel="next" href="ch17s06.html" title="17.6.&#160;報文接收">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">17.5.&#160;報文傳送</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch17s04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;17&#160;章&#160;網絡驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch17s06.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="PacketTransmission"></a>17.5.&#160;報文傳送</h2></div></div></div>
+<p>網絡接口進行的最重要任務是數據發送和接收. 我們從發送開始, 因為它稍微易懂一些.</p>
+<p>傳送指的是通過一個網絡連接發送一個報文的行為. 無論何時內核需要傳送一個數據報文, 它調用驅動的 hard_start_stransmit 方法將數據放在外出隊列上. 每個內核處理的報文都包含在一個 socket 緩存結構( 結構 sk_buff )裡, 定義見&lt;linux/skbuff.h&gt;. 這個結構從 Unix 抽像中得名, 用來代表一個網絡連接, socket. 如果接口與 socket 沒有關係, 每個網絡報文屬於一個網絡高層中的 socket, 並且任何 socket 輸入/輸出緩存是結構 struct sk_buff 的列表. 同樣的 sk_buff 結構用來存放網絡數據歷經所有 Linux 網絡子系統, 但是對於接口來說, 一個 socket 緩存只是一個報文.</p>
+<p>sk_buff 的指針通常稱為 skb, 我們在例子代碼和文本裡遵循這個做法.</p>
+<p>socket 緩存是一個複雜的結構, 內核提供了一些函數來操作它. 在"Socket 緩存"一節中描述這些函數; 現在, 對我們來說一個基本的關於 sk_buff 的事實就足夠來編寫一個能工作的驅動.</p>
+<p>傳給 hard_start_xmit 的 socket 緩存包含物理報文, 它應當出現在媒介上, 以傳輸層的頭部結束. 接口不需要修改要傳送的數據. skb-&gt;data 指向要傳送的報文, skb-&gt;len 是以字節計的長度. 如果你的驅動能夠處理發散/匯聚 I/O, 情形會稍稍複雜些; 我們在"發散/匯聚 I/O"一節中說它.</p>
+<p>snull 報文傳送代碼如下; 網絡傳送機制隔離在另外一個函數里, 因為每個接口驅動必須根據特定的在驅動的硬件來實現它:</p>
+<pre class="programlisting">
+int snull_tx(struct sk_buff *skb, struct net_device *dev)
+{
+    int len;
+    char *data, shortpkt[ETH_ZLEN];
+    struct snull_priv *priv = netdev_priv(dev);
+    data = skb-&gt;data;
+    len = skb-&gt;len;
+    if (len &lt; ETH_ZLEN) {
+        memset(shortpkt, 0, ETH_ZLEN);
+        memcpy(shortpkt, skb-&gt;data, skb-&gt;len);
+        len = ETH_ZLEN;
+        data = shortpkt;
+    }
+    dev-&gt;trans_start = jiffies; /* save the timestamp */
+    /* Remember the skb, so we can free it at interrupt time */
+    priv-&gt;skb = skb;
+
+    /* actual deliver of data is device-specific, and not shown here */ snull_hw_tx(data, len, dev);
+    return 0; /* Our simple device can not fail */
+}
+</pre>
+<p>傳送函數, 因此, 只對報文進行一些合理性檢查並通過硬件相關的函數傳送數據. 注意, 但是, 要小心對待傳送的報文比下面的媒介(對於 snull, 是我們虛擬的"以太網")支持的最小長度要短的情況. 許多 Linux 網絡驅動( 其他操作系統的也是 )已被發現在這種情況下洩漏數據. 不是產生那種安全漏洞, 我們拷貝短報文到一個單獨的數組, 這樣我們可以清楚地零填充到足夠的媒介要求的長度. (我們可以安全地在堆棧中放數據, 因為最小長度 -- 60 字節 -- 是太小了).</p>
+<p>hard_start_xmit 的返回值應當為 0 在成功時; 此時, 你的驅動已經負責起報文, 應當盡全力保證發送成功, 並且必須在最後釋放 skb. 非 0 返回值指出報文這次不能發送; 內核將稍後重試. 這種情況下, 你的驅動應當停止隊列直到已經解決導致失敗的情況.</p>
+<p>"硬件相關"的傳送函數( snull_hw_tx )這裡忽略了, 因為它完全是來實現了 snull 設備的戲法, 包括假造源和目的地址, 對於真正的網絡驅動作者沒有任何吸引力. 當然, 它呈現在例子源碼裡, 給那些想進入並看看它如何工作的人.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ControllingTransmissionConcurrency"></a>17.5.1.&#160;控制發送並發</h3></div></div></div>
+<p>hard_start_xmit 函數由一個 net_device 結構中的自旋鎖(xmit_lock)來保護避免並發調用. 但是, 函數一返回, 它有可能被再次調用. 當軟件完成指導硬件報文發送的事情, 但是硬件傳送可能還沒有完成. 對 snull 這不是問題, 它使用 CPU 完成它所有的工作, 因此報文發送在傳送函數返回前就完成了.</p>
+<p>真實的硬件接口, 另一方面, 異步發送報文並且具備有限的內存來存放外出的報文. 當內存耗盡(對某些硬件, 會發生在一個單個要發送的外出報文上), 驅動需要告知網絡系統不要再啟動發送直到硬件準備好接收新的數據.</p>
+<p>這個通知通過調用 netif_stop_queue 來實現, 這個前面介紹過的函數來停止隊列. 一旦你的驅動已停止了它的隊列, 它必須安排在以後某個時間重啟隊列, 當它又能夠接受報文來發送了. 為此, 它應當調用:</p>
+<pre class="programlisting">
+void netif_wake_queue(struct net_device *dev); 
+</pre>
+<p>這個函數如同 netif_start_queue, 除了它還刺探網絡系統來使它又啟動發送報文.</p>
+<p>大部分現代的網絡硬件維護一個內部的有多個發送報文的隊列; 以這種方式, 它可以從網絡上獲得最好的性能. 這些設備的網絡驅動必須支持在如何給定時間有多個未完成的發送, 但是設備內存能夠填滿不管硬件是否支持多個未完成發送. 任何時候當設備內存填充到沒有空間給最大可能的報文時, 驅動應當停止隊列直到有空間可用.</p>
+<p>如果你必須禁止如何地方的報文傳送, 除了你的 hard_start_xmit 函數( 也許, 響應一個重新配置請求 ), 你想使用的函數是:</p>
+<pre class="programlisting">
+void netif_tx_disable(struct net_device *dev); 
+</pre>
+<p>這個函數非常像 netif_stop_queue, 但是它還保證, 當它返回時, 你的 hard_start_xmit 方法沒有在另一個 CPU 上運行. 隊列能夠用 netif_wake_queue 重啟, 如常.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TransmissionTimeouts"></a>17.5.2.&#160;傳送超時</h3></div></div></div>
+<p>與真實硬件打交道的大部分驅動不得不預備處理硬件偶爾不能響應. 接口可能忘記它們在做什麼, 或者系統可能丟失中斷. 設計在個人機上運行的設備, 這種類型的問題是平常的.</p>
+<p>許多驅動通過設置定時器來處理這個問題; 如果在定時器到期時操作還沒結束, 有什麼不對了. 網絡系統, 本質上是一個複雜的由大量定時器控制的狀態機的組合體. 因此, 網絡代碼是一個合適的位置來檢測發送超時, 作為它正常操作的一部分.</p>
+<p>因此, 網絡驅動不需要擔心自己去檢測這樣的問題. 相反, 它們只需要設置一個超時值, 在 net_device 結構的 watchdog_timeo 成員. 這個超時值, 以 jiffy 計, 應當足夠長以容納正常的發送延遲(例如網絡媒介擁塞引起的衝突).</p>
+<p>如果當前系統時間超過設備的 trans_start 時間至少 time-out 值, 網絡層最終調用驅動的 tx_timeout 方法. 這個方法的工作是是進行清除問題需要的工作並且保證任何已經開始的發送正確地完成. 特別地, 驅動沒有丟失追蹤任何網絡代碼委託給它的 socket 緩存.</p>
+<p>snull 有能力模仿發送器上鎖, 由 2 個加載時參數控制的:</p>
+<pre class="programlisting">
+static int lockup = 0;
+module_param(lockup, int, 0);
+
+static int timeout = SNULL_TIMEOUT;
+module_param(timeout, int, 0);
+</pre>
+<p>如果驅動使用參數 lockup=n 加載, 則模擬一個上鎖, 一旦每 n 個報文傳送了, 並且 watchdog_timeo 成員設為給定的時間值. 當模擬上鎖時, snull 也調用 netif_stop_queue 來阻止其他的發送企圖發生.</p>
+<p>snull 發送超時處理看來如此:</p>
+<pre class="programlisting">
+void snull_tx_timeout (struct net_device *dev)
+{
+    struct snull_priv *priv = netdev_priv(dev);
+    PDEBUG("Transmit timeout at %ld, latency %ld\n", jiffies, jiffies - dev-&gt;trans_start);
+    /* Simulate a transmission interrupt to get things moving */
+    priv-&gt;status = SNULL_TX_INTR;
+    snull_interrupt(0, dev, NULL);
+    priv-&gt;stats.tx_errors++;
+    netif_wake_queue(dev);
+    return;
+}
+</pre>
+<p>當發生傳送超時, 驅動必須在接口統計量中標記這個錯誤, 並安排設備被復位到一個乾淨的能發送新報文的狀態. 當一個超時發生在 snull, 驅動調用 snull_interrupt 來填充"丟失"的中斷並用 netif_wake_queue 重啟隊列.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ScatterGathreIO"></a>17.5.3.&#160;發散/匯聚 I/O</h3></div></div></div>
+<p>網絡中創建一個發送報文的過程包括組合多個片. 報文數據必須從用戶空間拷貝, 由網絡協議棧各層使用的頭部必須同時加上. 這個組合可能要求相當數量的數據拷貝. 但是, 如果注定要發送報文的網絡接口能夠進行發散/匯聚 I/O, 報文就不需要組裝成一個單個塊, 大量的拷貝可以避免. 發散/匯聚 I/O 也從用戶空間啟動"零拷貝"網絡發送.</p>
+<p>內核不傳遞發散的報文給你的 hard_start_xmit 方法除非 NETIF_F_SG 位已經設置到你的設備結構的特性成員中. 如果你已設置了這個標誌, 你需要查看一個特殊的 skb 中的"shard info"成員來確定是否報文由一個單個片段或者多個組成, 並且如果需要就找出發散的片段. 一個特殊的宏定義來存取這個信息; 它是 skb_shinfo. 發送潛在的分片報文的第一步常常是看來如此的東東:</p>
+<pre class="programlisting">
+if (skb_shinfo(skb)-&gt;nr_frags == 0) {
+    /* Just use skb-&gt;data and skb-&gt;len as usual */
+}
+</pre>
+<p>nr_frags 成員告知多少片要用來建立這個報文. 如果它是 0, 報文存於一個單個片中, 可以如常使用 data 成員來存取. 但是, 如果它是非 0, 你的驅動必須歷經並安排發送每一個單獨的片. skb 結構的 data 成員方便地指向第一個片(在不分片情況下, 指向整個報文). 片的長度必須通過從 skb-&gt;len ( 仍然含有整個報文的長度 ) 中減去 skb-&gt;data_len 計算得來. 剩下的片會在稱為 frags 的數組中找到, frags 在共享的信息結構中; frags 中每個入口是一個 skb_frag_struct 結構:</p>
+<pre class="programlisting">
+struct skb_frag_struct { struct page *page;
+    __u16 page_offset;
+    __u16 size;
+};
+</pre>
+<p>如你所見, 我們又一次遇到 page 結構, 不是內核虛擬地址. 你的驅動應當遍歷這些分片, 為 DMA 傳送映射每一個, 並且不要忘記第一個分片, 它由 skb 直接指著. 你的硬件, 當然, 必須組裝這些分片並作為一個單個報文發送它們. 注意, 如果你已經設置了NETIF_F_HIGHDMA 特性標誌, 一些或者全部分片可能位於高端內存.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch17s04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch17.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch17s06.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">17.4.&#160;打開與關閉&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;17.6.&#160;報文接收</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch17s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:43 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

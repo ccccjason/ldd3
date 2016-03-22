@@ -1,0 +1,268 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch17s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:43 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>17.3.&#160;net_device 結構的詳情-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch17.html" title="第&#160;17&#160;章&#160;網絡驅動">
+<link rel="prev" href="ch17s02.html" title="17.2.&#160;連接到內核">
+<link rel="next" href="ch17s04.html" title="17.4.&#160;打開與關閉">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">17.3.&#160;net_device 結構的詳情</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch17s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;17&#160;章&#160;網絡驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch17s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="ThenetdeviceStructureinDetail"></a>17.3.&#160;net_device 結構的詳情</h2></div></div></div>
+<p>net_device 結構處於網絡驅動層的非常核心的位置並且值得完全的描述. 這個列表描述了所有成員, 更多的是提供了一個參考而不是用來備忘. 本章剩下的部分簡要地描述了每個成員, 一旦它用在例子代碼上, 因此你不需要不停地回看這一節.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="GlobalInformation"></a>17.3.1.&#160;全局信息</h3></div></div></div>
+<p>結構 net_device 的第一部分是由下面成員組成:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span> char name[IFNAMSIZ];</span></span></dt>
+<dd><p>設備名子. 如果名子由驅動設置, 包含一個 %d 格式串, register_netdev 用一個數替換它來形成一個唯一的名子; 分配的編號從 0 開始.</p></dd>
+<dt><span class="term"><span>unsigned long state;</span></span></dt>
+<dd><p>設備狀態. 這個成員包括幾個標誌. 驅動正常情況下不直接操作這些標誌; 相反, 提供了一套實用函數. 這些函數在我們進入驅動操作後馬上討論這些函數.</p></dd>
+<dt><span class="term"><span>struct net_device *next;</span></span></dt>
+<dd><p>全局列表中指向下一個設備的指針. 這個成員驅動不能動.</p></dd>
+<dt><span class="term"><span>int (*init)(struct net_device *dev);</span></span></dt>
+<dd><p>一個初始化函數. 如果設置了這個指針, 這個函數被 register_netdev 調用來完成對 net_device 結構的初始化. 大部分現代的網絡驅動不再使用這個函數; 相反, 初始化在註冊接口前進行.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="HardwareInformation"></a>17.3.2.&#160;硬件信息</h3></div></div></div>
+<p>下面的成員包含了相對簡單設備的低層硬件信息. 它們是早期 Linux 網絡的延續; 大部分現代驅動確實使用它們(可能的例外是 if_port ). 我們為完整起見在這裡列出.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>unsigned long rmem_end;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned long rmem_start;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned long mem_end;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned long mem_start;</span></span></dt>
+<dd><p>設備內存信息. 這些成員持有設備使用的共享內存的開始和結束地址. 如果設備有不同的接收和發送內存, mem 成員由發送內存使用, rmem 成員由接收內存使用. rmem 成員在驅動之外從不被引用. 慣例上, 設置 end 成員, 所以 end - start 是可用的板上內存的數量.</p></dd>
+<dt><span class="term"><span>unsigned long base_addr;</span></span></dt>
+<dd><p>網絡接口的 I/O 基地址. 這個成員, 如同前面的, 由驅動在設備探測時賦值. ifconfig 目錄可用來顯示或修改當前值. base_addr 可以當系統啟動時在內核命令行中顯式賦值( 通過 netdev= 參數), 或者在模塊加載時. 這個成員, 象上面描述過的內存成員, 內核不使用它們.</p></dd>
+<dt><span class="term"><span>unsigned char irq;</span></span></dt>
+<dd><p>安排的中斷號. 當接口被列出時 ifconfig 打印出 dev-&gt;irq 的值. 這個值常常在啟動或者加載時間設置並且在後來由 ifconfig 打印.</p></dd>
+<dt><span class="term"><span>unsigned char if_port;</span></span></dt>
+<dd><p>在多端口設備中使用的端口. 例如, 這個成員用在同時支持同軸線(IF_PORT_10BASE2)和雙絞線(IF_PORT_100BSAET)以太網連接. 完整的已知端口類型設置定義在 &lt;linux/netdevie.h&gt;.</p></dd>
+<dt><span class="term"><span>unsigned char dma;</span></span></dt>
+<dd><p>設備分配的 DMA 通道. 這個成員只在某些外設總線時有意義, 例如 ISA. 它不在設備驅動自身以外使用, 只是為了信息目的( 在 ifconfig ) 中.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="InterfaceInformation"></a>17.3.3.&#160;接口信息</h3></div></div></div>
+<p>有關接口的大部分信息由 ether_setup 函數正確設置(或者任何其他對給定硬件類型適合的設置函數). 以太網卡可以依賴這個通用的函數設置大部分這些成員, 但是 flags 和 dev_addr 成員是特定設備的, 必須在初始化時間明確指定.</p>
+<p>一些非以太網接口可以使用類似 ether_setup 的幫助函數. deviers/net/net_init.c 輸出了一些類似的函數, 包括下列:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>void ltalk_setup(struct net_device *dev);</span></span></dt>
+<dd><p>設置一個 LocalTalk 設備的成員</p></dd>
+<dt><span class="term"><span>void fc_setup(struct net_device *dev);</span></span></dt>
+<dd><p>初始化光通道設備的成員</p></dd>
+<dt><span class="term"><span>void fddi_setup(struct net_device *dev);</span></span></dt>
+<dd><p>配置一個光纖分佈數據接口 (FDDI) 網絡的接口</p></dd>
+<dt><span class="term"><span>void hippi_setup(struct net_device *dev);</span></span></dt>
+<dd><p>預備給一個高性能並行接口 (HIPPI) 的高速互連驅動的成員</p></dd>
+<dt><span class="term"><span>void tr_setup(struct net_device *dev);</span></span></dt>
+<dd><p>處理令牌環網絡接口的設置</p></dd>
+</dl></div>
+<p>大部分設備會歸於這些類別中的一類. 如果你的是全新和不同的, 但是, 你需要手工賦值下面的成員:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>unsigned short hard_header_len;</span></span></dt>
+<dd><p>硬件頭部長度, 就是, 被發送報文前面在 IP 頭之前的字節數, 或者別的協議信息. 對於以太網接口 hard_header_len 值是 14 (ETH_HLEN).</p></dd>
+<dt><span class="term"><span>unsigned mtu;</span></span></dt>
+<dd><p>最大傳輸單元 (MTU). 這個成員是網絡層用作驅動報文傳輸. 以太網有一個 1500 字節的 MTU (ETH_DATA_LEN). 這個值可用 ifconfig 改變.</p></dd>
+<dt><span class="term"><span>unsigned long tx_queue_len;</span></span></dt>
+<dd><p>設備發送隊列中可以排隊的最大幀數. 這個值由 ether_setup 設置為 1000, 但是你可以改它. 例如, plip 使用 10 來避免浪費系統內存( 相比真實以太網接口, plip 有一個低些的吞吐量).</p></dd>
+<dt><span class="term"><span>unsigned short type;</span></span></dt>
+<dd><p>接口的硬件類型. 這個 type 成員由 ARP 用來決定接口支持什麼樣的硬件地址. 對以太網接口正確的值是 ARPHRD_ETHER, 這是由 ether_setup 設置的值. 可認識的類型定義於 &lt;linux/if_arp.h&gt;.</p></dd>
+<dt><span class="term"><span>unsigned char addr_len;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned char broadcast[MAX_ADDR_LEN];</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned char dev_addr[MAX_ADDR_LEN];</span></span></dt>
+<dd><p>硬件 (MAC) 地址長度和設備硬件地址. 以太網地址長度是 6 個字節( 我們指的是接口板的硬件 ID ), 廣播地址由 6 個 0xff 字節組成; ether_setup 安排成正確的值. 設備地址, 另外, 必須以特定於設備的方式從接口板讀出, 驅動應當將它拷貝到 dev_addr. 硬件地址用來產生正確的以太網頭, 在報文傳遞給驅動發送之前. snull 設備不使用物理接口, 它創造自己的硬件接口.</p></dd>
+<dt><span class="term"><span>unsigned short flags;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int features;</span></span></dt>
+<dd><p>接口標誌(下面詳述)</p></dd>
+</dl></div>
+<p>這個 flags 成員是一個位掩碼, 包括下面的位值. IFF_ 前綴代表 "interface flags". 有些標誌由內核管理, 有些由接口在初始化時設置來表明接口的能力和其他特性. 有效的標誌, 對應於 &lt;linux/if.h&gt;, 有:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>IFF_UP</span></span></dt>
+<dd><p>對驅動這個標誌是只讀的. 內核打開它當接口激活並準備號傳送報文時.</p></dd>
+<dt><span class="term"><span>IFF_BROADCAST</span></span></dt>
+<dd><p>這個標誌(由網絡代碼維護)說明接口允許廣播. 以太網板是這樣.</p></dd>
+<dt><span class="term"><span>IFF_DEBUG</span></span></dt>
+<dd><p>這個標識了調試模式. 這個標誌用來控制你的 printk 調用的複雜性或者用於其他調試目的. 儘管當前沒有 in-tree 驅動使用這個標誌, 它可以通過 ioctl 來設置和重置, 你的驅動可用它. misc-progs/netifdebug 程序可以用來打開或關閉這個標誌.</p></dd>
+<dt><span class="term"><span>IFF_LOOPBACK</span></span></dt>
+<dd><p>這個標誌應當只在環回接口中設置. 內核檢查 IFF_LOOPBACK , 以代替硬連線 lo 名子作為一個特殊接口.</p></dd>
+<dt><span class="term"><span>IFF_POINTOPOINT</span></span></dt>
+<dd><p>這個標誌說明接口連接到一個點對點鏈路. 它由驅動設置或者, 有時, 由 ifconfig. 例如, plip 和 PPP 驅動設置它.</p></dd>
+<dt><span class="term"><span>IFF_NOARP</span></span></dt>
+<dd><p>這個說明接口不能進行 ARP. 例如, 點對點接口不需要運行 ARP, 它只能增加額外的流量卻沒有任何有用的信息. snull 在沒有 ARP 能力的情況下運行, 因此它設置這個標誌.</p></dd>
+<dt><span class="term"><span>IFF_PROMISC</span></span></dt>
+<dd><p>這個標誌設置(由網絡代碼)來激活混雜操作. 缺省地, 以太網接口使用硬件過濾器來保證它們只接收廣播報文和直接到接口硬件地址的報文. 報文嗅探器, 例如 tcpdump, 在接口上設置混雜模式來存取在接口發送介質上經過的所有報文.</p></dd>
+<dt><span class="term"><span>IFF_MULTICAST</span></span></dt>
+<dd><p>驅動設置這個標誌來表示接口能夠組播發送. ether_setup 設置 IFF_MULTICAST 缺省地, 因此如果你的驅動不支持組播, 必須在初始化時清除這個標誌.</p></dd>
+<dt><span class="term"><span>IFF_ALLMULTI</span></span></dt>
+<dd><p>這個標誌告知接口接收所有的組播報文. 內核在主機進行組播路由時設置它, 前提是 IFF_MULTICAST 置位. IFF_ALLMULTI 對驅動是只讀的. 組播標誌在本章後面的"組播"一節中用到.</p></dd>
+<dt><span class="term"><span>IFF_MASTER</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>IFF_SLAVE</span></span></dt>
+<dd><p>這些標誌由負載均衡代碼使用. 接口驅動不需要知道它們.</p></dd>
+<dt><span class="term"><span>IFF_PORTSEL</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>IFF_AUTOMEDIA</span></span></dt>
+<dd><p>這些標誌指出設備可以在多個介質類型間切換; 例如, 無屏蔽雙絞線 (UTP) 和 同軸以太網電纜. 如果 IFF_AUTOMEDIA 設置了, 設備自動選擇正確的介質. 特別地, 內核一個也不使用這 2 個標誌.</p></dd>
+<dt><span class="term"><span>IFF_DYNAMIC</span></span></dt>
+<dd><p>這個標誌, 由驅動設置, 指出接口的地址能夠變化. 目前內核沒有使用.</p></dd>
+<dt><span class="term"><span>IFF_RUNNING</span></span></dt>
+<dd><p>這個標誌指出接口已啟動並在運行. 它大部分是因為和 BSD 兼容; 內核很少用它. 大部分網絡驅動不需要擔心 IFF_RUNNING.</p></dd>
+<dt><span class="term"><span>IFF_NOTRAILERS</span></span></dt>
+<dd><p>在 Linux 中不用這個標誌, 為了 BSD 兼容才存在.</p></dd>
+</dl></div>
+<p>當一個程序改變 IFF_UP, open 或者 stop 設備方法被調用. 進而, 當 IFF_UP 或者任何別的標誌修改了, set_multicast_list 方法被調用. 如果驅動需要進行某些動作來響應標誌的修改, 它必須在 set_multicast_list 中採取動作. 例如, 當 IFF_PROMISC 被置位或者復位, set_multicast_list 必須通知板上的硬件過濾器. 這個設備方法的責任在"組播"一節中講解.</p>
+<p>結構 net_device 的特性成員由驅動設置來告知內核關於任何的接口擁有的特別硬件能力. 我們將談論一些這些特性; 別的就超出了本書範圍. 完整的集合是:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>NETIF_F_SG</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>NETIF_F_FRAGLIST</span></span></dt>
+<dd>
+<p>2 個標誌控制發散/匯聚 I/O 的使用. 如果你的接口可以發送一個報文, 它由幾個不同的內存段組成, 你應當設置 NETIF_F_SG. 當然, 你不得不實際實現發散/匯聚 I/O( 我們在"發散/匯聚"一節中描述如何做 ). NETIF_F_FRAGLIST 表明你的接口能夠處理分段的報文; 在 2.6 中只有環回驅動做這一點.</p>
+<p>注意內核不對你的設備進行發散/匯聚 I/O 操作, 如果它沒有同時提供某些校驗和形式. 理由是, 如果內核不得不跨過一個分片的("非線性")的報文來計算校驗和, 它可能也拷貝數據並同時接合報文.</p>
+</dd>
+<dt><span class="term"><span>NETIF_F_IP_CSUM</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>NETIF_F_NO_CSUM</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>NETIF_F_HW_CSUM</span></span></dt>
+<dd><p>這些標誌都是告知內核, 不需要給一些或所有的通過這個接口離開系統的報文進行校驗. 如果你的接口可以校驗 IP 報文但是別的不行, 就設置 NETIF_F_IP_CSUM. 如果這個接口不曾要求校驗和, 就設置 NETIF_F_NO_CSUM. 環回驅動設置了這個標誌, snull 也設置; 因為報文只通過系統內存傳送, 對它們來說沒有機會( 1 跳 )被破壞, 沒有必要校驗它們. 如果你的硬件自己做校驗, 設置 NETIF_F_HW_CWSUM.</p></dd>
+<dt><span class="term"><span>NETIF_F_HIGHDMA</span></span></dt>
+<dd><p>設置這個標誌, 如果你的設備能夠對高端內存進行 DMA. 沒有這個標誌, 所有提供給你的驅動的報文在低端內存分配.</p></dd>
+<dt><span class="term"><span>NETIF_F_HW_VLAN_TX</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>NETIF_F_HW_VLAN_RX</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>NETIF_F_HW_VLAN_FILTER</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>NETIF_F_VLAN_CHALLENGED</span></span></dt>
+<dd><p>這些選項描述你的硬件對 802.1q VLAN 報文的支持. VLAN 支持超出我們本章的內容. 如果 VLAN 報文使你的設備混亂( 其實不應該 ), 設置標誌 NETIF_F_VLAN_CHALLENGED.</p></dd>
+<dt><span class="term"><span>NETIF_F_TSO</span></span></dt>
+<dd><p>如果你的設備能夠進行 TCP 分段卸載, 設置這個標誌. TSO 是一個我們在這不涉及的高級特性.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheDeviceMethods"></a>17.3.4.&#160;設備方法</h3></div></div></div>
+<p>如同在字符和塊驅動的一樣, 每個網絡設備聲明能操作它的函數. 本節列出能夠對網絡接口進行的操作. 有些操作可以留作 NULL, 別的常常是不被觸動的, 因為 ether_setup 給它們安排了合適的方法.</p>
+<p>網絡接口的設備方法可分為 2 組: 基本的和可選的. 基本方法包括那些必需的能夠使用接口的; 可選的方法實現更多高級的不是嚴格要求的功能. 下列是基本方法:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int (*open)(struct net_device *dev);</span></span></dt>
+<dd><p>打開接口. 任何時候 ifconfig 激活它, 接口被打開. open 方法應當註冊它需要的任何系統資源( I/O 口, IRQ, DMA, 等等), 打開硬件, 進行任何別的你的設備要求的設置.</p></dd>
+<dt><span class="term"><span>int (*stop)(struct net_device *dev);</span></span></dt>
+<dd><p>停止接口. 接口停止當它被關閉. 這個函數應當恢復在打開時進行的操作.</p></dd>
+<dt><span class="term"><span>int (*hard_start_xmit) (struct sk_buff *skb, struct net_device *dev);</span></span></dt>
+<dd><p>起始報文的發送的方法. 完整的報文(協議頭和所有)包含在一個 socket 緩存區( sk_buff ) 結構. socket 緩存在本章後面介紹.</p></dd>
+<dt><span class="term"><span>int (*hard_header) (struct sk_buff *skb, struct net_device *dev, unsigned short type, void *daddr, void *saddr, unsigned len);</span></span></dt>
+<dd><p>用之前取到的源和目的硬件地址來建立硬件頭的函數(在 hard_start_xmit 前調用). 它的工作是將作為參數傳給它的信息組織成一個合適的特定於設備的硬件頭. eth_header 是以太網類型接口的缺省函數, ether_setup 針對性地對這個成員賦值.</p></dd>
+<dt><span class="term"><span>int (*rebuild_header)(struct sk_buff *skb);</span></span></dt>
+<dd><p>用來在 ARP 解析完成後但是在報文發送前重建硬件頭的函數. 以太網設備使用的缺省的函數使用 ARP 支持代碼來填充報文缺失的信息.</p></dd>
+<dt><span class="term"><span>void (*tx_timeout)(struct net_device *dev);</span></span></dt>
+<dd><p>由網絡代碼在一個報文發送沒有在一個合理的時間內完成時調用的方法, 可能是丟失一個中斷或者接口被鎖住. 它應當處理這個問題並恢復報文發送.</p></dd>
+<dt><span class="term"><span>struct net_device_stats *(*get_stats)(struct net_device *dev);</span></span></dt>
+<dd><p>任何時候當一個應用程序需要獲取接口的統計信息, 調用這個方法. 例如, 當 ifconfig 或者 netstat -i 運行時. snull 的一個例子實現在"統計信息"一節中介紹.</p></dd>
+<dt><span class="term"><span>int (*set_config)(struct net_device *dev, struct ifmap *map);</span></span></dt>
+<dd><p>改變接口配置. 這個方法是配置驅動的入口點. 設備的 I/O 地址和中斷號可以在運行時使用 set_config 來改變. 這種能力可由系統管理員在接口沒有探測到時使用. 現代硬件正常的驅動一般不需要實現這個方法.</p></dd>
+</dl></div>
+<p>剩下的設備操作是可選的:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int weight;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int (*poll)(struct net_device *dev; int *quota);</span></span></dt>
+<dd><p>由適應 NAPI 的驅動提供的方法, 用來在查詢模式下操作接口, 中斷關閉著. NAPI ( 以及 weight 成員) 在"接收中斷緩解"一節中涉及.</p></dd>
+<dt><span class="term"><span>void (*poll_controller)(struct net_device *dev);</span></span></dt>
+<dd><p>在中斷關閉的情況下, 要求驅動檢查接口上的事件的函數. 它用於特殊的內核中的網絡任務, 例如遠程控制台和使用網絡的內核調試.</p></dd>
+<dt><span class="term"><span>int (*do_ioctl)(struct net_device *dev, struct ifreq *ifr, int cmd);</span></span></dt>
+<dd><p>處理特定於接口的 ioctl 命令. (這些命令的實現在"定制 ioclt 命令"一節中描述)相應的 net_device 結構中的成員可留為 NULL, 如果接口不需要任何特定於接口的命令.</p></dd>
+<dt><span class="term"><span>void (*set_multicast_list)(struct net_device *dev);</span></span></dt>
+<dd><p>當設備的組播列表改變和當標誌改變時調用的方法. 詳情見"組播"一節, 以及一個例子實現.</p></dd>
+<dt><span class="term"><span>int (*set_mac_address)(struct net_device *dev, void *addr);</span></span></dt>
+<dd><p>如果接口支持改變它的硬件地址的能力, 可以實現這個函數. 很多接口根本不支持這個能力. 其他的使用缺省的 eth_mac_adr 實現(在 deivers/net/net_init.c). eth_mac_addr 只拷貝新地址到 dev-&gt;dev_addr, 只在接口沒有運行時作這件事. 使用 eth_mac_addr 的驅動應當在它們的 open 方法中自 dev-&gt;dev_addr 裡設置硬件 MAC 地址.</p></dd>
+<dt><span class="term"><span>int (*change_mtu)(struct net_device *dev, int new_mtu);</span></span></dt>
+<dd><p>當接口的最大傳輸單元 (MTU) 改變時動作的函數. 如果用戶改變 MTU 時驅動需要做一些特殊的事情, 它應當聲明它的自己的函數; 否則, 缺省的會將事情做對. snull 有對這個函數的一個模板, 如果你有興趣.</p></dd>
+<dt><span class="term"><span>int (*header_cache) (struct neighbour *neigh, struct hh_cache *hh);</span></span></dt>
+<dd><p>header_cache 被調用來填充 hh_cache 結構, 使用一個 ARP 請求的結果. 幾乎全部類似以太網的驅動可以使用缺省的 eth_header_cache 實現.</p></dd>
+<dt><span class="term"><span>int (*header_cache_update) (struct hh_cache *hh, struct net_device *dev, unsigned char *haddr);</span></span></dt>
+<dd><p>在響應一個變化中, 更新 hh_cache 結構中的目的地址的方法. 以太網設備使用 eth_header_cache_update.</p></dd>
+<dt><span class="term"><span>int (*hard_header_parse) (struct sk_buff *skb, unsigned char *haddr);</span></span></dt>
+<dd><p>hard_header_parse 方法從包含在 skb 中的報文中抽取源地址, 拷貝到 haddr 的緩存區. 函數的返回值是地址的長度. 以太網設備通常使用 eth_header_parse.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="UtilityFields"></a>17.3.5.&#160;公用成員</h3></div></div></div>
+<p>結構 net_device 剩下的數據成員由接口使用來持有有用的狀態信息. 有些是 ifconfig 和 netstat 用來提供給用戶關於當前配置的信息. 因此, 接口應當給這些成員賦值:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>unsigned long trans_start;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned long last_rx;</span></span></dt>
+<dd><p>保存一個 jiffy 值的成員. 驅動負責分別更新這些值, 當開始發送和收到一個報文時. trans_start 值被網絡子系統用來探測發送器加鎖. last_rx 目前沒有用到, 但是驅動應當盡量維護這個成員以備將來使用.</p></dd>
+<dt><span class="term"><span>int watchdog_timeo;</span></span></dt>
+<dd><p>網絡層認為一個傳送超時發生前應當過去的最小時間(按 jiffy 計算), 調用驅動的 tx_timeout 函數.</p></dd>
+<dt><span class="term"><span>void *priv;</span></span></dt>
+<dd><p>filp-&gt;private_data 的對等者. 在現代的驅動裡, 這個成員由 alloc_netdev 設置, 不應當直接存取; 使用 netdev_priv 代替.</p></dd>
+<dt><span class="term"><span>struct dev_mc_list *mc_list;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int mc_count;</span></span></dt>
+<dd><p>處理組播發送的成員. mc_count 是 mc_list 中的項數目. 更多細節見"組播"一節.</p></dd>
+<dt><span class="term"><span>spinlock_t xmit_lock;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int xmit_lock_owner;</span></span></dt>
+<dd><p>xmit_lock 用來避免對驅動的 hard_start_xmit 函數多個同時調用. xmit_lock_owner 是已獲得 xmit_lock 的CPU號. 驅動應當不改變這些成員的值.</p></dd>
+</dl></div>
+<p>結構 net_device 中有其他的成員, 但是網絡驅動用不著它們.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch17s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch17.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch17s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">17.2.&#160;連接到內核&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;17.4.&#160;打開與關閉</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch17s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:43 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

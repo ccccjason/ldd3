@@ -1,0 +1,101 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch09s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>9.3.&#160;一個 I/O 端口例子-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch09.html" title="第&#160;9&#160;章&#160;與硬件通訊">
+<link rel="prev" href="ch09s02.html" title="9.2.&#160;使用 I/O 端口">
+<link rel="next" href="ch09s04.html" title="9.4.&#160;使用 I/O 內存">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">9.3.&#160;一個 I/O 端口例子</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch09s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;9&#160;章&#160;與硬件通訊</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch09s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="AnIOPortExample.sect"></a>9.3.&#160;一個 I/O 端口例子</h2></div></div></div>
+<p>我們用來展示一個設備驅動內的端口 I/O 的例子代碼, 操作通用的數字 I/O 端口; 這樣的端口在大部分計算機系統中找到.</p>
+<p>一個數字 I/O 端口, 在它的大部分的普通的化身中, 是一個字節寬的 I/O 位置, 或者內存映射的或者端口映射的. 當你寫一個值到一個輸出位置, 在輸出管腳上見到的電信號根據寫入的單個位而改變. 當你從一個輸入位置讀取一個值, 輸入管腳上所見的當前邏輯電平作為單個位的值被返回.</p>
+<p>這樣的 I/O 端口的實際實現和軟件接口各個系統不同. 大部分時間, I/O 管腳由 2 個 I/O 位置控制: 一個允許選擇使用那些位作為輸入, 哪些位作為輸出, 以及一個可以實際讀或寫邏輯電平的. 有時, 但是, 事情可能更簡單, 並且這些位是硬連線為輸入或輸出(但是, 在這個情況下, 它們不再是所謂的"通用 I/O"); 在所有個人計算機上出現的並口是這樣一個非通用 I/O 端口. 任一方式, I/O 管腳對我們馬上介紹的例子代碼是可用的.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AnOverviewoftheParallelPort.sect"></a>9.3.1.&#160;並口縱覽</h3></div></div></div>
+<p>因為我們期望大部分讀者以所謂的"個人計算機"的形式使用一個 x86 平台, 我們覺得值得解釋一下 PC 並口如何設計的. 並口是在個人計算機上運行數字 I/O 例子代碼的外設接口選擇. 儘管大部分讀者可能有並口規範用, 為你的方便, 我們在這裡總結一下它們.</p>
+<p>並口, 在它的最小配置中 ( 我們瀏覽一下 ECP 和 EPP 模式) 由 3 個 8-位端口組成. PC 標準在 0x378 開始第一個並口的 I/O 端口並且第 2 個在 0x278. 第一個端口是一個雙向數據寄存器; 它直接連接到物理連接器的管腳 2 - 9. 第 2 個端口是一個只讀狀態寄存器; 當並口為打印機使用, 這個寄存器報告打印機狀態的幾個方面, 例如正在線, 缺紙, 或者忙. 第 3 個端口是一個只出控制寄存器, 它, 在其他東西中, 控制是否中斷使能.</p>
+<p>並口通訊中使用的信號電平是標準的 TTL 電平: 0 和 5 伏特, 邏輯門限在大概 1.2 伏特. 你可依靠端口至少符合標準 TTL LS 電流規格, 儘管大部分現代並口在電流和電壓額定值都工作的好.</p>
+<p>並口連接器和計算機內部電路不隔離, 當你想直接連接邏輯門到這個端口是有用的. 但是你不得不小心地正確連接線; 並口電路當你使用你自己的定制電路時容易損壞, 除非你給你的電路增加絕緣. 你可以選擇使用插座並口如果你害怕會損壞你的主板.</p>
+<p>位的規範在圖 <a href="ch09s03.html#ldd3-9-1.fig" title="圖&#160;9.1.&#160;並口的管腳">並口的管腳</a> 中概述. 你可以存取 12 個輸出位和 5 個輸入位, 有些是在它們地信號路徑上邏輯地翻轉了. 唯一的沒有關聯信號管腳的位是端口 2 的位 4 (0x10), 它使能來自並口的中斷. 我們使用這個位作為我們的在第 10 章中的中斷處理的實現的一部分.</p>
+<div class="figure">
+<a name="ldd3-9-1.fig"></a><p class="title"><b>圖&#160;9.1.&#160;並口的管腳</b></p>
+<div><img src="images/snagitldd3/ldd3-9-1.png" alt="並口的管腳"></div>
+</div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ASampleDriver.sect"></a>9.3.2.&#160;一個例子驅動</h3></div></div></div>
+<p>我們介紹的驅動稱為 short (Simple Hardware Operations and Raw Tests). 所有它做的是讀和寫幾個 8-位 端口, 從你在加載時選擇的開始. 缺省地, 它使用分配給 PC 並口的端口範圍. 每個設備節點(有一個獨特的次編號)存取一個不同的端口. short 驅動不做任何有用的事情; 它只是隔離來作為操作端口的單個指令給外部使用. 如果你習慣端口 I/O, 你可以使用 short 來熟悉它; 你能夠測量它花費來通過端口傳送數據的時間或者其他遊戲的時間.</p>
+<p>為 short 在你的系統上運行, 必須有存取底層硬件設備的自由(缺省地, 並口); 因此, 不能有其他驅動已經分配了它. 大部分現代發佈設置並口驅動作為只在需要時加載的模塊, 因此對 I/O 地址的競爭常常不是個問題. 如果, 但是, 你從 short 得到一個"無法獲得 I/O 地址" 錯誤(在控制台上或者在系統 log 文件), 一些其他的驅動可能已經獲得這個端口. 一個快速瀏覽 /proc/ioports 常常告訴你哪個驅動在搗亂. 同樣的告誡應用於另外 I/O 設備如果你沒有在使用並口.</p>
+<p>從現在開始, 我們只是用"並口"來簡化討論. 但是, 你能夠設置基本的模塊參數在加載時來重定向 short 到其他 I/O 設備. 這個特性允許例子代碼在任何 Linux 平台上運行, 這裡你對一個數字 I/O 接口有權限通過 outb 和 inb 存取( 儘管實際的硬件是內存映射的, 除 x86 外的所有平台). 後面, 在"使用 I/O 內存"的一節, 我們展示 short 如何用來使用通用的內存映射數字 I/O.</p>
+<p>為觀察在並口上發生了什麼以及如果你有使用硬件的愛好, 你可以焊接儘管 LED 到輸出管腳. 每個 LED 應當串連一個 1-K 電阻導向一個地引腳(除非, 當然, 你的 LED 有內嵌的電阻). 如果你連接一個輸出引腳到一個輸入管腳, 你會產生你自己的輸入能夠從輸入端口讀到.</p>
+<p>注意, 你無法只連接一個打印機到並口並且看到數據發向 short. 這個驅動實現簡單的對 I/O 端口的存取, 並且沒有進行與打印機需要的來操作數據的握手; 在下一章, 我們展示了一個例子驅動(稱為 shortprint ), 它能夠驅動並口打印機; 這個驅動使用中斷, 但是, 因此我們還是不能到這一點.</p>
+<p>如果你要查看並口數據通過焊接 LED 到一個 D-型 連接器, 我們建議你不要使用管腳 9 和管腳 10, 因為我們之後連接它們在一起來運行第 10 章展示的例子代碼.</p>
+<p>只考慮到 short, /dev/short0 寫到和讀自位於 I/O 基地址的 8-bit 端口( 0x378, 除非在加載時間改變). /dev/short1 寫到位於基址 + 1 的 8-位, 等等直到基址 + 7.</p>
+<p>/dev/short0 進行的實際輸出操作是基於使用 outb 的一個緊湊循環. 一個內存屏障指令用來保證輸出操作實際發生並且不被優化掉:</p>
+<pre class="programlisting">
+while (count--) {
+ outb(*(ptr++), port);
+    wmb(); 
+} 
+</pre>
+<p>你可以運行下列命令來點亮你的 LED:</p>
+<pre class="screen">
+echo -n "any string" &gt; /dev/short0 
+</pre>
+<p>每個 LED 監視一個單個的輸出端口位. 記住只有最後寫入的字符, 保持穩定在輸出管腳上足夠長時間你的眼睛能感覺到. 因此, 我們建議你阻止自動插入一個結尾新行, 通過傳遞一個 -n 選項給 echo.</p>
+<p>讀是通過一個類似的函數, 圍繞 inb 而不是 outb 建立的. 為了從並口讀"有意義的"值, 你需要某個硬件連接到連接器的輸入管腳來產生信號. 如果沒有信號, 你會讀到一個相同字節的無結尾的流. 如果你選擇從一個輸出端口讀取, 你極可能得到寫到端口的最後的值(這適用於並口和普通使用的其他數字 I/O 電路). 因此, 那些不喜歡拿出他們的烙鐵的人可以讀取當前的輸出值在端口 0x378, 通過運行這樣一個命令:</p>
+<pre class="screen">
+dd if=/dev/short0 bs=1 count=1 | od -t x1 
+</pre>
+<p>為演示所有 I/O 指令的使用, 每個 short 設備有 3 個變形: /dev/short0 進行剛剛展示的循環, /dev/short0p 使用 outb_p 和 inb_p 代替"快速"函數, 並且 /dev/short0s 使用字串指令. 有 8 個這樣的設備, 從 short0 到 short7. 儘管 PC 並口只有 3 個端口, 你可能需要它們更多如果使用不同的 I/O 設備來運行你的測試.</p>
+<p>short 驅動進行一個非常少的硬件控制, 但是足夠來展示如何使用 I/O 端口指令. 感興趣的讀者可能想看看 parpor 和 parport_pc 模塊的源碼, 來知道這個設備在真實生活中能有多複雜來支持一系列並口上的設備(打印機, 磁帶備份, 網絡接口)</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch09s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch09.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch09s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">9.2.&#160;使用 I/O 端口&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;9.4.&#160;使用 I/O 內存</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch09s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

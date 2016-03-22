@@ -1,0 +1,149 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch11s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>11.4.&#160;其他移植性問題-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch11.html" title="第&#160;11&#160;章&#160;內核中的數據類型">
+<link rel="prev" href="ch11s03.html" title="11.3.&#160;接口特定的類型">
+<link rel="next" href="ch11s05.html" title="11.5.&#160;鏈表">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">11.4.&#160;其他移植性問題</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch11s03.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;11&#160;章&#160;內核中的數據類型</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch11s05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="OtherPortabilityIssues.sect"></a>11.4.&#160;其他移植性問題</h2></div></div></div>
+<p>除了數據類型, 當編寫一個驅動時有幾個其他的軟件問題要記住, 如果你想在 Linux 平台間可移植.</p>
+<p>一個通常的規則是懷疑顯式的常量值. 常常通過使用預處理宏, 代碼已被參數化. 這一節列出了最重要的可移植性問題. 無論何時你遇到已被參數化的值, 你可以在頭文件中以及在隨官方內核發佈的設備驅動中找到提示.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TimeIntervals.sect"></a>11.4.1.&#160;時間間隔</h3></div></div></div>
+<p>當涉及時間間隔, 不要假定每秒有 1000 個嘀噠. 儘管當前對 i386 體系是真實的, 不是每個 Linux 平台都以這個速度運行. 對於 x86 如果你使用 HZ 值(如同某些人做的那樣), 這個假設可能是錯的, 並且沒人知道將來內核會發生什麼. 無論何時你使用嘀噠來計算時間間隔, 使用 HZ ( 每秒的定時器中斷數 ) 來標定你的時間. 例如, 檢查一個半秒的超時, 用 HZ/2 和逝去時間比較. 更普遍地, msec 毫秒對應地嘀噠數一直是 msec*HZ/1000.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="PageSize.sect"></a>11.4.2.&#160;頁大小</h3></div></div></div>
+<p>當使用內存時, 記住一個內存頁是 PAGE_SIZE 字節, 不是 4KB. 假定頁大小是 4KB 並且硬編碼這個值是一個 PC 程序員常見的錯誤, 相反, 被支持的平台顯示頁大小從 4 KB 到 64 KB, 並且有時它們在相同平台上的不同的實現上不同. 相關的宏定義是 PAGE_SIZE 和 PAGE_SHIT. 後者包含將一個地址移位來獲得它的頁號的位數. 對於 4KB 或者更大的頁這個數當前是 12 或者更大. 宏在 &lt;asm/page.h&gt; 中定義; 用戶空間程序可以使用 getpagesize 庫函數, 如果它們需要這個信息.</p>
+<p>讓我們看一下非一般的情況. 如果一個驅動需要 16 KB 來暫存數據, 它不應當指定一個 2 的指數 給 get_free_pages. 你需要一個可移植解決方法. 這樣的解決方法, 幸運的是, 已經由內核開發者寫好並且稱為 get_order:</p>
+<pre class="programlisting">
+#include &lt;asm/page.h&gt;
+int order = get_order(16*1024);
+buf = get_free_pages(GFP_KERNEL, order);
+</pre>
+<p>記住, get_order 的參數必須是 2 的冪.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ByteOrder.sect"></a>11.4.3.&#160;字節序</h3></div></div></div>
+<p>小心不要假設字節序. PC 存儲多字節值是低字節為先(小端為先, 因此是小端), 一些高級的平台以另一種方式(大端)工作. 任何可能的時候, 你的代碼應當這樣來編寫, 它不在乎它操作的數據的字節序. 但是, 有時候一個驅動需要使用單個字節建立一個整型數或者相反, 或者它必須與一個要求一個特定順序的設備通訊.</p>
+<p>包含文件 &lt;asm/byteorder.h&gt; 定義了或者 __BIG_ENDIAN 或者 __LITTLE_ENDIAN, 依賴處理器的字節序. 當處理字節序問題時, 你可能編碼一堆 #ifdef __LITTTLE_ENDIAN 條件語句, 但是有一個更好的方法. Linux 內核定義了一套宏定義來處理之間的轉換, 在處理器字節序和你需要以特定字節序存儲和加載的數據之間. 例如:</p>
+<pre class="programlisting">
+u32 cpu_to_le32 (u32);
+u32 le32_to_cpu (u32);
+</pre>
+<p>這 2 個宏定義轉換一個值, 從無論 CPU 使用的什麼到一個無符號的, 小端, 32 位數, 並且轉換回. 它們不管你的 CPU 是小端還是大端, 不管它是不是 32-位 處理器. 在沒有事情要做的情況下它們原樣返回它們的參數. 使用這些宏定義易於編寫可移植的代碼, 而不必使用大量的條件編譯建造.</p>
+<p>有很多類似的函數; 你可以在 &lt;linux/byteorder/big_endian.h&gt; 和 &lt;linux/byteorder/little_endian.h&gt; 中見到完整列表. 一會兒之後, 這個模式不難遵循. be64_to_cpu 轉換一個無符號的, 大端, 64-位 值到一個內部 CPU 表示. le16_to_cpus, 相反, 處理有符號的, 小端, 16 位數. 當處理指針時, 你也會使用如 cpu_to_le32p, 它使用指向一個值的指針來轉換, 而不是這個值自身. 剩下的看包含文件.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="DataAlignment.sect"></a>11.4.4.&#160;數據對齊</h3></div></div></div>
+<p>編寫可移植代碼而值得考慮的最後一個問題是如何存取不對齊的數據 -- 例如, 如何讀取一個存儲於一個不是 4 字節倍數的地址的4字節值. i386 用戶常常存取不對齊數據項, 但是不是所有的體系允許這個. 很多現代的體系產生一個異常, 每次程序試圖不對齊數據傳送時; 數據傳輸由異常處理來處理, 帶來很大的性能犧牲. 如果你需要存取不對齊的數據, 你應當使用下列宏:</p>
+<pre class="programlisting">
+#include &lt;asm/unaligned.h&gt;
+get_unaligned(ptr);
+put_unaligned(val, ptr);
+</pre>
+<p>這些宏是無類型的, 並且用在每個數據項, 不管它是 1 個, 2 個, 4 個, 或者 8 個字節長. 它們在任何內核版本中定義.</p>
+<p>關於對齊的另一個問題是跨平台的數據結構移植性. 同樣的數據結構( 在 C-語言 源文件中定義 )可能在不同的平台上不同地編譯. 編譯器根據各個平台不同的慣例來安排結構成員對齊.</p>
+<p>為了編寫可以跨體系移動的數據使用的數據結構, 你應當一直強制自然的數據項對齊, 加上對一個特定對齊方式的標準化. 自然對齊意味著存儲數據項在是它的大小的整數倍的地址上(例如, 8-byte 項在 8 的整數倍的地址上). 為強制自然對齊在阻止編譯器以不希望的方式安排成員量的時候, 你應當使用填充者成員來避免在數據結構中留下空洞.</p>
+<p>為展示編譯器如何強制對齊, dataalign 程序在源碼的 misc-progs 目錄中發佈, 並且一個對等的 kdataalign 模塊是 misc-modules 的一部分. 這是程序在幾個平台上的輸出以及模塊在 SPARC64 的輸出:</p>
+<pre class="screen">
+arch Align: char short int long ptr long-long u8 u16 u32 u64
+i386        1    2     4   4    4   4         1  2   4   4
+i686        1    2     4   4    4   4         1  2   4   4
+alpha       1    2     4   8    8   8         1  2   4   8
+armv4l      1    2     4   4    4   4         1  2   4   4
+ia64        1    2     4   8    8   8         1  2   4   8
+mips        1    2     4   4    4   8         1  2   4   8
+ppc         1    2     4   4    4   8         1  2   4   8
+sparc       1    2     4   4    4   8         1  2   4   8
+sparc64     1    2     4   4    4   8         1  2   4   8
+x86_64      1    2     4   8    8   8         1  2   4   8
+
+kernel: arch Align: char short int long ptr long-long u8 u16 u32 u64
+kernel: sparc64     1    2     4   8    8   8         1  2   4   8
+</pre>
+<p>有趣的是注意不是所有的平台對齊 64-位值在 64-位邊界上, 因此你需要填充者成員來強制對齊和保證可移植性.</p>
+<p>最後, 要知道編譯器可能自己悄悄地插入填充到結構中來保證每個成員是對齊的, 為了目標處理器的良好性能. 如果你定義一個結構打算來匹配一個設備期望的結構, 這個自動的填充可能妨礙你的企圖. 解決這個問題的方法是告訴編譯器這個結構必須是"緊湊的", 不能增加填充者. 例如, 內核頭文件 &lt;linux/edd.h&gt; 定義幾個與 x86 BIOS 接口的數據結構, 並且它包含下列的定義:</p>
+<pre class="programlisting">
+struct
+{
+        u16 id;
+        u64 lun;
+        u16 reserved1;
+        u32 reserved2;
+}
+__attribute__ ((packed)) scsi;
+</pre>
+<p>如果沒有 __attribute__ ((packed)), lun 成員可能被在前面添加 2 個填充者字節或者 6 個, 如果我們在 64-位平台上編譯這個結構.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="PointersandErrorValues.sect"></a>11.4.5.&#160;指針和錯誤值</h3></div></div></div>
+<p>很多內部內核函數返回一個指針值給調用者. 許多這些函數也可能失敗. 大部分情況, 失敗由返回一個 NULL 指針值來指示. 這個技術是能用的, 但是它不能通知問題的確切特性. 一些接口確實需要返回一個實際的錯誤碼以便於調用者能夠基於實際上什麼出錯來作出正確的判斷.</p>
+<p>許多內核接口通過在指針值中對錯誤值編碼來返回這個信息. 這樣的信息必須小心使用, 因為它們的返回值不能簡單地與 NULL 比較. 為幫助創建和使用這類接口, 一小部分函數已可用( 在 &lt;linux/err.h&gt;).</p>
+<p>一個返回指針類型的函數可以返回一個錯誤值, 使用:</p>
+<pre class="programlisting">
+void *ERR_PTR(long error);
+</pre>
+<p>這裡, error 是常見的負值錯誤碼. 調用者可用使用 IS_ERR 來測試是否一個返回的指針是不是一個錯誤碼:</p>
+<pre class="programlisting">
+long IS_ERR(const void *ptr); 
+</pre>
+<p>如果你需要實際的錯誤碼, 它可能被抽取到, 使用:</p>
+<pre class="programlisting">
+long PTR_ERR(const void *ptr); 
+</pre>
+<p>你應當只對 IS_ERR 返回一個真值的值使用 PTR_ERR; 任何其他的值是一個有效的指針.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch11s03.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch11.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch11s05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">11.3.&#160;接口特定的類型&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;11.5.&#160;鏈表</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch11s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

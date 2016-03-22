@@ -1,0 +1,257 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch14s07.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>14.7.&#160;熱插拔-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch14.html" title="第&#160;14&#160;章&#160;Linux 設備模型">
+<link rel="prev" href="ch14s06.html" title="14.6.&#160;集成起來">
+<link rel="next" href="ch14s08.html" title="14.8.&#160;處理固件">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">14.7.&#160;熱插拔</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch14s06.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;14&#160;章&#160;Linux 設備模型</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch14s08.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="Hotplug.sect1"></a>14.7.&#160;熱插拔</h2></div></div></div>
+<p>有 2 個不同方法來看熱插拔. 內核看待熱插拔為硬件, 內核和內核驅動之間的交互. 用戶看待熱插拔是內核和用戶空間的通過稱為 /sbin/hotplug 的程序的交互. 這個程序被內核調用, 當它想通知用戶空間某種熱插拔事件剛剛在內核中發生.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="DynamicDevices.sect2"></a>14.7.1.&#160;動態設備</h3></div></div></div>
+<p>術語"熱插拔"最普遍使用的意義產生於當討論這樣的事實時, 幾乎所有的計算機系統現在能夠處理當系統有電時設備的出現或消失. 這非常不同於只是幾年前的計算機系統, 那時程序員知道他們只需要在啟動時掃瞄所有的設備, 並且他們從不必擔心他們的設備消失直到整個機器被關電. 現在, 隨著 USB 的出現, CardBus, PCMCIA, IEEE1394, 和 PCI 熱插拔控制器, Linux 內核需要能夠可靠地運行不管什麼硬件從系統中增加或去除. 這產生了一個額外的負擔給設備驅動作者, 因為現在他們必須一直處理一個沒有任何通知而突然從地下冒出來的設備.</p>
+<p>每個不同的總線類型以不同方式處理一個設備的消失. 例如, 當一個 PCI , CardBus, 或者 PCMCIA 設備從系統中去除, 在驅動通過它的去除函數被通知之前常常是一會兒. 在發生這個前, 所有的從 PCI 的讀返回所有的位集合. 這意味著驅動需要一直檢查它們從 PCI 總線讀取的值並且能夠正確處理 0xff 值.</p>
+<p>這個的一個例子可在 drivers/usb/host/ehci-hcd.c 驅動中見到, 它是一個 PCI 驅動給一個 UBS 2.0(高速)控制卡. 它有下面的代碼在它的主握手循環中來探測是否控制塊已經從系統中去除.</p>
+<pre class="programlisting">
+result = readl(ptr);
+if (result == ~(u32)0)  /* card removed */
+ return -ENODEV; 
+</pre>
+<p>對於 USB 驅動, 當一個 USB 驅動被綁定到的設備被從系統中去除, 任何掛起的已被提交給設備的 urbs 以錯誤 -ENODEV 失敗. 如果發生這個情況, 驅動需要識別這個錯誤並且正確清理任何掛起的 I/O .</p>
+<p>可熱插拔的設備不只限於傳統的設備, 例如鼠標, 鍵盤, 和網卡. 有大量的系統現在支持整個 CPU 和內存條的移出. 幸運地, Linux 內核正確處理這些核心"系統"設備的加減, 以至於單個設備驅動不需要注意這些事情.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ThesbinhotplugUtility.sect2"></a>14.7.2.&#160;/sbin/hotplug 工具</h3></div></div></div>
+<p>如同本章中前面提過的, 無論何時一個設備從系統中增刪, 都產生一個"熱插拔事件". 這意味著內核調用用戶空間程序 /sbin/hotplug.  這個程序典型地是一個非常小的 bash 腳本, 只傳遞執行給一系列其他的位於 /etc/hot-plug.d/ 目錄樹的程序. 對於大部分的 Linux 發佈, 這個腳本看來如下:</p>
+<pre class="screen">
+DIR="/etc/hotplug.d"
+for I in "${DIR}/$1/"*.hotplug "${DIR}/"default/*.hotplug ; do
+ if [ -f $I ]; then
+ test -x $I &amp;&amp; $I $1 ;
+ fi
+done
+exit 1
+</pre>
+<p>換句話說, 這個腳本搜索所有的有 .hotplug 後綴的可能對這個事件感興趣的程序並調用它們, 傳遞給它們許多不同的環境變量, 這些環境變量已經被內核設置. 更多關於 /sbin/hotplug 腳本如何工作的細節可在程序的註釋中找到, 以及在 hotplug(8)手冊頁中.</p>
+<p>如同前面提到的, /sbin/hotplug 被調用無論何時一個 kobject 被創建或銷毀. 熱插拔程序被用一個提供事件名子的單個命令行參數調用. 核心內核和涉及到的特定子系統也設定一系列帶有關於發生了什麼的信息的環境變量(下面描述). 這些變量被熱插拔程序使用來判定剛剛在內核發生了什麼, 以及是否有任何特定的動作應當採取.</p>
+<p>傳遞給 /sbin/hotplug 的命令行參數是關聯這個熱插拔事件的名子, 如同分配給 kobject 的 kset 所決定的. 這個名子可通過一個對屬於本章前面描述過的 kset 的 hotplug_ops 結構的 name 函數的調用來設定; 如果那個函數不存在或者從未被調用, 名子是 kset 自身的名子.</p>
+<p>一直為 /sbin/hotplug 設定的缺省的環境變量是:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>ACTION </span></span></dt>
+<dd><p>這個字符串 add 或 remove, 只根據是否這個對象是被創建或者銷毀.</p></dd>
+<dt><span class="term"><span>DEVPATH </span></span></dt>
+<dd><p>一個目錄路徑, 在 sysfs 文件系統中, 它指向在被創建或銷毀的 kobject. 注意 sysfs 文件系統的加載點不是添加到這路徑, 因此是由用戶空間程序來決定這個. </p></dd>
+<dt><span class="term"><span>SEQNUM </span></span></dt>
+<dd><p>這個熱插拔事件的順序號. 順序號是一個 64-位 數, 它每次產生熱插拔事件都遞增. 這允許用戶空間以內核產生它們的順序來排序熱插拔事件, 因為對一個用戶空間程序可能亂序運行.</p></dd>
+<dt><span class="term"><span>SUBSYSTEM </span></span></dt>
+<dd><p>同樣的字符串作為前面描述的命令行參數傳遞.</p></dd>
+</dl></div>
+<p>許多不同的總線子系統都添加它們自己的環境變量到 /sbin/hotplug 調用中, 當關聯到總線的設備被添加或從系統中去除. 它們在它們的熱插拔回調中做這個, 這個回調在分配給它們的總線(如同在"熱插拔操作"一節中描述的)的 struct kset_hotplug_ops 中指定. 這允許用戶空間能夠自動加載必要的可能需要來控制這個被總線發現的設備的模塊. 這裡是一個不同總線類型的列表以及它們添加到 /sbin/hotplug 調用中的環境變量. </p>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="IEEE1394FireWire.sect3"></a>14.7.2.1.&#160;IEEE1394(火線)</h4></div></div></div>
+<p>任何在 IEEE1394 總線, 也是火線, 上的設備, 由 /sbin/hotplug 參數名和 SUBSYSTEM 環境變量設置為值 ieee1394. ieee1394 子系統也總是添加下列 4 個環境變量:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>VENDOR_ID </span></span></dt>
+<dd><p>IEEE1394 的 24-位 供應者 ID. </p></dd>
+<dt><span class="term"><span>MODEL_ID </span></span></dt>
+<dd><p>IEEE1394 的 24-位型號 ID.</p></dd>
+<dt><span class="term"><span>GUID </span></span></dt>
+<dd><p>設備的 64-位 GUID.</p></dd>
+<dt><span class="term"><span>SPECIFIER_ID </span></span></dt>
+<dd><p>24-位值, 指定設備的協議規格的擁有者.</p></dd>
+<dt><span class="term"><span>VERSION </span></span></dt>
+<dd><p>指定設備協議規格的版本的值</p></dd>
+</dl></div>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Networking.sect3"></a>14.7.2.2.&#160;網絡</h4></div></div></div>
+<p>所有的網絡設備都創建一個熱插拔事件, 當設備註冊或者註銷在內核. /sbin/hotplug 調用有參數 name 和 SUBSYSTEM 環境變量設置為 net, 並且只添加下列環境變量:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>INTERFACE </span></span></dt>
+<dd><p>已經從內核註冊或註銷的接口的名子. 這個的例子是 lo 和 eth0.</p></dd>
+</dl></div>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="PCI.sect3"></a>14.7.2.3.&#160;PCI 總線</h4></div></div></div>
+<p>任何在 PCI 總線上的設備有參數 name 和 SUBSYSTEM 環境變量設置為值 pci. PCI 子系統也一直添加下面 4 個環境變量:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>PCI_CLASS </span></span></dt>
+<dd><p>設備的 PCI 類號, 16 進制.</p></dd>
+<dt><span class="term"><span>PCI_ID </span></span></dt>
+<dd><p>設備的 PCI 供應商和設備 ID, 16進制, 結合成這樣的格式 供應者:設備.</p></dd>
+<dt><span class="term"><span>PCI_SUBSYS_ID </span></span></dt>
+<dd><p>PCI 子系統供應商和子系統設備 ID, 以 子系統供應者:子系統設備 的格式結合.</p></dd>
+<dt><span class="term"><span>PCI_SLOT_NAME </span></span></dt>
+<dd><p>PCI 插口"名", 內核給予這個設備的. 它以這樣的格式 域:總線:插口:功能. 一個例子可能是: 0000:00:0d.0.</p></dd>
+</dl></div>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Input.sect3"></a>14.7.2.4.&#160;輸入</h4></div></div></div>
+<p>對所有的輸入設備(鼠標, 鍵盤, 遊戲桿, 等等), 一個熱插拔事件當設備從內核增減時產生. /sbin/hotplug 參數和 SUBSYSTEM 環境變量被設置為值 input. 輸入子系統也總是添加下面的環境變量:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>PRODUCT </span></span></dt>
+<dd><p>一個多值字符串, 用 16 進制列出值沒有前導 0. 它的格式是 bustype:vender:product:version.</p></dd>
+</dl></div>
+<p>下列環境變量可能出現, 如果設備支持它:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>NAME </span></span></dt>
+<dd><p>輸入設備的名子, 如同設備給定的.</p></dd>
+<dt><span class="term"><span>PHYS </span></span></dt>
+<dd><p>輸入子系統給這個設備的設備的物理地址. 它假定是穩定的, 依賴設備所插入的總線的位置.</p></dd>
+<dt><span class="term"><span>EV</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>KEY</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>REL</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>ABS</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>MSC</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>LED</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>SND</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>FF </span></span></dt>
+<dd><p>這些都來自輸入設備描述符並且被設置為合適的值如果特定的輸入設備支持它.</p></dd>
+</dl></div>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="USB.sect3"></a>14.7.2.5.&#160;USB 總線</h4></div></div></div>
+<p>任何在 USB 總線上的設備有參數 name 和 SUBSYSTEM 環境變量設置為 usb. USB 子系統也總是一直添加下列的環境變量:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>PRODUCT </span></span></dt>
+<dd><p>一個字符串, idVendor/idProduct/bcdDevice 的格式, 來指定這些 USB 設備特定的成員.</p></dd>
+<dt><span class="term"><span>TYPE </span></span></dt>
+<dd><p>一個 bDeviceClass/bDeviceSubClass/bDeviceProtocol 格式的字符串, 指定這些 USB 設備特定的成員.</p></dd>
+</dl></div>
+<p>如果 bDeviceClass 成員設置為 0, 下列的環境變量也被設置:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>INTERFACE </span></span></dt>
+<dd><p>一個 bInterfaceClass/bInterfaceSubClass/bInterfaceProtocol 格式的字符串, 指定這些 USB 設備特定成員.</p></dd>
+</dl></div>
+<p>如果這個內核建立選項, CONFIG_USB_DEVICEFS, 它選擇 usbfs 文件系統來在內核中建立, 被選中, 下列環境變量也被設置:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>DEVICE </span></span></dt>
+<dd><p>一個字符串, 在設備所在的 usbfs 文件系統中出現. 這個字串以 /proc/bus/usb/USB_BUS_NUMBER/USB_DEVICE_NUMBER 的格式, 其中 USB_BUS_NUMBER 是這個設備所在的 USB 總線的 3 個數, USB_DEVICE_NUMBER 是已由內核分配給 USB 設備的 3 位數.</p></dd>
+</dl></div>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="SCSI.sect3"></a>14.7.2.6.&#160;SCSI 總線</h4></div></div></div>
+<p>所有的 SCSI 設備創建一個熱插拔事件當 SCSI 設備從內核中創建或去除. /sbin/hotplug 調用有參數 name 和 SUBSYSTEM 環境變量設置為 scsi 給每個添加或去除自系統的 SCSI 設備. 沒有額外的環境變量由 SCSI 系統添加, 但是它被在此提及因為有一個  SCSI 特定的用戶空間腳本來決定什麼 SCSI 驅動( 磁盤, 磁帶, 通用, 等等)應當給這個特定 SCSI 設備加載.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Laptopdockingstations.sect3"></a>14.7.2.7.&#160;膝上電腦塢站</h4></div></div></div>
+<p>如果一個支持即插即用的膝上電腦塢站被從運行中的 Linux 系統中添加或去除( 通過插入膝上電腦到塢站中, 或者去除它), 一個熱插拔事件被產生. /sbin/hotplug 調用有參數 name 和 SUBSYSTEM 環境變量設為 dock. 沒有其他的環境變量被設置.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="S390andzSeries.sect3"></a>14.7.2.8.&#160;S/390 和 zSeries</h4></div></div></div>
+<p>在 S/390 體系中, 通道總線結構支持很廣範圍的硬件, 所有產生 /sbin/hotplug 事件當它們從 Linux 虛擬系統被添加或去除時的硬件. 這些設備都有 /sbin/hotplug 參數 name 和 SUBSYSTEM 環境變量設置為 dasd. 沒有其他環境變量被設置.</p>
+</div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Usingsbinhotplug.sect2"></a>14.7.3.&#160;使用 /sbin/hotplug </h3></div></div></div>
+<p>現在 Linux 內核在調用 /sbin/hotplug 為每個設備, 添加和刪除自內核, 許多非常有用的工具在用戶空間已被創建來利用這一點. 2 個最常用的工具是 Linux 熱插拔腳本和 udev.</p>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Linuxhotplugscripts.sect3"></a>14.7.3.1.&#160;Linux 熱插拔腳本</h4></div></div></div>
+<p>Linux 熱插拔腳本作為 /sbin/hotplug 調用的第一個用戶而啟動. 這些腳本查看內核設置的來描述剛剛發現的設備的不同的環境變量, 並接著試圖發現一個匹配這個設備的內核模塊.</p>
+<p>如同前面描述的, 當一個驅動使用 MODULE_DEVICE_TABLE 宏, 程序 depmod 採用這個信息並創建位於 /lib/module/KERNEL_VERSION/modules.*map 的文件. 這個 * 是不同的, 根據驅動支持的總線類型. 當前, 模塊 map 文件為使用設備的驅動而產生, 這些設備支持 PCI, USB, IEEE1394, INPUT, ISAPNP, 和 CCW 子系統.</p>
+<p>熱插拔腳本使用這些模塊映射文本文件, 來決定試圖加載什麼模塊來支持內核剛剛發現的設備. 它們加載所有的模塊, 在第一次匹配時不停止, 為了使內核發現那個模塊工作得最好. 這些腳本不加載任何模塊當驅動被去除時. 如果它們要試圖做這個, 它們可能偶然地關閉被同一個要被去除的驅動控制的設備.</p>
+<p>注意, 現在 modprobe 程序能直接從模塊中讀 MODULE_DEVICE_TABLE 信息而不需要模塊 map 文件, 熱插拔腳本可能被刪減為一個小的在 modprobe 程序周圍的包裝.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="udev.sect3"></a>14.7.3.2.&#160;udev 啥?</h4></div></div></div>
+<p>在內核中創建統一的驅動模型的一個主要原因是允許用戶空間動態管理 /dev 樹. 這之前已使用 devfs 的實現在用戶空間實現, 但是那個代碼底線已慢慢消失, 由於缺少一個活躍的維護者以及一些無法修正的核心 bug. 許多內核開發者認識到如果所有的設備信息被輸出給用戶空間, 它可能進行所有的必要的 /dev 樹的管理.</p>
+<p>devfs 在它的設計中有一些非常基礎的缺陷. 它需要每個設備驅動被修改來支持它, 並且它要求設備驅動來指定名子和在它所在的 /dev 樹中的位置. 它也沒有正確處理動態主次編號, 並且它不允許用戶空間以簡單方式覆蓋設備的命名, 這樣來強制設備命名策略於內核中而不是在用戶空間. Linux 內核開發中非常厭惡使策略在內核中, 並且因為 devfs 命名策略不遵循 Linux 標準基礎規格, 它確實困擾他們.</p>
+<p>隨著 Linux 內核開始安裝到大型服務器, 許多用戶遇到如何管理大量設備的問題. 超過 10,000 個單一設備的磁盤驅動陣列提出了非常困難的任務, 保證一個特定磁盤一直使用相同的名子命名, 不管它在磁盤陣列的哪裡或者它什麼時候被內核發現. 同樣的問題也折磨著桌面用戶, 想插入 2 個 USB 打印機到他們的系統, 並且接著發現它們沒有辦法保證已知為 /dev/lpt0 的打印機不會改變並分配給其他的打印機如果系統重啟.</p>
+<p>因此, udev 被創建. 它依靠所有通過 sysfs 輸出給用戶空間的設備信息, 並且依靠被 /sbin/hotplug 通知有設備添加或去除. 策略決策, 例如給一個設備什麼名子, 可在用戶空間指定, 內核之外. 這保證了命名策略被從內核中去除並且允許大量每個設備名子的靈活性.</p>
+<p>對更多的關於如何使用 udev 和如何配置它的信息, 請看在你的發佈中和 udev 軟件包一起的文檔.</p>
+<p>所有的一個設備驅動需要做的, 為 udev 正確使用它, 是確保任何分配給一個驅動控制的設備的主次編號通過 sysfs 輸出到用戶空間. 對任何使用一個子系統來安排它一個主次編號的驅動, 這已經由子系統完成, 並且驅動不必做任何工作. 做這個的子系統的例子是 tty, misc, usb, input, scsi, block, i2c, network, 和 frame buffer 子系統. 如果你的驅動自己獲得一個主次編號, 通過對 cdev_init 函數的調用或者更老的 register_chrdev 函數, 驅動需要被修改以便 udev 能夠正確使用它.</p>
+<p>udev 查找一個稱為 dev 的文件在 sysfs 的 /class/ 樹中, 為了決定分配什麼主次編號給一個特定設備當它被內核通過 /sbin/hotplug 接口調用時. 一個設備驅動只要為每個它控制的設備創建這個文件. class_simple 接口常常是最易的做這個的方法.</p>
+<p>如同" class_simple 接口"一節中提過的, 使用 class_simple 接口的第一步是調用 class_simple_create 函數來創建一個 struct class_simple.</p>
+<pre class="programlisting">
+static struct class_simple *foo_class;
+...
+foo_class = class_simple_create(THIS_MODULE, "foo");
+if (IS_ERR(foo_class)) {
+ printk(KERN_ERR "Error creating foo class.\n");
+ goto error;
+}
+</pre>
+<p>這個代碼創建一個目錄在 sysfs 中 /sys/class/foo.</p>
+<p>無論何時你的驅動發現一個新設備, 並且你如第 3 章描述的分配它一個次編號, 驅動應當調用 class_simple_device_add 函數:</p>
+<pre class="programlisting">
+class_simple_device_add(foo_class, MKDEV(FOO_MAJOR, minor), NULL, "foo%d", minor); 
+</pre>
+<p>這個代碼導致在 /sys/class/foo 創建一個子目錄稱為 fooN, 這裡 N 是這個設備的次編號. 在這個目錄裡創建有一個文件, dev, 它恰好是 udev 為你的設備創建一個設備節點需要的.</p>
+<p>當你的驅動從一個設備解除, 並且你放棄它所依附的次編號, 需要調用 class_simple_device_remove 來去除這個設備的 sysfs 入口.</p>
+<pre class="programlisting">
+class_simple_device_remove(MKDEV(FOO_MAJOR, minor)); 
+</pre>
+<p>之後, 當你的整個驅動被關閉, 需要調用 class_simple_destroy 來去除你起初調用 class_simple_create 創建的 class.</p>
+<pre class="programlisting">
+class_simple_destroy(foo_class); 
+</pre>
+<p>同樣 class_simple_device_add 創建的 dev 文件包括主次編號, 由一個 : 隔開. 如果你的驅動不想使用 class_simple 接口因為你想提供其他在子系統的類目錄中的文件, 使用 print_dev_t 函數來正確格式化特定設備的主次編號.</p>
+</div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch14s06.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch14.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch14s08.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">14.6.&#160;集成起來&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;14.8.&#160;處理固件</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch14s07.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

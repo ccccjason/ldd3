@@ -1,0 +1,111 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;5&#160;章&#160;並發和競爭情況-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch04s06.html" title="4.6.&#160;調試器和相關工具">
+<link rel="next" href="ch05s02.html" title="5.2.&#160;並發和它的管理">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;5&#160;章&#160;並發和競爭情況</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch04s06.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch05s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="ConcurrencyandRaceContitions.chap"></a>第&#160;5&#160;章&#160;並發和競爭情況</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch05.html#Pitfallsinscull.sect">5.1. scull 中的缺陷</a></span></dt>
+<dt><span class="sect1"><a href="ch05s02.html">5.2. 並發和它的管理</a></span></dt>
+<dt><span class="sect1"><a href="ch05s03.html">5.3. 旗標和互斥體</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch05s03.html#TheLinuxSemaphoreImplementation.sect">5.3.1. Linux 旗標實現</a></span></dt>
+<dt><span class="sect2"><a href="ch05s03.html#UsingSemaphoresinscull.sect">5.3.2. 在 scull 中使用旗標</a></span></dt>
+<dt><span class="sect2"><a href="ch05s03.html#ReaderWriterSemphores.sect">5.3.3. 讀者/寫者旗標</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch05s04.html">5.4. Completions 機制</a></span></dt>
+<dt><span class="sect1"><a href="ch05s05.html">5.5. 自旋鎖</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch05s05.html#IntroductiontotheSpinlockAPI.sect">5.5.1. 自旋鎖 API 簡介</a></span></dt>
+<dt><span class="sect2"><a href="ch05s05.html#SpinlocksandAtomicContext.sect">5.5.2. 自旋鎖和原子上下文</a></span></dt>
+<dt><span class="sect2"><a href="ch05s05.html#TheSpinlockFunctions.sect">5.5.3. 自旋鎖函數</a></span></dt>
+<dt><span class="sect2"><a href="ch05s05.html#ReaderWriterSpinlocks.sect">5.5.4. 讀者/寫者自旋鎖</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch05s06.html">5.6. 鎖陷阱</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch05s06.html#AmbiguousRules.sect">5.6.1. 模糊的規則</a></span></dt>
+<dt><span class="sect2"><a href="ch05s06.html#LockOrderingRules.sect">5.6.2. 加鎖順序規則</a></span></dt>
+<dt><span class="sect2"><a href="ch05s06.html#FineVersusCoarseGrainedLocking.sect">5.6.3. 細 -粗- 粒度加鎖</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch05s07.html">5.7. 加鎖的各種選擇</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch05s07.html#LockFreeAlgorithms.sect">5.7.1. 不加鎖算法</a></span></dt>
+<dt><span class="sect2"><a href="ch05s07.html#AtomicVariables.sect">5.7.2. 原子變量</a></span></dt>
+<dt><span class="sect2"><a href="ch05s07.html#BitOperations.sect">5.7.3. 位操作</a></span></dt>
+<dt><span class="sect2"><a href="ch05s07.html#seqlocks.sect">5.7.4. seqlock 鎖</a></span></dt>
+<dt><span class="sect2"><a href="ch05s07.html#ReadCopyUpdate.sect">5.7.5. 讀取-拷貝-更新</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch05s08.html">5.8. 快速參考</a></span></dt>
+</dl>
+</div>
+<p>迄今, 我們未曾關心並發的問題 -- 就是說, 當系統試圖一次做多件事時發生的情況. 然而, 並發的管理是操作系統編程的核心問題之一. 並發相關的錯誤是一些最易出現又最難發現的問題. 即便是專家級 Linux 內核程序員偶爾也會出現並發相關的錯誤.</p>
+<p>早期的 Linux 內核, 較少有並發的源頭. 內核不支持對稱多處理器(SMP)系統, 並發執行的唯一原因是硬件中斷服務. 那個方法提供了簡單性, 但是在有越來越多處理器的系統上注重性能並且堅持系統要快速響應事件的世界中它不再可行了. 為響應現代硬件和應用程序的要求, Linux 內核已經發展為很多事情在同時進行. 這個進步已經產生了很大的性能和可擴展性. 然而, 它也很大地使內核編程任務複雜化. 設備啟動程序員現在必須從一開始就將並發作為他們設計的要素, 並且他們必須對內核提供的並發管理設施有很強的理解.</p>
+<p>本章的目的是開始建立那種理解的過程. 為此目的, 我們介紹一些設施來立刻應用到第 3 章的 scull 驅動. 展示的其他設施暫時還不使用. 但是首先, 我們看一下我們的簡單 scull 驅動可能哪裡出問題並且如何避免這些潛在的問題.</p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="Pitfallsinscull.sect"></a>5.1.&#160;scull 中的缺陷</h2></div></div></div>
+<p>讓我們快速看一段 scull 內存管理代碼. 在寫邏輯的深處, scull 必須決定它請求的內存是否已經分配. 處理這個任務的代碼是:</p>
+<pre class="programlisting">
+if (!dptr-&gt;data[s_pos]) {
+    dptr-&gt;data[s_pos] = kmalloc(quantum, GFP_KERNEL);
+    if (!dptr-&gt;data[s_pos])
+        goto out;
+}
+</pre>
+<p>假設有 2 個進程( 我們會稱它們為"A"和"B" ) 獨立地試圖寫入同一個 schull 設備的相同偏移. 每個進程同時到達上面片段的第一行的 if 測試. 如果被測試的指針是 NULL, 每個進程都會決定分配內存, 並且每個都會複製結果指針給 dptr-&gt;datat[s_pos]. 因為 2 個進程都在賦值給同一個位置, 顯然只有一個賦值可以成功.</p>
+<p>當然, 發生的是第 2 個完成賦值的進程將"勝出". 如果進程 A 先賦值, 它的賦值將被進程 B 覆蓋. 在此, scull 將完全忘記 A 分配的內存; 它只有指向 B 的內存的指針. A 所分配的指針, 因此, 將被丟掉並且不再返回給系統.</p>
+<p>事情的這個順序是一個競爭情況的演示. 競爭情況是對共享數據的無控制存取的結果. 當錯誤的存取模式發生了, 產生了不希望的東西. 對於這裡討論的競爭情況, 結果是內存洩漏. 這已經足夠壞了, 但是競爭情況常常導致系統崩潰和數據損壞. 程序員可能被誘惑而忽視競爭情況為相當低可能性的事件. 但是, 在計算機世界, 百萬分之一的事件會每隔幾秒發生, 並且後果會是嚴重的.</p>
+<p>很快我們將去掉 scull 的競爭情況, 但是首先我們需要對並發做一個更普遍的回顧.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch04s06.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch05s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">4.6.&#160;調試器和相關工具&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;5.2.&#160;並發和它的管理</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

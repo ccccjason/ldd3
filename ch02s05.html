@@ -1,0 +1,72 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>2.5.&#160;內核符號表-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch02.html" title="第&#160;2&#160;章&#160;建立和運行模塊">
+<link rel="prev" href="ch02s04.html" title="2.4.&#160;編譯和加載">
+<link rel="next" href="ch02s06.html" title="2.6.&#160;預備知識">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">2.5.&#160;內核符號表</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch02s04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;2&#160;章&#160;建立和運行模塊</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch02s06.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="TheKernelSymbolTable.sect1"></a>2.5.&#160;內核符號表</h2></div></div></div>
+<p> 我們已經看到 insmod 如何對應共用的內核符號來解決未定義的符號. 表中包含了全局內核項的地址 -- 函數和變量 -- 需要來完成模塊化的驅動. 當加載一個模塊, 如何由模塊輸出的符號成為內核符號表的一部分. 通常情況下, 一個模塊完成它自己的功能不需要輸出如何符號. 你需要輸出符號, 但是, 在任何別的模塊能得益於使用它們的時候.  </p>
+<p> 新的模塊可以用你的模塊輸出的符號, 你可以堆疊新的模塊在其他模塊之上. 模塊堆疊在主流內核源碼中也實現了: msdos 文件系統依賴 fat 模塊輸出的符號, 某一個輸入 USB 設備模塊堆疊在 usbcore 和輸入模塊之上.  </p>
+<p> 模塊堆疊在複雜的工程中有用處. 如果一個新的抽像以驅動程序的形式實現, 它可能提供一個特定硬件實現的插入點. 例如, video-for-linux 系列驅動分成一個通用模塊, 輸出了由特定硬件的低層設備驅動使用的符號. 根據你的設置, 你加載通用的視頻模塊和你的已安裝硬件對應的特定模塊. 對並口的支持和眾多可連接設備以同樣的方式處理, 如同 USB 內核子系統. 在並口子系統的堆疊在圖 <a href="ch02s05.html#ldd3-2-2.fig" title="圖&#160;2.2.&#160;並口驅動模塊的堆疊">並口驅動模塊的堆疊</a> 中顯示; 箭頭顯示了模塊和內核編程接口間的通訊.  
+</p>
+<div class="figure">
+<a name="ldd3-2-2.fig"></a><p class="title"><b>圖&#160;2.2.&#160;並口驅動模塊的堆疊</b></p>
+<div><img src="images/snagitldd3/ldd3-2-2.png" alt="並口驅動模塊的堆疊"></div>
+</div>
+<p> 當使用堆疊的模塊時, 熟悉 modprobe 工具是有幫助的. 如我們前面講的, modprobe 函數很多地方與 insmod 相同, 但是它也加載任何你要加載的模塊需要的其他模塊. 所以, 一個 modprobe 命令有時可能代替幾次使用 insmod( 儘管你從當前目錄下加載你自己模塊仍將需要 insmod, 因為 modprobe 只查找標準的已安裝模塊目錄 ).  </p>
+<p> 使用堆疊來劃分模塊成不同層, 這有助於通過簡化每一層來縮短開發時間. 這同我們在第 1 章討論的區分機制和策略是類似的.  </p>
+<p> linux 內核頭文件提供了方便來管理你的符號的可見性, 因此減少了命名空間的污染( 將與在內核別處已定義的符號衝突的名子填入命名空間), 並促使了正確的信息隱藏. 如果你的模塊需要輸出符號給其他模塊使用, 應當使用下面的宏定義: </p>
+<pre class="programlisting">
+EXPORT_SYMBOL(name);
+EXPORT_SYMBOL_GPL(name);
+</pre>
+<p> 上面宏定義的任一個使得給定的符號在模塊外可用. _GPL 版本的宏定義只能使符號對 GPL 許可的模塊可用. 符號必須在模塊文件的全局部分輸出, 在任何函數之外, 因為宏定義擴展成一個特殊用途的並被期望是全局存取的變量的聲明. 這個變量存儲於模塊的一個特殊的可執行部分( 一個 "ELF 段" ), 內核用這個部分在加載時找到模塊輸出的變量. ( 感興趣的讀者可以看 &lt;linux/module.h&gt; 獲知詳情, 儘管並不需要這些細節使東西動起來. ) 
+</p>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch02s04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch02.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch02s06.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">2.4.&#160;編譯和加載&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;2.6.&#160;預備知識</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

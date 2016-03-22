@@ -1,0 +1,105 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:31 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;2&#160;章&#160;建立和運行模塊-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch01s08.html" title="1.8.&#160;本書的內容">
+<link rel="next" href="ch02s02.html" title="2.2.&#160;Hello World 模塊">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;2&#160;章&#160;建立和運行模塊</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch01s08.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch02s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="BuildingandRunningModules.chap"></a>第&#160;2&#160;章&#160;建立和運行模塊</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch02.html#SettingUpYourTestSystem.sect1">2.1. 設置你的測試系統</a></span></dt>
+<dt><span class="sect1"><a href="ch02s02.html">2.2. Hello World 模塊</a></span></dt>
+<dt><span class="sect1"><a href="ch02s03.html">2.3. 內核模塊相比於應用程序</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch02s03.html#UserSpaceandKernelSpace.sect2">2.3.1. 用戶空間和內核空間</a></span></dt>
+<dt><span class="sect2"><a href="ch02s03.html#ConcurrencyintheKernel.sect2">2.3.2. 內核的並發</a></span></dt>
+<dt><span class="sect2"><a href="ch02s03.html#TheCurrentProcess.sect2">2.3.3. 當前進程</a></span></dt>
+<dt><span class="sect2"><a href="ch02s03.html#AFewOtherDetails.sect2">2.3.4. 幾個別的細節</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch02s04.html">2.4. 編譯和加載</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch02s04.html#CompilingModules.sect2">2.4.1. 編譯模塊</a></span></dt>
+<dt><span class="sect2"><a href="ch02s04.html#LoadingandUnloadingModules.sect2">2.4.2. 加載和卸載模塊</a></span></dt>
+<dt><span class="sect2"><a href="ch02s04.html#VersionDependency.sect2">2.4.3. 版本依賴</a></span></dt>
+<dt><span class="sect2"><a href="ch02s04.html#PlatformDependency.sect2">2.4.4. 平台依賴性</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch02s05.html">2.5. 內核符號表</a></span></dt>
+<dt><span class="sect1"><a href="ch02s06.html">2.6. 預備知識</a></span></dt>
+<dt><span class="sect1"><a href="ch02s07.html">2.7. 初始化和關停</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch02s07.html#TheCleanupFunction.sect2">2.7.1. 清理函數</a></span></dt>
+<dt><span class="sect2"><a href="ch02s07.html#ErrorHandlingDuringInitialization.sect2">2.7.2. 初始化中的錯誤處理</a></span></dt>
+<dt><span class="sect2"><a href="ch02s07.html#ModuleLoadingRaces.sect2">2.7.3. 模塊加載競爭</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch02s08.html">2.8. 模塊參數</a></span></dt>
+<dt><span class="sect1"><a href="ch02s09.html">2.9. 在用戶空間做</a></span></dt>
+<dt><span class="sect1"><a href="ch02s10.html">2.10. 快速參考</a></span></dt>
+</dl>
+</div>
+<p> 時間差不多該開始編程了. 本章介紹所有的關於模塊和內核編程的關鍵概念. 在這幾頁裡, 我們建立並運行一個完整(但是相對地沒有什麼用處)的模塊, 並且查看一些被所有模塊共用的基本代碼. 開發這樣的專門技術對任何類型的模塊化的驅動都是重要的基礎. 為避免一次拋出太多的概念, 本章只論及模塊, 不涉及任何特別的設備類型.</p>
+<p>在這裡介紹的所有的內核項 ( 函數, 變量, 頭文件, 和宏 )在本章的結尾的參考一節裡有說明.</p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="SettingUpYourTestSystem.sect1"></a>2.1.&#160;設置你的測試系統</h2></div></div></div>
+<p> 在本章開始, 我們提供例子模塊來演示編程概念. ( 所有的例子都可從 O' Reilly' s 的 FTP 網站上得到, 如第 1 章解釋的那樣 )建立, 加載, 和修改這些例子, 是提高你對驅動如何工作以及如何與內核交互的理解的好方法.  </p>
+<p> 例子模塊應該可以在大部分的 2.6.x 內核上運行, 包括那些由發佈供應商提供的. 但是, 我們建議你獲得一個主流內核, 直接從 kernel.org 的鏡像網絡, 並把它安裝到你的系統中. 供應商的內核可能是主流內核被重重地打了補丁並且和主流內核有分歧; 偶爾, 供應商的補丁可能改變了設備驅動可見的內核 API. 如果你在編寫一個必須在特別的發佈上運行的驅動, 你當然要在相應的內核上建立和測試. 但是, 處於學習驅動編寫的目的, 一個標準內核是最好的.  </p>
+<p>不管你的內核來源, 建立 2.6.x 的模塊需要你有一個配置好並建立好的內核樹在你的系統中. 這個要求是從之前內核版本的改變, 之前只要有一套當前版本的頭文件就足夠了. 2.6 模塊針對內核源碼樹裡找到的目標文件連接; 結果是一個更加健壯的模塊加載器, 還要求那些目標文件也是可用的. 因此你的第一個商業訂單是具備一個內核源碼樹( 或者從 krenel.org 網絡或者你的發佈者的內核源碼包), 建立一個新內核, 並且安裝到你的系統. 因為我們稍後會見到的原因, 生活通常是最容易的如果當你建立模塊時真正運行目標內核, 儘管這不是需要的.</p>
+<div class="note" style="margin-left: 0.5in; margin-right: 0.5in;"><table border="0" summary="Note">
+<tr>
+<td rowspan="2" align="center" valign="top" width="25"><img alt="[注意]" src="images/note.png"></td>
+<th align="left">注意</th>
+</tr>
+<tr><td align="left" valign="top"><p> 你應當也考慮一下在哪裡進行你的模塊試驗, 開發和測試. 我們已經盡力使我們的例子模塊安全和正確, 但是 bug 的可能性是經常會有的. 內核代碼中的錯誤可能會引起一個用戶進程的死亡, 或者偶爾, 癱瘓整個系統. 它們正常地不會導致更嚴重地後果, 例如磁盤損傷. 然而, 還是建議你進行你的內核試驗在一個沒有包含你負擔不起丟失的數據的系統, 並且沒有進行重要的服務. 內核開發者典型地會保留一台"犧牲"系統來測試新的代碼.  </p></td></tr>
+</table></div>
+<p> 因此, 如果你還沒有一個合適的系統, 帶有一個配置好並建立好的源碼樹在磁盤上, 現在是時候建立了. 我們將等待. 一旦這個任務完成, 你就準備好開始擺佈內核模塊了.  
+</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch01s08.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch02s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">1.8.&#160;本書的內容&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;2.2.&#160;Hello World 模塊</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:31 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

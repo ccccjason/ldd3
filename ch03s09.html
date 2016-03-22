@@ -1,0 +1,107 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch03s09.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>3.9.&#160;快速參考-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch03.html" title="第&#160;3&#160;章&#160;字符驅動">
+<link rel="prev" href="ch03s08.html" title="3.8.&#160;使用新設備">
+<link rel="next" href="ch04.html" title="第&#160;4&#160;章&#160;調試技術">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">3.9.&#160;快速參考</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch03s08.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;3&#160;章&#160;字符驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="CharDriversQuickReference.sect"></a>3.9.&#160;快速參考</h2></div></div></div>
+<p>本章介紹了下面符號和頭文件. struct file_operations 和 struct file 中的成員的列表這裡不重複了.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>#include &lt;linux/types.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>dev_t </span></span></dt>
+<dd><p>dev_t 是用來在內核裡代表設備號的類型.</p></dd>
+<dt><span class="term"><span>int MAJOR(dev_t dev);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int MINOR(dev_t dev);</span></span></dt>
+<dd><p>從設備編號中抽取主次編號的宏.</p></dd>
+<dt><span class="term"><span>dev_t MKDEV(unsigned int major, unsigned int minor);</span></span></dt>
+<dd><p>從主次編號來建立 dev_t 數據項的宏定義.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/fs.h&gt;</span></span></dt>
+<dd><p>"文件系統"頭文件是編寫設備驅動需要的頭文件. 許多重要的函數和數據結構在此定義.</p></dd>
+<dt><span class="term"><span>int register_chrdev_region(dev_t first, unsigned int count, char *name)</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int alloc_chrdev_region(dev_t *dev, unsigned int firstminor, unsigned int count, char *name)</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void unregister_chrdev_region(dev_t first, unsigned int count);</span></span></dt>
+<dd><p>允許驅動分配和釋放設備編號的範圍的函數. register_chrdev_region 應當用在事先知道需要的主編號時; 對於動態分配, 使用 alloc_chrdev_region 代替.</p></dd>
+<dt><span class="term"><span>int register_chrdev(unsigned int major, const char *name, struct file_operations *fops);</span></span></dt>
+<dd><p>老的( 2.6 之前) 字符設備註冊函數. 它在 2.6 內核中被模擬, 但是不應當給新代碼使用. 如果主編號不是 0, 可以不變地用它; 否則一個動態編號被分配給這個設備.</p></dd>
+<dt><span class="term"><span>int unregister_chrdev(unsigned int major, const char *name);</span></span></dt>
+<dd><p>恢復一個由 register_chrdev 所作的註冊的函數. major 和 name 字符串必須包含之前用來註冊設備時同樣的值.</p></dd>
+<dt><span class="term"><span>struct file_operations;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct file;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct inode;</span></span></dt>
+<dd><p>大部分設備驅動使用的 3 個重要數據結構. file_operations 結構持有一個字符驅動的方法; struct file 代表一個打開的文件, struct inode 代表磁盤上的一個文件.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/cdev.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct cdev *cdev_alloc(void);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void cdev_init(struct cdev *dev, struct file_operations *fops);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int cdev_add(struct cdev *dev, dev_t num, unsigned int count);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void cdev_del(struct cdev *dev);</span></span></dt>
+<dd><p>cdev 結構管理的函數, 它代表內核中的字符設備.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/kernel.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>container_of(pointer, type, field);</span></span></dt>
+<dd><p>一個傳統宏定義, 可用來獲取一個結構指針, 從它裡面包含的某個其他結構的指針.</p></dd>
+<dt><span class="term"><span>#include &lt;asm/uaccess.h&gt;</span></span></dt>
+<dd><p>這個包含文件聲明內核代碼使用的函數來移動數據到和從用戶空間.</p></dd>
+<dt><span class="term"><span>unsigned long copy_from_user (void *to, const void *from, unsigned long count);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned long copy_to_user (void *to, const void *from, unsigned long count);</span></span></dt>
+<dd><p>在用戶空間和內核空間拷貝數據.</p></dd>
+</dl></div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch03s08.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch03.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">3.8.&#160;使用新設備&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;第&#160;4&#160;章&#160;調試技術</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch03s09.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

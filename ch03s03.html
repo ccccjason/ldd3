@@ -1,0 +1,174 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch03s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>3.3.&#160;一些重要數據結構-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch03.html" title="第&#160;3&#160;章&#160;字符驅動">
+<link rel="prev" href="ch03s02.html" title="3.2.&#160;主次編號">
+<link rel="next" href="ch03s04.html" title="3.4.&#160;字符設備註冊">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">3.3.&#160;一些重要數據結構</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch03s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;3&#160;章&#160;字符驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch03s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="SomeImportantDataStructures.sect"></a>3.3.&#160;一些重要數據結構</h2></div></div></div>
+<p>如同你想像的, 註冊設備編號僅僅是驅動代碼必須進行的諸多任務中的第一個. 我們將很快看到其他重要的驅動組件, 但首先需要涉及一個別的. 大部分的基礎性的驅動操作包括 3 個重要的內核數據結構, 稱為 file_operations, file, 和 inode. 需要對這些結構的基本瞭解才能夠做大量感興趣的事情, 因此我們現在在進入如何實現基礎性驅動操作的細節之前, 會快速查看每一個.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="FileOperation.sect"></a>3.3.1.&#160;文件操作</h3></div></div></div>
+<p>到現在, 我們已經保留了一些設備編號給我們使用, 但是我們還沒有連接任何我們設備操作到這些編號上. file_operation 結構是一個字符驅動如何建立這個連接. 這個結構, 定義在 &lt;linux/fs.h&gt;, 是一個函數指針的集合. 每個打開文件(內部用一個 file 結構來代表, 稍後我們會查看)與它自身的函數集合相關連( 通過包含一個稱為 f_op 的成員, 它指向一個 file_operations 結構). 這些操作大部分負責實現系統調用, 因此, 命名為 open, read, 等等. 我們可以認為文件是一個"對像"並且其上的函數操作稱為它的"方法", 使用面向對像編程的術語來表示一個對像聲明的用來操作對象的動作. 這是我們在 Linux 內核中看到的第一個面向對像編程的現象, 後續章中我們會看到更多.</p>
+<p>傳統上, 一個 file_operation 結構或者其一個指針稱為 fops( 或者它的一些變體). 結構中的每個成員必須指向驅動中的函數, 這些函數實現一個特別的操作, 或者對於不支持的操作留置為 NULL. 當指定為 NULL 指針時內核的確切的行為是每個函數不同的, 如同本節後面的列表所示.</p>
+<p>下面的列表介紹了一個應用程序能夠在設備上調用的所有操作. 我們已經試圖保持列表簡短, 這樣它可作為一個參考, 只是總結每個操作和在 NULL 指針使用時的缺省內核行為.</p>
+<p>在你通讀 file_operations 方法的列表時, 你會注意到不少參數包含字串 __user. 這種註解是一種文檔形式, 注意, 一個指針是一個不能被直接解引用的用戶空間地址. 對於正常的編譯, __user 沒有效果, 但是它可被外部檢查軟件使用來找出對用戶空間地址的錯誤使用.</p>
+<p>本章剩下的部分, 在描述一些其他重要數據結構後, 解釋了最重要操作的角色並且給了提示, 告誡和真實代碼例子. 我們推遲討論更複雜的操作到後面章節, 因為我們還不準備深入如內存管理, 阻塞操作, 和異步通知.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct module *owner</span></span></dt>
+<dd><p>第一個 file_operations 成員根本不是一個操作; 它是一個指向擁有這個結構的模塊的指針. 這個成員用來在它的操作還在被使用時阻止模塊被卸載. 幾乎所有時間中, 它被簡單初始化為 THIS_MODULE, 一個在 &lt;linux/module.h&gt; 中定義的宏.</p></dd>
+<dt><span class="term"><span>loff_t (*llseek) (struct file *, loff_t, int);</span></span></dt>
+<dd><p>llseek 方法用作改變文件中的當前讀/寫位置, 並且新位置作為(正的)返回值. loff_t 參數是一個"long offset", 並且就算在 32位平台上也至少 64 位寬. 錯誤由一個負返回值指示. 如果這個函數指針是 NULL, seek 調用會以潛在地無法預知的方式修改 file 結構中的位置計數器( 在"file 結構" 一節中描述).</p></dd>
+<dt><span class="term"><span>ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);</span></span></dt>
+<dd><p>用來從設備中獲取數據. 在這個位置的一個空指針導致 read 系統調用以 -EINVAL("Invalid argument") 失敗. 一個非負返回值代表了成功讀取的字節數( 返回值是一個 "signed size" 類型, 常常是目標平台本地的整數類型).</p></dd>
+<dt><span class="term"><span>ssize_t (*aio_read)(struct kiocb *, char __user *, size_t, loff_t);</span></span></dt>
+<dd><p>初始化一個異步讀 -- 可能在函數返回前不結束的讀操作. 如果這個方法是 NULL, 所有的操作會由 read 代替進行(同步地).</p></dd>
+<dt><span class="term"><span>ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);</span></span></dt>
+<dd><p>發送數據給設備. 如果 NULL, -EINVAL 返回給調用 write 系統調用的程序. 如果非負, 返回值代表成功寫的字節數.</p></dd>
+<dt><span class="term"><span>ssize_t (*aio_write)(struct kiocb *, const char __user *, size_t, loff_t *);</span></span></dt>
+<dd><p>初始化設備上的一個異步寫.</p></dd>
+<dt><span class="term"><span>int (*readdir) (struct file *, void *, filldir_t);</span></span></dt>
+<dd><p>對於設備文件這個成員應當為 NULL; 它用來讀取目錄, 並且僅對文件系統有用.</p></dd>
+<dt><span class="term"><span>unsigned int (*poll) (struct file *, struct poll_table_struct *);</span></span></dt>
+<dd><p>poll 方法是 3 個系統調用的後端: poll, epoll, 和 select, 都用作查詢對一個或多個文件描述符的讀或寫是否會阻塞. poll 方法應當返回一個位掩碼指示是否非阻塞的讀或寫是可能的, 並且, 可能地, 提供給內核信息用來使調用進程睡眠直到 I/O 變為可能. 如果一個驅動的 poll 方法為 NULL, 設備假定為不阻塞地可讀可寫.</p></dd>
+<dt><span class="term"><span>int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned long);</span></span></dt>
+<dd><p>ioctl 系統調用提供了發出設備特定命令的方法(例如格式化軟盤的一個磁道, 這不是讀也不是寫). 另外, 幾個 ioctl 命令被內核識別而不必引用 fops 表. 如果設備不提供 ioctl 方法, 對於任何未事先定義的請求(-ENOTTY, "設備無這樣的 ioctl"), 系統調用返回一個錯誤. </p></dd>
+<dt><span class="term"><span>int (*mmap) (struct file *, struct vm_area_struct *);</span></span></dt>
+<dd><p>mmap 用來請求將設備內存映射到進程的地址空間. 如果這個方法是 NULL, mmap 系統調用返回 -ENODEV.</p></dd>
+<dt><span class="term"><span>int (*open) (struct inode *, struct file *);</span></span></dt>
+<dd><p>儘管這常常是對設備文件進行的第一個操作, 不要求驅動聲明一個對應的方法. 如果這個項是 NULL, 設備打開一直成功, 但是你的驅動不會得到通知.</p></dd>
+<dt><span class="term"><span>int (*flush) (struct file *);</span></span></dt>
+<dd><p>flush 操作在進程關閉它的設備文件描述符的拷貝時調用; 它應當執行(並且等待)設備的任何未完成的操作. 這個必須不要和用戶查詢請求的 fsync 操作混淆了. 當前, flush 在很少驅動中使用; SCSI 磁帶驅動使用它, 例如, 為確保所有寫的數據在設備關閉前寫到磁帶上. 如果 flush 為 NULL, 內核簡單地忽略用戶應用程序的請求.</p></dd>
+<dt><span class="term"><span>int (*release) (struct inode *, struct file *);</span></span></dt>
+<dd><p>在文件結構被釋放時引用這個操作. 如同 open, release 可以為 NULL.</p></dd>
+<dt><span class="term"><span>int (*fsync) (struct file *, struct dentry *, int);</span></span></dt>
+<dd><p>這個方法是 fsync 系統調用的後端, 用戶調用來刷新任何掛著的數據. 如果這個指針是 NULL, 系統調用返回 -EINVAL.</p></dd>
+<dt><span class="term"><span>int (*aio_fsync)(struct kiocb *, int);</span></span></dt>
+<dd><p>這是 fsync 方法的異步版本.</p></dd>
+<dt><span class="term"><span>int (*fasync) (int, struct file *, int);</span></span></dt>
+<dd><p>這個操作用來通知設備它的 FASYNC 標誌的改變. 異步通知是一個高級的主題, 在第 6 章中描述. 這個成員可以是NULL 如果驅動不支持異步通知.</p></dd>
+<dt><span class="term"><span>int (*lock) (struct file *, int, struct file_lock *);</span></span></dt>
+<dd><p>lock 方法用來實現文件加鎖; 加鎖對常規文件是必不可少的特性, 但是設備驅動幾乎從不實現它.</p></dd>
+<dt><span class="term"><span>ssize_t (*readv) (struct file *, const struct iovec *, unsigned long, loff_t *);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>ssize_t (*writev) (struct file *, const struct iovec *, unsigned long, loff_t *);</span></span></dt>
+<dd><p>這些方法實現發散/匯聚讀和寫操作. 應用程序偶爾需要做一個包含多個內存區的單個讀或寫操作; 這些系統調用允許它們這樣做而不必對數據進行額外拷貝. 如果這些函數指針為 NULL, read 和 write 方法被調用( 可能多於一次 ).</p></dd>
+<dt><span class="term"><span>ssize_t (*sendfile)(struct file *, loff_t *, size_t, read_actor_t, void *);</span></span></dt>
+<dd><p>這個方法實現 sendfile 系統調用的讀, 使用最少的拷貝從一個文件描述符搬移數據到另一個. 例如, 它被一個需要發送文件內容到一個網絡連接的 web 服務器使用. 設備驅動常常使 sendfile 為 NULL.</p></dd>
+<dt><span class="term"><span>ssize_t (*sendpage) (struct file *, struct page *, int, size_t, loff_t *, int);</span></span></dt>
+<dd><p>sendpage 是 sendfile 的另一半; 它由內核調用來發送數據, 一次一頁, 到對應的文件. 設備驅動實際上不實現 sendpage.</p></dd>
+<dt><span class="term"><span>unsigned long (*get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);</span></span></dt>
+<dd><p>這個方法的目的是在進程的地址空間找一個合適的位置來映射在底層設備上的內存段中. 這個任務通常由內存管理代碼進行; 這個方法存在為了使驅動能強制特殊設備可能有的任何的對齊請求. 大部分驅動可以置這個方法為 NULL.<sup>[<a name="id415066" href="#ftn.id415066">10</a>]</sup></p></dd>
+<dt><span class="term"><span>int (*check_flags)(int)</span></span></dt>
+<dd><p>這個方法允許模塊檢查傳遞給 fnctl(F_SETFL...) 調用的標誌.</p></dd>
+<dt><span class="term"><span>int (*dir_notify)(struct file *, unsigned long);</span></span></dt>
+<dd><p>這個方法在應用程序使用 fcntl 來請求目錄改變通知時調用. 只對文件系統有用; 驅動不需要實現 dir_notify.</p></dd>
+</dl></div>
+<p>scull 設備驅動只實現最重要的設備方法. 它的 file_operations 結構是如下初始化的:</p>
+<pre class="programlisting">
+struct file_operations scull_fops = {
+ .owner =  THIS_MODULE, 
+ .llseek =  scull_llseek, 
+ .read =  scull_read, 
+ .write =  scull_write, 
+ .ioctl =  scull_ioctl, 
+ .open =  scull_open, 
+ .release =  scull_release,  
+};  
+</pre>
+<p>這個聲明使用標準的 C 標記式結構初始化語法. 這個語法是首選的, 因為它使驅動在結構定義的改變之間更加可移植, 並且, 有爭議地, 使代碼更加緊湊和可讀. 標記式初始化允許結構成員重新排序; 在某種情況下, 真實的性能提高已經實現, 通過安放經常使用的成員的指針在相同硬件高速存儲行中.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ThefileStructure.sect"></a>3.3.2.&#160;文件結構</h3></div></div></div>
+<p>struct file, 定義於 &lt;linux/fs.h&gt;, 是設備驅動中第二個最重要的數據結構. 注意 file 與用戶空間程序的 FILE 指針沒有任何關係. 一個 FILE 定義在 C 庫中, 從不出現在內核代碼中. 一個 struct file, 另一方面, 是一個內核結構, 從不出現在用戶程序中.</p>
+<p>文件結構代表一個打開的文件. (它不特定給設備驅動; 系統中每個打開的文件有一個關聯的 struct file 在內核空間). 它由內核在 open 時創建, 並傳遞給在文件上操作的任何函數, 直到最後的關閉. 在文件的所有實例都關閉後, 內核釋放這個數據結構.</p>
+<p>在內核源碼中, struct file 的指針常常稱為 file 或者 filp("file pointer"). 我們將一直稱這個指針為 filp 以避免和結構自身混淆. 因此, file 指的是結構, 而 filp 是結構指針.</p>
+<p>struct file 的最重要成員在這展示. 如同在前一節, 第一次閱讀可以跳過這個列表. 但是, 在本章後面, 當我們面對一些真實 C 代碼時, 我們將更詳細討論這些成員.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>mode_t f_mode;</span></span></dt>
+<dd><p>文件模式確定文件是可讀的或者是可寫的(或者都是), 通過位 FMODE_READ 和 FMODE_WRITE. 你可能想在你的 open 或者 ioctl 函數中檢查這個成員的讀寫許可, 但是你不需要檢查讀寫許可, 因為內核在調用你的方法之前檢查. 當文件還沒有為那種存取而打開時讀或寫的企圖被拒絕, 驅動甚至不知道這個情況.</p></dd>
+<dt><span class="term"><span>loff_t f_pos;</span></span></dt>
+<dd><p>當前讀寫位置. loff_t 在所有平台都是 64 位( 在 gcc 術語裡是 long long ). 驅動可以讀這個值, 如果它需要知道文件中的當前位置, 但是正常地不應該改變它; 讀和寫應當使用它們作為最後參數而收到的指針來更新一個位置, 代替直接作用於 filp-&gt;f_pos. 這個規則的一個例外是在 llseek 方法中, 它的目的就是改變文件位置.</p></dd>
+<dt><span class="term"><span>unsigned int f_flags;</span></span></dt>
+<dd><p>這些是文件標誌, 例如 O_RDONLY, O_NONBLOCK, 和 O_SYNC. 驅動應當檢查 O_NONBLOCK 標誌來看是否是請求非阻塞操作( 我們在第一章的"阻塞和非阻塞操作"一節中討論非阻塞 I/O ); 其他標誌很少使用. 特別地, 應當檢查讀/寫許可, 使用 f_mode 而不是 f_flags. 所有的標誌在頭文件 &lt;linux/fcntl.h&gt; 中定義.</p></dd>
+<dt><span class="term"><span>struct file_operations *f_op;</span></span></dt>
+<dd><p>和文件關聯的操作. 內核安排指針作為它的 open 實現的一部分, 接著讀取它當它需要分派任何的操作時. filp-&gt;f_op 中的值從不由內核保存為後面的引用; 這意味著你可改變你的文件關聯的文件操作, 在你返回調用者之後新方法會起作用. 例如, 關聯到主編號 1 (/dev/null, /dev/zero, 等等)的 open 代碼根據打開的次編號來替代 filp-&gt;f_op 中的操作. 這個做法允許實現幾種行為, 在同一個主編號下而不必在每個系統調用中引入開銷. 替換文件操作的能力是面向對像編程的"方法重載"的內核對等體.</p></dd>
+<dt><span class="term"><span>void *private_data;</span></span></dt>
+<dd><p>open 系統調用設置這個指針為 NULL, 在為驅動調用 open 方法之前. 你可自由使用這個成員或者忽略它; 你可以使用這個成員來指向分配的數據, 但是接著你必須記住在內核銷毀文件結構之前, 在 release 方法中釋放那個內存. private_data 是一個有用的資源, 在系統調用間保留狀態信息, 我們大部分例子模塊都使用它.</p></dd>
+<dt><span class="term"><span>struct dentry *f_dentry;</span></span></dt>
+<dd><p>關聯到文件的目錄入口( dentry )結構. 設備驅動編寫者正常地不需要關心 dentry 結構, 除了作為 filp-&gt;f_dentry-&gt;d_inode 存取 inode 結構.</p></dd>
+</dl></div>
+<p>真實結構有多幾個成員, 但是它們對設備驅動沒有用處. 我們可以安全地忽略這些成員, 因為驅動從不創建文件結構; 它們真實存取別處創建的結構.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheinodeStructure.sect"></a>3.3.3.&#160;inode 結構</h3></div></div></div>
+<p>inode 結構由內核在內部用來表示文件. 因此, 它和代表打開文件描述符的文件結構是不同的. 可能有代表單個文件的多個打開描述符的許多文件結構, 但是它們都指向一個單個 inode 結構.</p>
+<p>inode 結構包含大量關於文件的信息. 作為一個通用的規則, 這個結構只有 2 個成員對於編寫驅動代碼有用:</p>
+<div class="variablelist"><dl>
+<dt><span class="term">dev_t i_rdev;<span></span></span></dt>
+<dd><p>對於代表設備文件的節點, 這個成員包含實際的設備編號.</p></dd>
+<dt><span class="term">struct cdev *i_cdev;<span></span></span></dt>
+<dd><p>struct cdev 是內核的內部結構, 代表字符設備; 這個成員包含一個指針, 指向這個結構, 當節點指的是一個字符設備文件時.</p></dd>
+</dl></div>
+<p>i_rdev 類型在 2.5 開發系列中改變了, 破壞了大量的驅動. 作為一個鼓勵更可移植編程的方法, 內核開發者已經增加了 2 個宏, 可用來從一個 inode 中獲取主次編號:</p>
+<pre class="programlisting">
+unsigned int iminor(struct inode *inode);
+unsigned int imajor(struct inode *inode);
+</pre>
+<p>為了不要被下一次改動抓住, 應當使用這些宏代替直接操作 i_rdev.</p>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id415066" href="#id415066">10</a>] </sup>注意, release 不是每次進程調用 close 時都被調用. 無論何時共享一個文件結構(例如, 在一個 fork 或 dup 之後), release 不會調用直到所有的拷貝都關閉了. 如果你需要在任一拷貝關閉時刷新掛著的數據, 你應當實現 flush 方法.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch03s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch03.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch03s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">3.2.&#160;主次編號&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;3.4.&#160;字符設備註冊</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch03s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

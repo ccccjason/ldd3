@@ -1,0 +1,145 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch17s10.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:43 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>17.10.&#160;Socket 緩存-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch17.html" title="第&#160;17&#160;章&#160;網絡驅動">
+<link rel="prev" href="ch17s09.html" title="17.9.&#160;連接狀態的改變">
+<link rel="next" href="ch17s11.html" title="17.11.&#160;MAC 地址解析">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">17.10.&#160;Socket 緩存</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch17s09.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;17&#160;章&#160;網絡驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch17s11.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="TheSocketBuffers"></a>17.10.&#160;Socket 緩存</h2></div></div></div>
+<p>我們現在已經涵蓋到了大部分關於網絡接口的問題. 還缺乏的是對 sk_buff 結構的詳細描述.這個結構處於 Linux 內核網絡子系統的核心, 我們現在介紹這個結構的重要成員和操作它們的函數.</p>
+<p>儘管沒有嚴格要求去理解 sk_buff 的內部, 能夠查看它的內容的能力在你追蹤問題和試圖優化代碼時是有幫助的. 例如, 如果你看 loopback.c, 你會發現一個基於對 sk_buff 內部瞭解的優化. 這裡適用的通常的警告是: 如果你編寫利用 sk_buff 結構的知識的代碼, 你應當準備好在以後內核發行中它壞掉. 仍然, 有時性能優勢值得額外的維護開銷.</p>
+<p>我們這裡不會描述整個結構, 只是那些在驅動裡可能用到的. 如果你想看到更多, 你可以查看 &lt;linux/skbuff.h&gt;, 那裡定義了結構和函數原型. 關於如何使用這些成員和函數的額外的細節可以通過搜索內核源碼很容易獲取.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheImportFields"></a>17.10.1.&#160;重要成員變量</h3></div></div></div>
+<p>這裡介紹的成員是驅動可能需要存取的. 以非特別的順序列出它們.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct net_device *dev;</span></span></dt>
+<dd><p>接收或發送這個緩存的設備</p></dd>
+<dt><span class="term"><span>union { /* ... */ } h;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>union { /* ... */ } nh;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>union { /*... */} mac;</span></span></dt>
+<dd>
+<p>指向報文中包含的各級的頭的指針. union 中的某個成員都是一個不同數據結構類型的指針. h 含有傳輸層頭部指針(例如, struct tcphdr *th); nh 包含網絡層頭部(例如 struct iphdr *iph); 以及 mac 包含鏈路層頭部指針(例如 struct ethkr * ethernet).</p>
+<p>如果你的驅動需要查看 TCP 報文的源和目的地址, 可以在 skb-&gt;h.th 中找到. 看頭文件來找到全部的可以這樣存取的頭部類型.</p>
+<p>注意網絡驅動負責設置進入報文的 mac 指針. 這個任務正常是由 eth_type_trans 處理, 但是 非以太網驅動不得不直接設置 skb-&gt;mac.raw, 如同"非以太網頭部"一節所示.</p>
+</dd>
+<dt><span class="term"><span>unsigned char *head;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned char *data;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned char *tail;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned char *end;</span></span></dt>
+<dd><p>用來尋址報文中數據的指針. head 指向分配內存的開始, data 是有效字節的開始(並且常常稍微比 head 大一些), tail 是有效字節的結尾, end 指向 tail 能夠到達的最大地址. 查看它的另一個方法是可用緩存空間是 skb-&gt;end - skb-&gt;head, 當前使用的空間是 skb-&gt;tail - skb-&gt;data.</p></dd>
+<dt><span class="term"><span>unsigned int len;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned int data_len;</span></span></dt>
+<dd><p>len 是報文中全部數據的長度, 而 data_len 是報文存儲於單個片中的部分的長度. 除非使用發散/匯聚 I/O, data_len 成員的值為 0.</p></dd>
+<dt><span class="term"><span>unsigned char ip_summed;</span></span></dt>
+<dd><p>這個報文的校驗和策略. 由驅動在進入報文上設置這個成員, 如在"報文接收"一節中描述的.</p></dd>
+<dt><span class="term"><span>unsigned char pkt_type;</span></span></dt>
+<dd><p>在遞送中使用的報文分類. 驅動負責設置它為 PACKET_HOST (報文是給自己的), PACKET_OTHERHOST (不, 這個報文不是給我的), PACKET_BROADCAST, 或者 PACKET_MULTICAST. 以太網驅動不顯式修改 pkt_type, 因為 eth_type_trans 為它們做.</p></dd>
+<dt><span class="term"><span>shinfo(struct sk_buff *skb);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned int shinfo(skb)-&gt;nr_frags;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>skb_frag_t shinfo(skb)-&gt;frags;</span></span></dt>
+<dd><p>由於性能的原因, 有些 skb 信息存儲於一個分開的結構中, 它在內存中緊接著 skb. 這個"shared info"(這樣命名是因為它可以在網絡代碼中多個 skb 拷貝中共享)必須通過 shinfo 宏定義來存取. 這個結構中有幾個成員, 但是大部分超出本書的範圍. 我們在"發散/匯聚 I/O"一節中見過 nr_frags 和 frags.</p></dd>
+</dl></div>
+<p>在結構中剩下的成員不是特別有趣. 它們用來維護緩存列表, 來統計 socket 擁有的緩存大小, 等等.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="FunctionsActingonSocketBuffers"></a>17.10.2.&#160;作用於 socket 緩存的函數</h3></div></div></div>
+<p>使用一個 sk_buff 結構的網絡驅動利用正式接口函數來操作它. 許多函數操作一個 socket 緩存; 這裡是最有趣的幾個:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct sk_buff *alloc_skb(unsigned int len, int priority);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct sk_buff *dev_alloc_skb(unsigned int len);</span></span></dt>
+<dd><p>分配一個緩存區. alloc_skb 函數分配一個緩存並且將 skb-&gt;data 和 skb-&gt;tail 都初始化成 skb-&gt;head. dev_alloc_skb 函數是使用 GFP_ATOMIC 優先級調用 alloc_skb 的快捷方法, 並且在 skb-&gt;head 和 skb-&gt;data 之間保留了一些空間. 這個數據空間用在網絡層之間的優化, 驅動不要動它.</p></dd>
+<dt><span class="term"><span>void kfree_skb(struct sk_buff *skb);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void dev_kfree_skb(struct sk_buff *skb);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void dev_kfree_skb_irq(struct sk_buff *skb);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void dev_kfree_skb_any(struct sk_buff *skb);</span></span></dt>
+<dd><p>釋放緩存. kfree_skb 調用由內核在內部使用. 一個驅動應當使用一種 dev_kfree_skb 的變體: 在非中斷上下文中使用 dev_kfree_skb, 在中斷上下文中使用 dev_kfree_skb_irq, 或者 dev_kfree_skb_any 在任何 2 種情況下.</p></dd>
+<dt><span class="term"><span>unsigned char *skb_put(struct sk_buff *skb, int len);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned char *__skb_put(struct sk_buff *skb, int len);</span></span></dt>
+<dd><p>更新 sk_buff 結構中的 tail 和 len 成員; 它們用來增加數據到緩存的結尾, 每個函數的返回值是 skb-&gt;tail 的前一個值(換句話說, 它指向剛剛創建的數據空間). 驅動可以使用返回值通過引用 memcpy(skb_put(...), data, len) 來拷貝數據或者一個等同的東東. 兩個函數的區別在於 skb_put 檢查以確認數據適合緩存, 而 __skb_put 省略這個檢查.</p></dd>
+<dt><span class="term"><span>unsigned char *skb_push(struct sk_buff *skb, int len);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned char *__skb_push(struct sk_buff *skb, int len);</span></span></dt>
+<dd><p>遞減 skb-&gt;data 和遞增 skb-&gt;len 的函數. 它們與 skb_put 相似, 除了數據是添加到報文的開始而不是結尾. 返回值指向剛剛創建的數據空間. 這些函數用來在發送報文之前添加一個硬件頭部. 又一次, __skb_push 不同在它不檢查空間是否足夠.</p></dd>
+<dt><span class="term"><span>int skb_tailroom(struct sk_buff *skb);</span></span></dt>
+<dd><p>返回可以在緩存中放置數據的可用空間數量. 如果驅動放了多於它能持有的數據到緩存中, 系統傻掉. 儘管你可能反對說一個 printk 會足夠來標識出這個錯誤, 內存破壞對系統是非常有害的以至於開發者決定採取確定的動作. 實際中, 你不該需要檢查可用空間, 如果緩存被正確地分配了. 因為驅動常常在分配緩存前獲知報文的大小, 只有一個嚴重壞掉的驅動會在緩存中安放太多的數據, 這樣出亂子就可當作一個應得的懲罰.</p></dd>
+<dt><span class="term"><span>int skb_headroom(struct sk_buff *skb);</span></span></dt>
+<dd><p>返回 data 前面的可用空間數量, 就是, 可以 "push" 給緩存多少字節.</p></dd>
+<dt><span class="term"><span>void skb_reserve(struct sk_buff *skb, int len);</span></span></dt>
+<dd><p>遞增 data 和 tail. 這個函數可用來在填充數據前保留空間. 大部分以太網接口保留 2 個字節在報文的前面; 因此, IP 頭對齊到 16 字節, 在 14 字節的以太網頭後面. snull 也這樣做, 儘管沒有在"報文接收"一節中展現這個指令以避免在那時引入過多概念.</p></dd>
+<dt><span class="term"><span>unsigned char *skb_pull(struct sk_buff *skb, int len);</span></span></dt>
+<dd><p>從報文的頭部去除數據. 驅動不會需要使用這個函數, 但是為完整而包含在這兒. 它遞減 skb-&gt;len 和遞增 skb-&gt;data; 這是硬件頭如何從進入報文開始被剝離.</p></dd>
+<dt><span class="term"><span>int skb_is_nonlinear(struct sk_buff *skb);</span></span></dt>
+<dd><p>返回一個真值, 如果這個 skb 分離為多個片為發散/匯聚 I/O.</p></dd>
+<dt><span class="term"><span>int skb_headlen(struct sk_buff *skb);</span></span></dt>
+<dd><p>返回 skb 的第一個片的長度(由 skb-&gt;data 指著).</p></dd>
+<dt><span class="term"><span>void *kmap_skb_frag(skb_frag_t *frag);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void kunmap_skb_frag(void *vaddr);</span></span></dt>
+<dd><p>如果你必須從內核中的一個非線性 skb 直接存取片, 這些函數為你映射以及去映射它們. 使用一個原子性 kmap, 因此你不能一次映射多於一個片.</p></dd>
+</dl></div>
+<p>內核定義了幾個其他的作用於 socket 緩存的函數, 但是它們是打算用於高層網絡代碼, 驅動不需要它們.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch17s09.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch17.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch17s11.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">17.9.&#160;連接狀態的改變&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;17.11.&#160;MAC 地址解析</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch17s10.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:43 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

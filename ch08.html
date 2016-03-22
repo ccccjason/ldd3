@@ -1,0 +1,157 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch08.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;8&#160;章&#160;分配內存-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch07s07.html" title="7.7.&#160;快速參考">
+<link rel="next" href="ch08s02.html" title="8.2.&#160;後備緩存">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;8&#160;章&#160;分配內存</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch07s07.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch08s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="AllocatingMemory.chap"></a>第&#160;8&#160;章&#160;分配內存</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch08.html#TheRealStoryofkmalloc.sect">8.1. kmalloc 的真實故事</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch08.html#TheFlagsArgument.sect">8.1.1. flags 參數</a></span></dt>
+<dt><span class="sect2"><a href="ch08.html#TheSizeArgument.sect">8.1.2.  size 參數</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch08s02.html">8.2. 後備緩存</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch08s02.html#AscullBasedontheSlabCachesscullc.sect">8.2.1. 一個基於 Slab 緩存的 scull: scullc</a></span></dt>
+<dt><span class="sect2"><a href="ch08s02.html#MemoryPools.sect">8.2.2. 內存池</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch08s03.html">8.3. get_free_page 和其友</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch08s03.html#AscullUsingWholePagesscullp.sect">8.3.1. 一個使用整頁的 scull: scullp</a></span></dt>
+<dt><span class="sect2"><a href="ch08s03.html#TheallocpagesInterface.sect">8.3.2. alloc_pages 接口</a></span></dt>
+<dt><span class="sect2"><a href="ch08s03.html#vallocandFriends.sect">8.3.3. vmalloc 和 其友</a></span></dt>
+<dt><span class="sect2"><a href="ch08s03.html#AscullUsingVirtualAddressesscullv.sect">8.3.4. 一個使用虛擬地址的 scull : scullv</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch08s04.html">8.4. 每-CPU 的變量</a></span></dt>
+<dt><span class="sect1"><a href="ch08s05.html">8.5. 獲得大量緩衝</a></span></dt>
+<dd><dl><dt><span class="sect2"><a href="ch08s05.html#AcquiringaDedicatedBufferatBootTime.sect">8.5.1. 在啟動時獲得專用的緩衝</a></span></dt></dl></dd>
+<dt><span class="sect1"><a href="ch08s06.html">8.6. 快速參考</a></span></dt>
+</dl>
+</div>
+<p>至此, 我們已經使用 kmalloc 和 kfree 來分配和釋放內存. Linux 內核提供了更豐富的一套內存分配原語, 但是. 在本章, 我們查看在設備驅動中使用內存的其他方法和如何優化你的系統的內存資源. 我們不涉及不同的體系實際上如何管理內存. 模塊不牽扯在分段, 分頁等問題中, 因為內核提供一個統一的內存管理驅動接口. 另外, 我們不會在本章描述內存管理的內部細節, 但是推遲在 15 章.</p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="TheRealStoryofkmalloc.sect"></a>8.1.&#160;kmalloc 的真實故事</h2></div></div></div>
+<p>kmalloc 分配引擎是一個有力的工具並且容易學習因為它對 malloc 的相似性. 這個函數快(除非它阻塞)並且不清零它獲得的內存; 分配的區仍然持有它原來的內容.<sup>[<a name="id450180" href="#ftn.id450180">28</a>]</sup> 分配的區也是在物理內存中連續. 在下面幾節, 我們詳細討論 kmalloc, 因此你能比較它和我們後來要討論的內存分配技術.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheFlagsArgument.sect"></a>8.1.1.&#160;flags 參數</h3></div></div></div>
+<p>記住 kmalloc 原型是:</p>
+<pre class="programlisting">
+#include &lt;linux/slab.h&gt; 
+void *kmalloc(size_t size, int flags); 
+</pre>
+<p>給 kmalloc 的第一個參數是要分配的塊的大小. 第 2 個參數, 分配標誌, 非常有趣, 因為它以幾個方式控制 kmalloc 的行為.</p>
+<p>最一般使用的標誌, GFP_KERNEL, 意思是這個分配((內部最終通過調用 __get_free_pages 來進行, 它是 GFP_ 前綴的來源) 代表運行在內核空間的進程而進行的. 換句話說, 這意味著調用函數是代表一個進程在執行一個系統調用. 使用 GFP_KENRL 意味著 kmalloc 能夠使當前進程在少內存的情況下睡眠來等待一頁. 一個使用 GFP_KERNEL 來分配內存的函數必須, 因此, 是可重入的並且不能在原子上下文中運行. 當當前進程睡眠, 內核採取正確的動作來定位一些空閒內存, 或者通過刷新緩存到磁盤或者交換出去一個用戶進程的內存.</p>
+<p>GFP_KERNEL 不一直是使用的正確分配標誌; 有時 kmalloc 從一個進程的上下文的外部調用. 例如, 這類的調用可能發生在中斷處理, tasklet, 和內核定時器中. 在這個情況下, 當前進程不應當被置為睡眠, 並且驅動應當使用一個 GFP_ATOMIC 標誌來代替. 內核正常地試圖保持一些空閒頁以便來滿足原子的分配. 當使用 GFP_ATOMIC 時, kmalloc 能夠使用甚至最後一個空閒頁. 如果這最後一個空閒頁不存在, 但是, 分配失敗.</p>
+<p>其他用來代替或者增添 GFP_KERNEL 和 GFP_ATOMIC 的標誌, 儘管它們 2 個涵蓋大部分設備驅動的需要. 所有的標誌定義在 &lt;linux/gfp.h&gt;, 並且每個標誌用一個雙下劃線做前綴, 例如 __GFP_DMA. 另外, 有符號代表常常使用的標誌組合; 這些缺乏前綴並且有時被稱為分配優先級. 後者包括:</p>
+<div class="variablelist"><dl>
+<dt><span class="term">GFP_ATOMIC <span></span></span></dt>
+<dd><p>用來從中斷處理和進程上下文之外的其他代碼中分配內存. 從不睡眠.</p></dd>
+<dt><span class="term">GFP_KERNEL <span></span></span></dt>
+<dd><p>內核內存的正常分配. 可能睡眠.</p></dd>
+<dt><span class="term">GFP_USER <span></span></span></dt>
+<dd><p>用來為用戶空間頁來分配內存; 它可能睡眠.</p></dd>
+<dt><span class="term">GFP_HIGHUSER <span></span></span></dt>
+<dd><p>如同 GFP_USER, 但是從高端內存分配, 如果有. 高端內存在下一個子節描述.</p></dd>
+<dt><span class="term">GFP_NOIO <span></span></span></dt>
+<dd></dd>
+<dt><span class="term">GFP_NOFS <span></span></span></dt>
+<dd><p>這個標誌功能如同 GFP_KERNEL, 但是它們增加限制到內核能做的來滿足請求. 一個 GFP_NOFS 分配不允許進行任何文件系統調用, 而 GFP_NOIO 根本不允許任何 I/O 初始化. 它們主要地用在文件系統和虛擬內存代碼, 那裡允許一個分配睡眠, 但是遞歸的文件系統調用會是一個壞注意.</p></dd>
+</dl></div>
+<p>上面列出的這些分配標誌可以是下列標誌的相或來作為參數, 這些標誌改變這些分配如何進行:</p>
+<div class="variablelist"><dl>
+<dt><span class="term">__GFP_DMA <span></span></span></dt>
+<dd><p>這個標誌要求分配在能夠 DMA 的內存區. 確切的含義是平台依賴的並且在下面章節來解釋.</p></dd>
+<dt><span class="term">__GFP_HIGHMEM <span></span></span></dt>
+<dd><p>這個標誌指示分配的內存可以位於高端內存.</p></dd>
+<dt><span class="term">__GFP_COLD <span></span></span></dt>
+<dd><p>正常地, 內存分配器盡力返回"緩衝熱"的頁 -- 可能在處理器緩衝中找到的頁. 相反, 這個標誌請求一個"冷"頁, 它在一段時間沒被使用. 它對分配頁作 DMA 讀是有用的, 此時在處理器緩衝中出現是無用的. 一個完整的對如何分配 DMA 緩存的討論看"直接內存存取"一節在第 1 章.</p></dd>
+<dt><span class="term">__GFP_NOWARN <span></span></span></dt>
+<dd><p>這個很少用到的標誌阻止內核來發出警告(使用 printk ), 當一個分配無法滿足.</p></dd>
+<dt><span class="term">__GFP_HIGH <span></span></span></dt>
+<dd><p>這個標誌標識了一個高優先級請求, 它被允許來消耗甚至被內核保留給緊急狀況的最後的內存頁.</p></dd>
+<dt><span class="term">__GFP_REPEAT<span></span></span></dt>
+<dd></dd>
+<dt><span class="term">__GFP_NOFAIL<span></span></span></dt>
+<dd></dd>
+<dt><span class="term">__GFP_NORETRY <span></span></span></dt>
+<dd><p>這些標誌修改分配器如何動作, 當它有困難滿足一個分配. __GFP_REPEAT 意思是" 更盡力些嘗試" 通過重複嘗試 -- 但是分配可能仍然失敗. __GFP_NOFAIL 標誌告訴分配器不要失敗; 它盡最大努力來滿足要求. 使用 __GFP_NOFAIL 是強烈不推薦的; 可能從不會有有效的理由在一個設備驅動中使用它. 最後, __GFP_NORETRY 告知分配器立即放棄如果得不到請求的內存.</p></dd>
+</dl></div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Memoryzones.sect"></a>8.1.1.1.&#160;內存區</h4></div></div></div>
+<p>__GFP_DMA 和 __GFP_HIGHMEM 都有一個平台相關的角色, 儘管對所有平台它們的使用都有效.</p>
+<p>Linux 內核知道最少 3 個內存區: DMA-能夠 內存, 普通內存, 和高端內存. 儘管通常地分配都發生於普通區, 設置這些剛剛提及的位的任一個請求從不同的區來分配內存. 這個想法是, 每個必須知道特殊內存範圍(不是認為所有的 RAM 等同)的計算機平台將落入這個抽像中.</p>
+<p>DMA-能夠 的內存是位於一個優先的地址範圍, 外設可以在這裡進行 DMA 存取. 在大部分的健全的平台, 所有的內存都在這個區. 在 x86, DMA 區用在 RAM 的前 16 MB, 這裡傳統的 ISA 設備可以進行 DMA; PCI 設備沒有這個限制.</p>
+<p>高端內存是一個機制用來允許在 32-位 平台存取(相對地)大量內存. 如果沒有首先設置一個特殊的映射這個內存無法直接從內核存取並且通常更難使用. 如果你的驅動使用大量內存, 但是, 如果它能夠使用高端內存它將在大系統中工作的更好. 高端內存如何工作以及如何使用它的詳情見第 1 章的"高端和低端內存"一節.</p>
+<p>無論何時分配一個新頁來滿足一個內存分配請求, 內核都建立一個能夠在搜索中使用的內存區的列表. 如果 __GFP_DMA 指定了, 只有 DMA 區被搜索: 如果在低端沒有內存可用, 分配失敗. 如果沒有特別的標誌存取, 普通和 DMA 內存都被搜索; 如果 __GFP_HIGHMEM 設置了, 所有的 3 個區都用來搜索一個空閒的頁. (注意, 但是, kmalloc  不能分配高端內存.)</p>
+<p>情況在非統一內存存取(NUMA)系統上更加複雜. 作為一個通用的規則, 分配器試圖定位進行分配的處理器的本地的內存, 儘管有幾個方法來改變這個行為.</p>
+<p>內存區後面的機制在 mm/page_alloc.c 中實現, 而內存區的初始化在平台特定的文件中, 常常在 arch 目錄樹的 mm/init.c. 我們將在第 15 章再次討論這些主題.</p>
+</div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheSizeArgument.sect"></a>8.1.2.&#160; size 參數</h3></div></div></div>
+<p>內核管理系統的物理內存, 這些物理內存只是以頁大小的塊來使用. 結果是, kmalloc 看來非常不同於一個典型的用戶空間 malloc 實現. 一個簡單的, 面向堆的分配技術可能很快有麻煩; 它可能在解決頁邊界時有困難. 因而, 內核使用一個特殊的面向頁的分配技術來最好地利用系統 RAM.</p>
+<p>Linux 處理內存分配通過創建一套固定大小的內存對像池. 分配請求被這樣來處理, 進入一個持有足夠大的對象的池子並且將整個內存塊遞交給請求者. 內存管理方案是非常複雜, 並且細節通常不是全部設備驅動編寫者都感興趣的.</p>
+<p>然而, 驅動開發者應當記住的一件事情是, 內核只能分配某些預定義的, 固定大小的字節數組. 如果你請求一個任意數量內存, 你可能得到稍微多於你請求的, 至多是 2 倍數量. 同樣, 程序員應當記住 kmalloc 能夠處理的最小分配是 32 或者 64 字節, 依賴系統的體系所使用的頁大小.</p>
+<p>kmalloc 能夠分配的內存塊的大小有一個上限. 這個限制隨著體系和內核配置選項而變化. 如果你的代碼是要完全可移植, 它不能指望可以分配任何大於 128 KB. 如果你需要多於幾個 KB, 但是, 有個比 kmalloc 更好的方法來獲得內存, 我們在本章後面描述.</p>
+</div>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id450180" href="#id450180">28</a>] </sup>在其他的之中, 這暗含著你應當明確地清零可能暴露給用戶空間或者寫入設備的內存; 否則, 你可能冒險將應當保密的信息透露出去.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch07s07.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch08s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">7.7.&#160;快速參考&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;8.2.&#160;後備緩存</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch08.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

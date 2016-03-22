@@ -1,0 +1,258 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch16.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:41 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;16&#160;章&#160;塊驅動-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch15s05.html" title="15.5.&#160;快速參考">
+<link rel="next" href="ch16s02.html" title="16.2.&#160;塊設備操作">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;16&#160;章&#160;塊驅動</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch15s05.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch16s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="BlockDrivers.chap"></a>第&#160;16&#160;章&#160;塊驅動</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch16.html#Registration.sect1">16.1. 註冊</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch16.html#BlockDriverRegistration.sect2">16.1.1. 塊驅動註冊</a></span></dt>
+<dt><span class="sect2"><a href="ch16.html#DiskRegistration.sect2">16.1.2. 磁盤註冊</a></span></dt>
+<dt><span class="sect2"><a href="ch16.html#Initializationinsbull.sect2">16.1.3. 在 sbull 中的初始化</a></span></dt>
+<dt><span class="sect2"><a href="ch16.html#ANoteonSectorSizes.sect2">16.1.4. 注意扇區大小</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch16s02.html">16.2. 塊設備操作</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch16s02.html#TheopenandreleaseMethods.sect2">16.2.1. open 和 release 方法</a></span></dt>
+<dt><span class="sect2"><a href="ch16s02.html#SupportingRemovableMedia.sect2">16.2.2. 支持可移出的介質</a></span></dt>
+<dt><span class="sect2"><a href="ch16s02.html#TheioctlMethod.sect2">16.2.3. ioctl 方法</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch16s03.html">16.3. 請求處理</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch16s03.html#IntroductiontotherequestMethod.sect2">16.3.1. 對請求方法的介紹</a></span></dt>
+<dt><span class="sect2"><a href="ch16s03.html#ASimplerequestMethod.sect2">16.3.2. 一個簡單的請求方法</a></span></dt>
+<dt><span class="sect2"><a href="ch16s03.html#RequestQueues.sect2">16.3.3. 請求隊列</a></span></dt>
+<dt><span class="sect2"><a href="ch16s03.html#TheAnatomyofaRequest.sect2">16.3.4. 請求的分析</a></span></dt>
+<dt><span class="sect2"><a href="ch16s03.html#RequestCompletionFunctions.sect2">16.3.5. 請求完成函數</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch16s04.html">16.4. 一些其他的細節</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch16s04.html#CommandPrePreparation.sect2">16.4.1. 命令預準備</a></span></dt>
+<dt><span class="sect2"><a href="ch16s04.html#TaggedCommandQueueing.sect2">16.4.2. 被標識的命令排隊</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch16s05.html">16.5. 快速參考</a></span></dt>
+</dl>
+</div>
+<p>至今, 我們的討論一直限於字符驅動. 但是, 在 Linux 系統中有其他類型的驅動, 並且到時候要開闊我們的視野了. 因此, 本章討論塊驅動.</p>
+<p>一個塊驅動提供設備的存取, 這個設備可隨機地以固定大小的塊傳送數據--主要的是, 磁盤驅動. Linux 內核看待塊設備根本上不同於字符設備; 結果, 塊驅動有明顯不同的接口和它們自己的特殊的挑戰.</p>
+<p>高效的塊驅動對於性能是重要的 -- 不只是為在用戶應用程序的明確的讀和寫. 現代的有虛擬內存的系統將不需要的數據移向(希望地)二級存儲中, 它常常是一個磁盤驅動器. 塊驅動是核心內存和二級存儲之間的導管; 因此, 它們可組成虛擬內存子系統的一部分. 雖然可能編寫一個塊驅動不必知道 struct page 和其他重要的內存概念, 任何需要編寫一個高性能驅動的人必須使用 15 章所涉及的內容.</p>
+<p>許多塊層的設計圍繞性能. 許多字符設備可在它們的最大速率以下運行, 並且系統的總體性能不被影響. 但是如果它的塊 I/O 子系統沒有調整好, 系統不能很好地運行. Linux 塊驅動接口允許你從一個塊設備中獲得最多輸出, 但是有必要, 施加一些你必須處理的複雜性. 好的是, 2.6 的塊接口比之前的內核很大提高.</p>
+<p>如你會期望的, 本章的討論集中在一個例子驅動, 它實現了一個面向塊的, 基於內存的設備. 基本上, 它是一個 ramdisk. 內核硬件包含了一個很高級的 ramdisk 實現, 但是我們的驅動(稱為 sbull)讓我們演示創建一個塊驅動, 同時最小化無關的複雜性.</p>
+<p>在進入細節之前, 我們精確定義幾個詞語. 一個塊是一個固定大小的數據塊, 大小由內核決定. 塊常常是 4096 字節, 但是這個值可依賴體系和使用的文件系統而變化. 一個扇區, 相反, 是一個小塊, 它的大小常常由底層的硬件決定. 內核期望處理實現 512-字節扇區的設備. 如果你的設備使用不同的大小, 內核調整並且避免產生硬件無法處理的 I/O 請求. 但是, 它值得記住, 任何時候內核給你一個扇區號, 它是工作在一個 512-字節扇區的世界. 如果你使用不同的硬件扇區大小, 你必須相應地調整內核的扇區號. 我們在 sbull 驅動中見如何完成這個.</p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="Registration.sect1"></a>16.1.&#160;註冊</h2></div></div></div>
+<p>塊驅動, 象字符驅動, 必須使用一套註冊接口來使內核可使用它們的設備. 概念是類似的, 但是塊設備註冊的細節是都不同的. 你有一整套新的數據結構和設備操作要學習.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="BlockDriverRegistration.sect2"></a>16.1.1.&#160;塊驅動註冊</h3></div></div></div>
+<p>大部分塊驅動採取的第一步是註冊它們自己到內核. 這個任務的函數是 register_blkdev(在 &lt;linux/fs.h&gt; 中定義):</p>
+<pre class="programlisting">
+int register_blkdev(unsigned int major, const char *name); 
+</pre>
+<p>參數是你的設備要使用的主編號和關聯的名子(內核將顯示它在 /proc/devices). 如果 major 傳遞為0, 內核分配一個新的主編號並且返回它給調用者. 如常, 自 register_blkdev 的一個負的返回值指示已發生了一個錯誤.</p>
+<p>取消註冊的對應函數是:</p>
+<pre class="programlisting">
+int unregister_blkdev(unsigned int major, const char *name); 
+</pre>
+<p>這裡, 參數必須匹配傳遞給 register_blkdev 的那些, 否則這個函數返回 -EINVAL 並且什麼都不註銷.</p>
+<p>在2.6內核, 對 register_blkdev 的調用完全是可選的. 由 register_blkdev 所進行的功能已隨時間正在減少; 這個調用唯一的任務是 (1) 如果需要, 分配一個動態主編號, 並且 (2) 在 /proc/devices 創建一個入口. 在將來的內核, register_blkdev 可能被一起去掉. 同時, 但是, 大部分驅動仍然調用它; 它是慣例.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="DiskRegistration.sect2"></a>16.1.2.&#160;磁盤註冊</h3></div></div></div>
+<p>雖然 register_blkdev 可用來獲得一個主編號, 它不使任何磁盤驅動器對系統可用. 有一個分開的註冊接口你必須使用來管理單獨的驅動器. 使用這個接口要求熟悉一對新結構, 這就是我們的起點.</p>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Blockdeviceoperations.sect3"></a>16.1.2.1.&#160;塊設備操作</h4></div></div></div>
+<p>字符設備通過 file_ 操作結構使它們的操作對系統可用. 一個類似的結構用在塊設備上; 它是 struct block_device_operations, 定義在 &lt;linux/fs.h&gt;. 下面是一個對這個結構中的成員的簡短的概覽; 當我們進入 sbull 驅動的細節時詳細重新訪問它們.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int (*open)(struct inode *inode, struct file *filp);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int (*release)(struct inode *inode, struct file *filp);</span></span></dt>
+<dd><p>就像它們的字符驅動對等體一樣工作的函數; 無論何時設備被打開和關閉都調用它們. 一個字符驅動可能通過啟動設備或者鎖住門(為可移出的介質)來響應一個 open 調用. 如果你將介質鎖入設備, 你當然應當在 release 方法中解鎖.</p></dd>
+<dt><span class="term"><span>int (*ioctl)(struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg);</span></span></dt>
+<dd><p>實現 ioctl 系統調用的方法. 但是, 塊層首先解釋大量的標準請求; 因此大部分的塊驅動 ioctl 方法相當短.</p></dd>
+<dt><span class="term"><span>int (*media_changed) (struct gendisk *gd);</span></span></dt>
+<dd>
+<p>被內核調用來檢查是否用戶已經改變了驅動器中的介質的方法, 如果是這樣返回一個非零值. 顯然, 這個方法僅適用於支持可移出的介質的驅動器(並且最好給驅動一個"介質被改變"標誌); 在其他情況下可被忽略.</p>
+<p>struct gendisk 參數是內核任何表示單個磁盤; 我們將在下一節查看這個結構.</p>
+</dd>
+<dt><span class="term"><span>int (*revalidate_disk) (struct gendisk *gd);</span></span></dt>
+<dd><p>revalidate_disk 方法被調用來響應一個介質改變; 它給驅動一個機會來進行需要的任何工作使新介質準備好使用. 這個函數返回一個 int 值, 但是值被內核忽略.</p></dd>
+<dt><span class="term"><span>struct module *owner;</span></span></dt>
+<dd><p>一個指向擁有這個結構的模塊的指針; 它應當常常被初始化為 THIS_MODULE.</p></dd>
+</dl></div>
+<p>專心的讀者可能已注意到這個列表一個有趣的省略: 沒有實際讀或寫數據的函數. 在塊 I/O 子系統, 這些操作由請求函數處理, 它們應當有它們自己的一節並且在本章後面討論. 在我們談論服務請求之前, 我們必須完成對磁盤註冊的討論.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Thegendiskstructure.sect3"></a>16.1.2.2.&#160;gendisk 結構</h4></div></div></div>
+<p>struct gendisk (定義於 &lt;linux/genhd.h&gt;) 是單獨一個磁盤驅動器的內核表示. 事實上, 內核還使用 gendisk 來表示分區, 但是驅動作者不必知道這點. struct gedisk 中有幾個成員, 必須被一個塊驅動初始化:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int major;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int first_minor;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int minors;</span></span></dt>
+<dd><p>描述被磁盤使用的設備號的成員. 至少, 一個驅動器必須使用最少一個次編號. 如果你的驅動會是可分區的, 但是(並且大部分應當是), 你要分配一個次編號給每個可能的分區. 次編號的一個普通的值是 16, 它允許"全磁盤"設備盒 15 個分區. 一些磁盤驅動使用 64 個次編號給每個設備.</p></dd>
+<dt><span class="term"><span>char disk_name[32];</span></span></dt>
+<dd><p>應當被設置為磁盤驅動器名子的成員. 它出現在 /proc/partitions 和 sysfs.</p></dd>
+<dt><span class="term"><span>struct block_device_operations *fops;</span></span></dt>
+<dd><p>來自前一節的設備操作集合.</p></dd>
+<dt><span class="term"><span>struct request_queue *queue;</span></span></dt>
+<dd><p>被內核用來管理這個設備的 I/O 請求的結構; 我們在"請求處理"一節中檢查它.</p></dd>
+<dt><span class="term"><span>int flags;</span></span></dt>
+<dd><p>一套標誌(很少使用), 描述驅動器的狀態. 如果你的設備有可移出的介質, 你應當設置 GENHD_FL_REMOVABLE. CD-ROM 驅動器可設置 GENHD_FL_CD. 如果, 由於某些原因, 你不需要分區信息出現在 /proc/partitions, 設置 GENHD_FL_SUPPRESS_PARTITIONS_INFO.</p></dd>
+<dt><span class="term"><span>sector_t capacity;</span></span></dt>
+<dd><p>這個驅動器的容量, 以512-字節扇區來計. sector_t 類型可以是 64 位寬. 驅動不應當直接設置這個成員; 相反, 傳遞扇區數目給 set_capacity.</p></dd>
+<dt><span class="term"><span>void *private_data;</span></span></dt>
+<dd><p>塊驅動可使用這個成員作為一個指向它們自己內部數據的指針.</p></dd>
+</dl></div>
+<p>內核提供了一小部分函數來使用 gendisk 結構. 我們在這裡介紹它們, 接著看 sbull 如何使用它們來使系統可使用它的磁盤驅動器.</p>
+<p>struct gendisk 是一個動態分配的結構, 它需要特別的內核操作來初始化; 驅動不能自己分配這個結構. 相反, 你必須調用:</p>
+<pre class="programlisting">
+struct gendisk *alloc_disk(int minors); 
+</pre>
+<p>minors 參數應當是這個磁盤使用的次編號數目; 注意你不能在之後改變 minors 成員並且期望事情可以正確工作. 當不再需要一個磁盤時, 它應當被釋放, 使用:</p>
+<pre class="programlisting">
+void del_gendisk(struct gendisk *gd);
+</pre>
+<p>一個 gendisk 是一個被引用計數的結構(它含有一個 kobject). 有 get_disk 和 put_disk 函數用來操作引用計數, 但是驅動應當從不需要做這個. 正常地, 對 del_gendisk 的調用去掉了最一個 gendisk 的最終的引用, 但是不保證這樣. 因此, 這個結構可能繼續存在(並且你的方法可能被調用)在調用 del_gendisk 之後. 但是, 如果你刪除這個結構當沒有用戶時(即, 在最後的釋放之後, 或者在你的模塊清理函數), 你可確信你不會再收到它的信息.</p>
+<p>分配一個 gendisk 結構不能使系統可使用這個磁盤. 要做到這點, 你必須初始化這個結構並且調用 add_disk:</p>
+<pre class="programlisting">
+void add_disk(struct gendisk *gd); 
+</pre>
+<p>這裡記住一件重要的事情:一旦你調用add_disk, 這個磁盤是"活的"並且它的方法可被在任何時間被調用. 實際上, 這樣的第一個調用將可能發生, 即便在 add_disk 返回之前; 內核將讀前幾個字節以試圖找到一個分區表. 因此你不應當調用 add_disk 直到你的驅動被完全初始化並且準備好響應對那個磁盤的請求.</p>
+</div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Initializationinsbull.sect2"></a>16.1.3.&#160;在 sbull 中的初始化</h3></div></div></div>
+<p>是時間進入一些例子了. sbull 驅動(從 O'Reilly 的 FTP 網站, 以及其他例子源碼)實現一套內存中的虛擬磁盤驅動器. 對每個驅動器, sbull 分配(使用 vmalloc, 為了簡單)一個內存數組; 它接著使這個數組可通過塊操作來使用. 這個 sbull 驅動可通過分區這個驅動器, 在上面建立文件系統, 以及加載到系統層級中來測試. </p>
+<p>像我們其他的例子驅動一樣, sbull 允許一個主編號在編譯或者模塊加載時被指定. 如果沒有指定, 動態分配一個. 因為對 register_blkdev 的調用被用來動態分配, sbull 應當這樣做:</p>
+<pre class="programlisting">
+sbull_major = register_blkdev(sbull_major, "sbull");
+if (sbull_major &lt;= 0)
+{
+        printk(KERN_WARNING "sbull: unable to get major number\n");
+        return -EBUSY;
+}
+</pre>
+<p>同樣, 像我們在本書已展現的其他虛擬設備, sbull 設備由一個內部結構描述:</p>
+<pre class="programlisting">
+struct sbull_dev {
+ int size;  /* Device size in sectors */ 
+ u8 *data;  /* The data array */ 
+ short users;  /* How many users */ 
+ short media_change;  /* Flag a media change? */ 
+ spinlock_t lock;  /* For mutual exclusion */ 
+ struct request_queue *queue;  /* The device request queue */ 
+ struct gendisk *gd;  /* The gendisk structure */ 
+ struct timer_list timer;  /* For simulated media changes */  
+};  
+</pre>
+<p>需要幾個步驟來初始化這個結構, 並且使系統可用關聯的設備. 我們從基本的初始化開始, 並且分配底層的內存:</p>
+<pre class="programlisting">
+memset (dev, 0, sizeof (struct sbull_dev));
+dev-&gt;size = nsectors*hardsect_size;
+dev-&gt;data = vmalloc(dev-&gt;size);
+if (dev-&gt;data == NULL)
+{
+        printk (KERN_NOTICE "vmalloc failure.\n");
+        return;
+}
+spin_lock_init(&amp;dev-&gt;lock);
+</pre>
+<p>重要的是在下一步之前分配和初始化一個自旋鎖, 下一步是分配請求隊列. 我們在進入請求處理時詳細看這個過程; 現在, 只需說必要的調用是:</p>
+<pre class="programlisting">
+dev-&gt;queue = blk_init_queue(sbull_request, &amp;dev-&gt;lock); 
+</pre>
+<p>這裡, sbull_request 是我們的請求函數 -- 實際進行塊讀和寫請求的函數. 當我們分配一個請求隊列時, 我們必須提供一個自旋鎖來控制對那個隊列的存取. 這個鎖由驅動提供而不是內核通常的部分, 因為, 常常, 請求隊列和其他的驅動數據結構在相同的臨界區; 它們可能被同時存取. 如同任何分配內存的函數, blk_init_queue 可能失敗, 因此你必須在繼續之前檢查返回值.</p>
+<p>一旦我們有我們的設備內存和請求隊列, 我們可分配, 初始化, 並且安裝對應的 gendisk 結構. 做這個工作的代碼是:</p>
+<pre class="programlisting">
+dev-&gt;gd = alloc_disk(SBULL_MINORS);
+if (! dev-&gt;gd)
+{
+        printk (KERN_NOTICE "alloc_disk failure\n");
+        goto out_vfree;
+}
+dev-&gt;gd-&gt;major = sbull_major;
+dev-&gt;gd-&gt;first_minor = which*SBULL_MINORS;
+dev-&gt;gd-&gt;fops = &amp;sbull_ops;
+dev-&gt;gd-&gt;queue = dev-&gt;queue;
+dev-&gt;gd-&gt;private_data = dev;
+snprintf (dev-&gt;gd-&gt;disk_name, 32, "sbull%c", which + 'a');
+set_capacity(dev-&gt;gd, nsectors*(hardsect_size/KERNEL_SECTOR_SIZE));
+add_disk(dev-&gt;gd);
+</pre>
+<p>這裡, SBULL_MINORS 是每個 sbull 設備所支持的次編號的數目. 當我們設置第一個次編號給每個設備, 我們必須考慮被之前的設備所用的全部編號. 磁盤的名子被設置, 這樣第一個是 sbulla, 第二個是 sbullb, 等等. 用戶空間可接著添加分區號以便它們在第 2 個設備上的分區可能是 /dev/sbull3. </p>
+<p>一旦所有的都被設置, 我們以對 add_disk 的調用來結束. 我們的幾個方法將在 add_disk 返回時被調用, 因此我們負責做這個調用, 這是初始化我們的設備的最後一步.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ANoteonSectorSizes.sect2"></a>16.1.4.&#160;注意扇區大小</h3></div></div></div>
+<p>如同我們之前提到的, 內核對待每個磁盤如同一個 512-字節扇區的數組. 不是所有的硬件都使用那個扇區大小, 但是. 使一個有不同扇區大小的設備工作不是一件很難的事; 只要小心處理幾個細節. sbull 設備輸出一個 hardsect_size 參數, 可被用來改變設備的"硬件"扇區大小. 通過看它的實現, 你可見到如何添加這個支持到你自己的驅動.</p>
+<p>這些細節中的第一個是通知內核你的設備支持的扇區大小. 硬件扇區大小是一個在請求隊列的參數, 而不是在 gendisk 結構. 這個大小通過調用 blk_queue_hardsect_size 設置的, 在分配隊列後馬上進行:</p>
+<pre class="programlisting">
+blk_queue_hardsect_size(dev-&gt;queue, hardsect_size); 
+</pre>
+<p>一旦完成那個, 內核堅持你的設備的硬件扇區大小. 所有的 I/O 請求被正確對齊到一個硬件扇區的起始, 並且每個請求的長度是一個整數的扇區數. 你必須記住, 但是, 內核一直以 512-字節扇區表述自己; 因此, 有必要相應地轉換所有的扇區號. 因此, 例如, 當 sbull 在它的 gendisk 結構中設置設備的容量時, 這個調用看來像:</p>
+<pre class="programlisting">
+set_capacity(dev-&gt;gd, nsectors*(hardsect_size/KERNEL_SECTOR_SIZE));
+</pre>
+<p>KERNEL_SECTOR_SIZE 是一個本地定義的常量, 我們用來調整內核的 512-字節和任何我們已被告知要使用的大小. 在我們查看 sbull 請求處理邏輯中會不時看到這類計算出來.</p>
+</div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch15s05.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch16s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">15.5.&#160;快速參考&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;16.2.&#160;塊設備操作</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch16.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:41 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

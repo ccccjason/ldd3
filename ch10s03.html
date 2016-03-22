@@ -1,0 +1,144 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch10s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>10.3.&#160;前和後半部-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch10.html" title="第&#160;10&#160;章&#160;中斷處理">
+<link rel="prev" href="ch10s02.html" title="10.2.&#160;安裝一個中斷處理">
+<link rel="next" href="ch10s04.html" title="10.4.&#160;中斷共享">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">10.3.&#160;前和後半部</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch10s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;10&#160;章&#160;中斷處理</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch10s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="TopandBottomHalves.sect"></a>10.3.&#160;前和後半部</h2></div></div></div>
+<p>中斷處理的一個主要問題是如何在處理中進行長時間的任務. 常常大量的工作必須響應一個設備中斷來完成, 但是中斷處理需要很快完成並且不使中斷阻塞太長. 這 2 個需要(工作和速度)彼此衝突, 留給驅動編寫者一點困擾.</p>
+<p>Linux (許多其他系統一起)解決這個問題通過將中斷處理分為 2 半. 所謂的前半部是實際響應中斷的函數 -- 你使用 request_irq 註冊的那個. 後半部是由前半部調度來延後執行的函數, 在一個更安全的時間. 最大的不同在前半部處理和後半部之間是所有的中斷在後半部執行時都使能 -- 這就是為什麼它在一個更安全時間運行. 在典型的場景中, 前半部保存設備數據到一個設備特定的緩存, 調度它的後半部, 並且退出: 這個操作非常快. 後半部接著進行任何其他需要的工作, 例如喚醒進程, 啟動另一個 I/O 操作, 等等. 這種設置允許前半部來服務一個新中斷而同時後半部仍然在工作.</p>
+<p>幾乎每個認真的中斷處理都這樣劃分. 例如, 當一個網絡接口報告有新報文到達, 處理者只是獲取數據並且上推給協議層; 報文的實際處理在後半部進行.</p>
+<p>Linux 內核有 2 個不同的機制可用來實現後半部處理, 我們都在第 7 章介紹. tasklet 常常是後半部處理的首選機制; 它們非常快, 但是所有的 tasklet 代碼必須是原子的. tasklet 的可選項是工作隊列, 它可能有一個更高的運行週期但是允許睡眠.</p>
+<p>下面的討論再次使用 short 驅動. 當使用一個模塊選項加載時, short 能夠被告知在前/後半部模式使用一個 tasklet 或者工作隊列處理者來進行中斷處理. 在這個情況下, 前半部快速地執行; 它簡單地記住當前時間並且調度後半部處理. 後半部接著負責將時間編碼並且喚醒任何可能在等待數據的用戶進程.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Tasklet.sect"></a>10.3.1.&#160;Tasklet 實現</h3></div></div></div>
+<p>記住 tasklet 是一個特殊的函數, 可能被調度來運行, 在軟中斷上下文, 在一個系統決定的安全時間中. 它們可能被調度運行多次, 但是 tasklet 調度不累積; ; tasklet 只運行一次, 即便它在被投放前被重複請求. 沒有 tasklet 會和它自己並行運行, 因為它只運行一次, 但是 tasklet 可以與 SMP 系統上的其他 tasklet 並行運行. 因此, 如果你的驅動有多個 tasklet, 它們必須採取某類加鎖來避免彼此衝突.</p>
+<p>tasklet 也保證作為函數運行在第一個調度它們的同一個 CPU 上. 因此, 一個中斷處理可以確保一個 tasklet 在處理者結束前不會開始執行. 但是, 另一個中斷當然可能在 tasklet 在運行時被遞交, 因此, tasklet 和中斷處理之間加鎖可能仍然需要.</p>
+<p>tasklet 必須使用 DECLARE_TASKLET 宏來聲明:</p>
+<pre class="programlisting">
+DECLARE_TASKLET(name, function, data);
+</pre>
+<p>name 是給 tasklet 的名子, function 是調用來執行 tasklet (它帶一個 unsigned long 參數並且返回 void )的函數, 以及 data 是一個 unsigned long 值來傳遞給 tasklet 函數.</p>
+<p>short 驅動聲明它的 tasklet 如下:</p>
+<pre class="programlisting">
+void short_do_tasklet(unsigned long);
+DECLARE_TASKLET(short_tasklet, short_do_tasklet, 0);
+</pre>
+<p>函數 tasklet_schedule 用來調度一個 tasklet 運行. 如果 short 使用 tasklet=1 來加載, 它安裝一個不同的中斷處理來保存數據並且調度 tasklet 如下:</p>
+<pre class="programlisting">
+irqreturn_t short_tl_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+        do_gettimeofday((struct timeval *) tv_head); /* cast to stop 'volatile' warning
+                         */
+        short_incr_tv(&amp;tv_head);
+        tasklet_schedule(&amp;short_tasklet);
+        short_wq_count++; /* record that an interrupt arrived */
+        return IRQ_HANDLED;
+}
+</pre>
+<p>實際的 tasklet 函數, short_do_tasklet, 將在系統方便時很快執行. 如同前面提過, 這個函數進行處理中斷的大量工作; 它看來如此:</p>
+<pre class="programlisting">
+void short_do_tasklet (unsigned long unused)
+{
+        int savecount = short_wq_count, written;
+        short_wq_count = 0; /* we have already been removed from the queue */
+        /*
+        * The bottom half reads the tv array, filled by the top half,
+        * and prints it to the circular text buffer, which is then consumed
+        * by reading processes */
+        /* First write the number of interrupts that occurred before this bh */
+        written = sprintf((char *)short_head,"bh after %6i\n",savecount);
+        short_incr_bp(&amp;short_head, written);
+        /*
+        * Then, write the time values. Write exactly 16 bytes at a time,
+        * so it aligns with PAGE_SIZE */
+
+        do {
+                written = sprintf((char *)short_head,"%08u.%06u\n",
+                                  (int)(tv_tail-&gt;tv_sec % 100000000),
+                                  (int)(tv_tail-&gt;tv_usec));
+                short_incr_bp(&amp;short_head, written);
+                short_incr_tv(&amp;tv_tail);
+        } while (tv_tail != tv_head);
+
+        wake_up_interruptible(&amp;short_queue); /* awake any reading process */
+}
+</pre>
+<p>在別的東西中, 這個 tasklet 記錄了從它上次被調用以來有多少中斷到達. 一個如 short 一樣的設備能夠在短時間內產生大量中斷, 因此在後半部執行前有幾個中斷到達就不是不尋常的. 驅動必須一直準備這種可能性並且必須能夠從前半部留下的信息中決定有多少工作要做.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Workqueues.sect"></a>10.3.2.&#160;工作隊列</h3></div></div></div>
+<p>回想, 工作隊列在將來某個時候調用一個函數, 在一個特殊工作者進程的上下文中. 因為這個工作隊列函數在進程上下文運行, 它在需要時能夠睡眠. 但是, 你不能從一個工作隊列拷貝數據到用戶空間, 除非你使用我們在 15 章演示的高級技術; 工作者進程不存取任何其他進程的地址空間.</p>
+<p>short 驅動, 如果設置 wq 選項為一個非零值來加載, 為它的後半部處理使用一個工作隊列. 它使用系統缺省的工作隊列, 因此不要求特殊的設置代碼; 如果你的驅動有特別的運行週期要求(或者可能在工作隊列函數長時間睡眠), 你可能需要創建你自己的, 專用的工作隊列. 我們確實需要一個 work_struct 結構, 它聲明和初始化使用下列:</p>
+<pre class="programlisting">
+static struct work_struct short_wq;
+/* this line is in short_init() */
+INIT_WORK(&amp;short_wq, (void (*)(void *)) short_do_tasklet, NULL);
+</pre>
+<p>我們的工作者函數是 short_do_tasklet, 我們已經在前面一節看到.</p>
+<p>當使用一個工作隊列, short 還建立另一個中斷處理, 看來如此:</p>
+<pre class="programlisting">
+irqreturn_t short_wq_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+        /* Grab the current time information. */
+        do_gettimeofday((struct timeval *) tv_head);
+        short_incr_tv(&amp;tv_head);
+        /* Queue the bh. Don't worry about multiple enqueueing */
+        schedule_work(&amp;short_wq);
+        short_wq_count++; /* record that an interrupt arrived */
+        return IRQ_HANDLED;
+}
+</pre>
+<p>如你所見, 中斷處理看來非常像這個 tasklet 版本, 除了它調用 schedule_work 來安排後半部處理.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch10s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch10.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch10s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">10.2.&#160;安裝一個中斷處理&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;10.4.&#160;中斷共享</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch10s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

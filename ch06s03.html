@@ -1,0 +1,174 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch06s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>6.3.&#160;poll 和 select-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch06.html" title="第&#160;6&#160;章&#160;高級字符驅動操作">
+<link rel="prev" href="ch06s02.html" title="6.2.&#160;阻塞 I/O">
+<link rel="next" href="ch06s04.html" title="6.4.&#160;異步通知">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">6.3.&#160;poll 和 select</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch06s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;6&#160;章&#160;高級字符驅動操作</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch06s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="pollandselect.sect1"></a>6.3.&#160;poll 和 select</h2></div></div></div>
+<p>使用非阻塞 I/O 的應用程序常常使用 poll, select, 和 epoll 系統調用. poll, select 和 epoll 本質上有相同的功能: 每個允許一個進程來決定它是否可讀或者寫一個或多個文件而不阻塞. 這些調用也可阻塞進程直到任何一個給定集合的文件描述符可用來讀或寫. 因此, 它們常常用在必須使用多輸入輸出流的應用程序, 而不必粘連在它們任何一個上. 相同的功能常常由多個函數提供, 因為 2 個是由不同的團隊在幾乎相同時間完成的: select 在 BSD Unix 中引入, 而 poll 是 System V 的解決方案. epoll 調用<sup>[<a name="id436502" href="#ftn.id436502">23</a>]</sup>添加在 2.5.45, 作為使查詢函數擴展到幾千個文件描述符的方法.</p>
+<p>支持任何一個這些調用都需要來自設備驅動的支持. 這個支持(對所有 3 個調用)由驅動的 poll 方法調用. 這個方法由下列的原型:</p>
+<pre class="programlisting">
+unsigned int (*poll) (struct file *filp, poll_table *wait); 
+</pre>
+<p>這個驅動方法被調用, 無論何時用戶空間程序進行一個 poll, select, 或者 epoll 系統調用, 涉及一個和驅動相關的文件描述符. 這個設備方法負責這 2 步:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>1. 在一個或多個可指示查詢狀態變化的等待隊列上調用 poll_wait. 如果沒有文件描述符可用作 I/O, 內核使這個進程在等待隊列上等待所有的傳遞給系統調用的文件描述符. </p></li>
+<li><p>2. 返回一個位掩碼, 描述可能不必阻塞就立刻進行的操作.</p></li>
+</ul></div>
+<p>這 2 個操作常常是直接的, 並且趨向與各個驅動看起來類似. 但是, 它們依賴只能由驅動提供的信息, 因此, 必須由每個驅動單獨實現.</p>
+<p>poll_table 結構, 給 poll 方法的第 2 個參數, 在內核中用來實現 poll, select, 和 epoll 調用; 它在 &lt;linux/poll.h&gt;中聲明, 這個文件必須被驅動源碼包含. 驅動編寫者不必要知道所有它內容並且必須作為一個不透明的對象使用它; 它被傳遞給驅動方法以便驅動可用每個能喚醒進程的等待隊列來加載它, 並且可改變 poll 操作狀態. 驅動增加一個等待隊列到 poll_table 結構通過調用函數 poll_wait:</p>
+<pre class="programlisting">
+ void poll_wait (struct file *, wait_queue_head_t *, poll_table *); 
+</pre>
+<p>poll 方法的第 2 個任務是返回位掩碼, 它描述哪個操作可馬上被實現; 這也是直接的. 例如, 如果設備有數據可用, 一個讀可能不必睡眠而完成; poll 方法應當指示這個時間狀態. 幾個標誌(通過 &lt;linux/poll.h&gt; 定義)用來指示可能的操作:</p>
+<div class="variablelist"><dl>
+<dt><span class="term">POLLIN <span></span></span></dt>
+<dd><p>如果設備可被不阻塞地讀, 這個位必須設置.</p></dd>
+<dt><span class="term">POLLRDNORM <span></span></span></dt>
+<dd><p>這個位必須設置, 如果"正常"數據可用來讀. 一個可讀的設備返回(	POLLIN|POLLRDNORM ).</p></dd>
+<dt><span class="term">POLLRDBAND <span></span></span></dt>
+<dd><p>這個位指示帶外數據可用來從設備中讀取. 當前只用在 Linux 內核的一個地方( DECnet 代碼 )並且通常對設備驅動不可用.</p></dd>
+<dt><span class="term">POLLPRI <span></span></span></dt>
+<dd><p>高優先級數據(帶外)可不阻塞地讀取. 這個位使 select 報告在文件上遇到一個異常情況, 因為 selct 報告帶外數據作為一個異常情況.</p></dd>
+<dt><span class="term">POLLHUP<span></span></span></dt>
+<dd><p>當讀這個設備的進程見到文件尾, 驅動必須設置 POLLUP(hang-up). 一個調用 select 的進程被告知設備是可讀的, 如同 selcet 功能所規定的.</p></dd>
+<dt><span class="term">POLLERR <span></span></span></dt>
+<dd><p>一個錯誤情況已在設備上發生. 當調用 poll, 設備被報告位可讀可寫, 因為讀寫都返回一個錯誤碼而不阻塞.</p></dd>
+<dt><span class="term">POLLOUT <span></span></span></dt>
+<dd><p>這個位在返回值中設置, 如果設備可被寫入而不阻塞.</p></dd>
+<dt><span class="term">POLLWRNORM<span></span></span></dt>
+<dd><p>這個位和 POLLOUT 有相同的含義, 並且有時它確實是相同的數. 一個可寫的設備返回( POLLOUT|POLLWRNORM).</p></dd>
+<dt><span class="term">POLLWRBAND<span></span></span></dt>
+<dd><p>如同 POLLRDBAND , 這個位意思是帶有零優先級的數據可寫入設備. 只有 poll 的數據報實現使用這個位, 因為一個數據報看傳送帶外數據.</p></dd>
+</dl></div>
+<p>應當重複一下 POLLRDBAND 和 POLLWRBAND 僅僅對關聯到 socket 的文件描述符有意義: 通常設備驅動不使用這些標誌.</p>
+<p>poll 的描述使用了大量在實際使用中相對簡單的東西. 考慮 poll 方法的 scullpipe 實現:</p>
+<pre class="programlisting">
+static unsigned int scull_p_poll(struct file *filp, poll_table *wait)
+{
+        struct scull_pipe *dev = filp-&gt;private_data;
+        unsigned int mask = 0;
+
+        /*
+        * The buffer is circular; it is considered full
+        * if "wp" is right behind "rp" and empty if the
+        * two are equal. 
+        */
+        down(&amp;dev-&gt;sem);
+        poll_wait(filp, &amp;dev-&gt;inq,  wait);
+        poll_wait(filp, &amp;dev-&gt;outq, wait);
+        if (dev-&gt;rp != dev-&gt;wp)
+                mask |= POLLIN | POLLRDNORM;  /* readable */
+        if (spacefree(dev))
+                mask |= POLLOUT | POLLWRNORM;  /* writable */
+        up(&amp;dev-&gt;sem);
+        return mask;
+}
+</pre>
+<p>這個代碼簡單地增加了 2 個 scullpipe 等待隊列到 poll_table, 接著設置正確的掩碼位, 根據數據是否可以讀或寫.</p>
+<p>所示的 poll 代碼缺乏文件尾支持, 因為 scullpipe 不支持文件尾情況. 對大部分真實的設備, poll 方法應當返回 POLLHUP 如果沒有更多數據(或者將)可用. 如果調用者使用 select 系統調用, 文件被報告為可讀. 不管是使用 poll 還是 select, 應用程序知道它能夠調用 read 而不必永遠等待, 並且 read 方法返回 0 來指示文件尾.</p>
+<p>例如, 對於 真正的FIFO, 讀者見到一個文件尾當所有的寫者關閉文件, 而在 scullpipe 中讀者永遠見不到文件尾. 這個做法不同是因為 FIFO 是用作一個 2 個進程的通訊通道, 而 scullpipe 是一個垃圾桶, 人人都可以放數據只要至少有一個讀者. 更多地, 重新實現內核中已有的東西是沒有意義的, 因此我們選擇在我們的例子裡實現一個不同的做法.</p>
+<p>與 FIFO 相同的方式實現文件尾就意味著檢查 dev-&gt;nwwriters, 在 read 和 poll 中, 並且報告文件尾(如剛剛描述過的)如果沒有進程使設備寫打開. 不幸的是, 使用這個實現方法, 如果一個讀者打開 scullpipe 設備在寫者之前, 它可能見到文件尾而沒有機會來等待數據. 解決這個問題的最好的方式是在 open 中實現阻塞, 如同真正的 FIFO 所做的; 這個任務留作讀者的一個練習.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Interactionwithreadandwrite.sect2"></a>6.3.1.&#160;與 read 和 write 的交互</h3></div></div></div>
+<p>poll 和 select 調用的目的是提前決定是否一個 I/O 操作會阻塞. 在那個方面, 它們補充了 read 和 write. 更重要的是, poll 和 select , 因為它們使應用程序同時等待幾個數據流, 儘管我們在 scull 例子裡沒有採用這個特性.</p>
+<p>一個正確的實現對於使應用程序正確工作是必要的: 儘管下列的規則或多或少已經說明過, 我們在此總結它們.</p>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Readingdatafromthedevice.sect3"></a>6.3.1.1.&#160;從設備中讀數據</h4></div></div></div>
+<div class="itemizedlist"><ul type="disc">
+<li><p>如果在輸入緩衝中有數據, read 調用應當立刻返回, 沒有可注意到的延遲, 即便數據少於應用程序要求的, 並且驅動確保其他的數據會很快到達. 你可一直返回小於你被請求的數據, 如果因為任何理由而方便這樣(我們在 scull 中這樣做), 如果你至少返回一個字節. 在這個情況下, poll 應當返回 POLLIN|POLLRDNORM.</p></li>
+<li><p>如果在輸入緩衝中沒有數據, 缺省地 read 必須阻塞直到有一個字節. 如果 O_NONBLOCK 被置位, 另一方面, read 立刻返回 -EAGIN (儘管一些老版本 SYSTEM V 返回 0 在這個情況時). 在這些情況中, poll 必須報告這個設備是不可讀的直到至少一個字節到達. 一旦在緩衝中有數據, 我們就回到前面的情況.</p></li>
+<li><p>如果我們處於文件尾, read 應當立刻返回一個 0, 不管是否阻塞. 這種情況 poll 應該報告 POLLHUP.</p></li>
+</ul></div>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Writingtothedevice.sect3"></a>6.3.1.2.&#160;寫入設備</h4></div></div></div>
+<div class="itemizedlist"><ul type="disc">
+<li><p>如果在輸出緩衝中有空間, write 應當不延遲返回. 它可接受小於這個調用所請求的數據, 但是它必須至少接受一個字節. 在這個情況下,  poll 報告這個設備是可寫的, 通過返回 POLLOUT|POLLWRNORM.</p></li>
+<li><p>如果輸出緩衝是滿的, 缺省地 write 阻塞直到一些空間被釋放. 如果 O_NOBLOCK 被設置, write 立刻返回一個 -EAGAIN(老式的 System V Unices 返回 0). 在這些情況下, poll 應當報告文件是不可寫的. 另一方面, 如果設備不能接受任何多餘數據, write 返回 -ENOSPC("設備上沒有空間"), 不管是否設置了 O_NONBLOCK.</p></li>
+<li><p>在返回之前不要調用 wait 來傳送數據, 即便當 O_NONBLOCK 被清除. 這是因為許多應用程序選擇來找出一個 write 是否會阻塞. 如果設備報告可寫, 調用必須不阻塞. 如果使用設備的程序想保證它加入到輸出緩衝中的數據被真正傳送, 驅動必須提供一個 fsync 方法. 例如, 一個可移除的設備應當有一個 fsnyc 入口.</p></li>
+</ul></div>
+<p>儘管有一套通用的規則, 還應當認識到每個設備是唯一的並且有時這些規則必須稍微彎曲一下. 例如, 面向記錄的設備(例如磁帶設備)無法執行部分寫.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Flushingpendingoutput.sect3"></a>6.3.1.3.&#160;刷新掛起的輸出</h4></div></div></div>
+<p>我們已經見到 write 方法如何自己不能解決全部的輸出需要. fsync 函數, 由同名的系統調用而調用, 填補了這個空缺. 這個方法原型是:</p>
+<pre class="programlisting">
+ int (*fsync) (struct file *file, struct dentry *dentry, int datasync); 
+</pre>
+<p>如果一些應用程序需要被確保數據被發送到設備, fsync 方法必須被實現為不管 O_NONBLOCK 是否被設置. 對 fsync 的調用應當只在設備被完全刷新時返回(即, 輸出緩衝為空), 即便這需要一些時間.  datasync 參數用來區分 fsync 和 fdatasync 系統調用; 這樣, 它只對文件系統代碼有用, 驅動可以忽略它.</p>
+<p>fsync 方法沒有不尋常的特性. 這個調用不是時間關鍵的, 因此每個設備驅動可根據作者的口味實現它. 大部分的時間, 字符驅動只有一個 NULL 指針在它們的 fops 中. 阻塞設備, 另一方面, 常常實現這個方法使用通用的 block_fsync, 它接著會刷新設備的所有的塊.</p>
+</div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheUnderlyingDataStructure.sect2"></a>6.3.2.&#160;底層的數據結構</h3></div></div></div>
+<p>poll 和 select 系統調用的真正實現是相當地簡單, 對那些感興趣於它如何工作的人; epoll 更加複雜一點但是建立在同樣的機制上. 無論何時用戶應用程序調用 poll, select, 或者 epoll_ctl,<sup>[<a name="id437076" href="#ftn.id437076">24</a>]</sup> 內核調用這個系統調用所引用的所有文件的 poll 方法, 傳遞相同的 poll_table 到每個. poll_table 結構只是對一個函數的封裝, 這個函數建立了實際的數據結構. 那個數據結構, 對於 poll和 select, 是一個內存頁的鏈表, 其中包含 poll_table_entry 結構. 每個 poll_table_entry 持有被傳遞給 poll_wait 的 struct file 和 wait_queue_head_t 指針, 以及一個關聯的等待隊列入口. 對 poll_wait 的調用有時還添加這個進程到給定的等待隊列. 整個的結構必須由內核維護以至於這個進程可被從所有的隊列中去除, 在 poll 或者 select 返回之前.</p>
+<p>如果被輪詢的驅動沒有一個指示 I/O 可不阻塞地發生, poll 調用簡單地睡眠直到一個它所在的等待隊列(可能許多)喚醒它.</p>
+<p>在 poll 實現中有趣的是驅動的 poll 方法可能被用一個 NULL 指針作為 poll_table 參數. 這個情況出現由於幾個理由. 如果調用 poll 的應用程序已提供了一個 0 的超時值(指示不應當做等待), 沒有理由來堆積等待隊列, 並且系統簡單地不做它. poll_table 指針還被立刻設置為 NULL 在任何被輪詢的驅動指示可以 I/O 之後. 因為內核在那一點知道不會發生等待, 它不建立等待隊列鏈表.</p>
+<p>當 poll 調用完成, poll_table 結構被去分配, 並且所有的之前加入到 poll 表的等待隊列入口被從表和它們的等待隊列中移出.</p>
+<p>我們試圖在圖<a href="ch06s03.html#ldd3-6-1.fig" title="圖&#160;6.1.&#160;poll 背後的數據結構">poll 背後的數據結構</a>中展示包含在輪詢中的數據結構; 這個圖是真實數據結構的簡化地表示, 因為它忽略了一個 poll 表地多頁性質並且忽略了每個 poll_table_entry 的文件指針.</p>
+<div class="figure">
+<a name="ldd3-6-1.fig"></a><p class="title"><b>圖&#160;6.1.&#160;poll 背後的數據結構</b></p>
+<div><img src="images/snagitldd3/ldd3-6-1.png" alt="poll 背後的數據結構"></div>
+</div>
+<p>在此, 可能理解在新的系統調用 epoll 後面的動機. 在一個典型的情況中, 一個對 poll 或者 select 的調用只包括一組文件描述符, 所以設置數據結構的開銷是小的. 但是, 有應用程序在那裡, 它們使用幾千個文件描述符. 在這時, 在每次 I/O 操作之間設置和銷毀這個數據結構變得非常昂貴. epoll 系統調用家族允許這類應用程序建立內部的內核數據結構只一次, 並且多次使用它們.</p>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id436502" href="#id436502">23</a>] </sup>實際上, epoll 是一組 3 個調用, 都可用來獲得查詢功能. 但是, 由於我們的目的, 我們可認為它是一個調用.</p></div>
+<div class="footnote"><p><sup>[<a name="ftn.id437076" href="#id437076">24</a>] </sup>這是建立內部數據結構為將來調用 epoll_wait 的函數.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch06s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch06.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch06s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">6.2.&#160;阻塞 I/O&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;6.4.&#160;異步通知</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch06s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

@@ -1,0 +1,373 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;6&#160;章&#160;高級字符驅動操作-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch05s08.html" title="5.8.&#160;快速參考">
+<link rel="next" href="ch06s02.html" title="6.2.&#160;阻塞 I/O">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;6&#160;章&#160;高級字符驅動操作</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch05s08.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch06s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="AdvancedCharDriverOperations.chap"></a>第&#160;6&#160;章&#160;高級字符驅動操作</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch06.html#ioctl.sect1">6.1. ioctl 接口</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch06.html#ChoosingtheioctlCommands.sect2">6.1.1. 選擇 ioctl 命令</a></span></dt>
+<dt><span class="sect2"><a href="ch06.html#TheReturnValue.sect2">6.1.2. 返回值</a></span></dt>
+<dt><span class="sect2"><a href="ch06.html#ThePredefinedCommands.sect2">6.1.3. 預定義的命令</a></span></dt>
+<dt><span class="sect2"><a href="ch06.html#UsingtheioctlArgument.sect2">6.1.4. 使用 ioctl 參數</a></span></dt>
+<dt><span class="sect2"><a href="ch06.html#CapabilitiesandRestrictedOperations.sect2">6.1.5. 兼容性和受限操作</a></span></dt>
+<dt><span class="sect2"><a href="ch06.html#TheImplementationoftheioctl.sect2">6.1.6. ioctl 命令的實現</a></span></dt>
+<dt><span class="sect2"><a href="ch06.html#DeviceControlWithoutioctl.sect2">6.1.7. 不用 ioctl 的設備控制</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch06s02.html">6.2. 阻塞 I/O</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch06s02.html#IntroductiontoSleeping.sect2">6.2.1. 睡眠的介紹</a></span></dt>
+<dt><span class="sect2"><a href="ch06s02.html#SimpleSleeping.sect2">6.2.2. 簡單睡眠</a></span></dt>
+<dt><span class="sect2"><a href="ch06s02.html#BlockingandNonblockingOperations.sect2">6.2.3. 阻塞和非阻塞操作 </a></span></dt>
+<dt><span class="sect2"><a href="ch06s02.html#ABlockingIOExample.sect2">6.2.4. 一個阻塞 I/O 的例子</a></span></dt>
+<dt><span class="sect2"><a href="ch06s02.html#AdvancedSleeping.sect2">6.2.5. 高級睡眠</a></span></dt>
+<dt><span class="sect2"><a href="ch06s02.html#TestingtheScullpipeDriver.sect2">6.2.6. 測試 scullpipe 驅動</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch06s03.html">6.3. poll 和 select</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch06s03.html#Interactionwithreadandwrite.sect2">6.3.1. 與 read 和 write 的交互</a></span></dt>
+<dt><span class="sect2"><a href="ch06s03.html#TheUnderlyingDataStructure.sect2">6.3.2. 底層的數據結構</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch06s04.html">6.4. 異步通知</a></span></dt>
+<dd><dl><dt><span class="sect2"><a href="ch06s04.html#TheDriversPointofView.sect2">6.4.1. 驅動的觀點</a></span></dt></dl></dd>
+<dt><span class="sect1"><a href="ch06s05.html">6.5. 移位一個設備</a></span></dt>
+<dd><dl><dt><span class="sect2"><a href="ch06s05.html#ThellseekImplementation.sect2">6.5.1. llseek 實現</a></span></dt></dl></dd>
+<dt><span class="sect1"><a href="ch06s06.html">6.6. 在一個設備文件上的存取控制</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch06s06.html#SingleOpenDevices.sect2">6.6.1. 單 open 設備</a></span></dt>
+<dt><span class="sect2"><a href="ch06s06.html#RestrictingAccesstoaSingleUserataTime.sect2">6.6.2. 一次對一個用戶限制存取</a></span></dt>
+<dt><span class="sect2"><a href="ch06s06.html#BlockingopenasanAlternativetoEBUSY.sect2">6.6.3. 阻塞 open 作為對 EBUSY 的替代</a></span></dt>
+<dt><span class="sect2"><a href="ch06s06.html#CloningtheDeviceonopen.sect2">6.6.4. 在 open 時複製設備</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch06s07.html">6.7. 快速參考</a></span></dt>
+</dl>
+</div>
+<p>在第 3 章, 我們建立了一個完整的設備驅動, 用戶可用來寫入和讀取. 但是一個真正的設備常常提供比同步讀和寫更多的功能. 現在我們已裝備有調試工具如果發生錯誤, 並且一個牢固的並發的理解來幫助避免事情進入錯誤-- 我們可安全地前進並且創建一個更高級的驅動.</p>
+<p>本章檢查幾個你需要理解的概念來編寫全特性的字符設備驅動. 我們從實現 ioctl 系統調用開始, 它是用作設備控制的普通接口. 接著我們進入各種和用戶空間同步的方法; 在本章結尾, 你有一個充分的認識對於如何使進程睡眠(並且喚醒它們), 實現非阻塞的 I/O, 並且通知用戶空間當你的設備可用來讀或寫. 我們以查看如何在驅動中實現幾個不同的設備存取策略來結束.</p>
+<p>這裡討論的概念通過 scull 驅動的幾個修改版本來演示. 再一次, 所有的都使用內存中的虛擬設備來實現, 因此你可自己試驗這些代碼而不必使用任何特別的硬件. 到此為止, 你可能在想親手使用真正的硬件, 但是那將必須等到第 9 章.</p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="ioctl.sect1"></a>6.1.&#160;ioctl 接口</h2></div></div></div>
+<p>大部分驅動需要 -- 除了讀寫設備的能力 -- 通過設備驅動進行各種硬件控制的能力. 大部分設備可進行超出簡單的數據傳輸之外的操作; 用戶空間必須常常能夠請求, 例如, 設備鎖上它的門, 彈出它的介質, 報告錯誤信息, 改變波特率, 或者自我銷毀. 這些操作常常通過 ioctl 方法來支持, 它通過相同名子的系統調用來實現.</p>
+<p>在用戶空間, ioctl 系統調用有下面的原型:</p>
+<pre class="programlisting">
+int ioctl(int fd, unsigned long cmd, ...); 
+</pre>
+<p>這個原型由於這些點而凸現於 Unix 系統調用列表, 這些點常常表示函數有數目不定的參數. 在實際系統中, 但是, 一個系統調用不能真正有變數目的參數. 系統調用必須有一個很好定義的原型, 因為用戶程序可存取它們只能通過硬件的"門". 因此, 原型中的點不表示一個變數目的參數, 而是一個單個可選的參數, 傳統上標識為 char *argp. 這些點在那裡只是為了阻止在編譯時的類型檢查. 第 3 個參數的實際特點依賴所發出的特定的控制命令( 第 2 個參數 ). 一些命令不用參數, 一些用一個整數值, 以及一些使用指向其他數據的指針. 使用一個指針是傳遞任意數據到 ioctl 調用的方法; 設備接著可與用戶空間交換任何數量的數據.</p>
+<p>ioctl 調用的非結構化特性使它在內核開發者中失寵. 每個 ioctl 命令, 基本上, 是一個單獨的, 常常無文檔的系統調用, 並且沒有方法以任何類型的全面的方式核查這些調用. 也難於使非結構化的 ioctl 參數在所有系統上一致工作; 例如, 考慮運行在 32-位模式的一個用戶進程的 64-位 系統. 結果, 有很大的壓力來實現混雜的控制操作, 只通過任何其他的方法. 可能的選擇包括嵌入命令到數據流(本章稍後我們將討論這個方法)或者使用虛擬文件系統, 要麼是 sysfs 要麼是設備特定的文件系統. (我們將在 14 章看看 sysfs). 但是, 事實是 ioctl 常常是最容易的和最直接的選擇,對於真正的設備操作.</p>
+<p>ioctl 驅動方法有和用戶空間版本不同的原型:</p>
+<pre class="programlisting">
+int (*ioctl) (struct inode *inode, struct file *filp, unsigned int cmd, unsigned long arg);
+</pre>
+<p>inode 和 filp 指針是對應應用程序傳遞的文件描述符 fd 的值, 和傳遞給 open 方法的相同參數. cmd 參數從用戶那裡不改變地傳下來, 並且可選的參數 arg 參數以一個 unsigned long 的形式傳遞, 不管它是否由用戶給定為一個整數或一個指針. 如果調用程序不傳遞第 3 個參數, 被驅動操作收到的 arg 值是無定義的. 因為類型檢查在這個額外參數上被關閉, 編譯器不能警告你如果一個無效的參數被傳遞給 ioctl, 並且任何關聯的錯誤將難以查找.</p>
+<p>如果你可能想到的, 大部分 ioctl 實現包括一個大的 switch 語句來根據 cmd 參數, 選擇正確的做法. 不同的命令有不同的數值, 它們常常被給予符號名來簡化編碼. 符號名通過一個預處理定義來安排. 定制的驅動常常聲明這樣的符號在它們的頭文件中; scull.h 為 scull 聲明它們. 用戶程序必須, 當然, 包含那個頭文件來存取這些符號.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ChoosingtheioctlCommands.sect2"></a>6.1.1.&#160;選擇 ioctl 命令</h3></div></div></div>
+<p>在為 ioctl 編寫代碼之前, 你需要選擇對應命令的數字. 許多程序員的第一個本能的反應是選擇一組小數從0或1開始, 並且從此開始向上. 但是, 有充分的理由不這樣做. ioctl 命令數字應當在這個系統是唯一的, 為了阻止向錯誤的設備發出正確的命令而引起的錯誤. 這樣的不匹配不會不可能發生, 並且一個程序可能發現它自己試圖改變一個非串口輸入系統的波特率, 例如一個 FIFO 或者一個音頻設備. 如果這樣的 ioctl 號是唯一的, 這個應用程序得到一個 EINVAL 錯誤而不是繼續做不應當做的事情.</p>
+<p>為幫助程序員創建唯一的 ioctl 命令代碼, 這些編碼已被劃分為幾個位段. Linux 的第一個版本使用 16-位數: 高 8 位是關聯這個設備的"魔"數, 低 8 位是一個順序號, 在設備內唯一. 這樣做是因為 Linus 是"無能"的(他自己的話); 一個更好的位段劃分僅在後來被設想. 不幸的是, 許多驅動仍然使用老傳統. 它們不得不: 改變命令編碼會破壞大量的二進製程序,並且這不是內核開發者願意見到的.</p>
+<p>根據 Linux 內核慣例來為你的驅動選擇 ioctl 號, 你應當首先檢查 include/asm/ioctl.h 和 Documentation/ioctl-number.txt. 這個頭文件定義你將使用的位段: type(魔數), 序號, 傳輸方向, 和參數大小. ioctl-number.txt 文件列舉了在內核中使用的魔數,<sup>[<a name="id433758" href="#ftn.id433758">20</a>]</sup> 因此你將可選擇你自己的魔數並且避免交疊. 這個文本文件也列舉了為什麼應當使用慣例的原因.</p>
+<p>定義 ioctl 命令號的正確方法使用 4 個位段, 它們有下列的含義. 這個列表中介紹的新符號定義在 &lt;linux/ioctl.h&gt;.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>type </span></span></dt>
+<dd><p>魔數. 只是選擇一個數(在參考了 ioctl-number.txt之後)並且使用它在整個驅動中. 這個成員是 8 位寬(_IOC_TYPEBITS). </p></dd>
+<dt><span class="term"><span>number</span></span></dt>
+<dd><p>序(順序)號. 它是 8 位(_IOC_NRBITS)寬. </p></dd>
+<dt><span class="term"><span>direction </span></span></dt>
+<dd><p>數據傳送的方向,如果這個特殊的命令涉及數據傳送. 可能的值是 _IOC_NONE(沒有數據傳輸), _IOC_READ, _IOC_WRITE, 和 _IOC_READ|_IOC_WRITE (數據在2個方向被傳送). 數據傳送是從應用程序的觀點來看待的; _IOC_READ 意思是從設備讀, 因此設備必須寫到用戶空間. 注意這個成員是一個位掩碼, 因此 _IOC_READ 和 _IOC_WRITE 可使用一個邏輯 AND 操作來抽取.</p></dd>
+<dt><span class="term"><span>size </span></span></dt>
+<dd><p>涉及到的用戶數據的大小. 這個成員的寬度是依賴體系的, 但是常常是 13 或者 14 位. 你可為你的特定體繫在宏 _IOC_SIZEBITS 中找到它的值. 你使用這個 size 成員不是強制的 - 內核不檢查它 -- 但是它是一個好主意. 正確使用這個成員可幫助檢測用戶空間程序的錯誤並使你實現向後兼容, 如果你曾需要改變相關數據項的大小. 如果你需要更大的數據結構, 但是, 你可忽略這個 size 成員. 我們很快見到如何使用這個成員.</p></dd>
+</dl></div>
+<p>頭文件 &lt;asm/ioctl.h&gt;, 它包含在 &lt;linux/ioctl.h&gt; 中, 定義宏來幫助建立命令號, 如下: _IO(type,nr)(給沒有參數的命令), _IOR(type, nre, datatype)(給從驅動中讀數據的), _IOW(type,nr,datatype)(給寫數據), 和 _IOWR(type,nr,datatype)(給雙向傳送). type 和 number 成員作為參數被傳遞, 並且 size 成員通過應用 sizeof 到 datatype 參數而得到.</p>
+<p>這個頭文件還定義宏, 可被用在你的驅動中來解碼這個號: _IOC_DIR(nr), _IOC_TYPE(nr), _IOC_NR(nr), 和 _IOC_SIZE(nr). 我們不進入任何這些宏的細節, 因為頭文件是清楚的, 並且在本節稍後有例子代碼展示.</p>
+<p>這裡是一些 ioctl 命令如何在 scull 被定義的. 特別地, 這些命令設置和獲得驅動的可配置參數.</p>
+<pre class="programlisting">
+/* Use 'k' as magic number */
+#define SCULL_IOC_MAGIC 'k'
+/* Please use a different 8-bit number in your code */
+
+#define SCULL_IOCRESET _IO(SCULL_IOC_MAGIC, 0)
+/*
+ * S means "Set" through a ptr,
+ * T means "Tell" directly with the argument value
+ * G means "Get": reply by setting through a pointer
+ * Q means "Query": response is on the return value
+ * X means "eXchange": switch G and S atomically
+ * H means "sHift": switch T and Q atomically
+ */
+#define SCULL_IOCSQUANTUM _IOW(SCULL_IOC_MAGIC, 1, int)
+#define SCULL_IOCSQSET _IOW(SCULL_IOC_MAGIC, 2, int)
+#define SCULL_IOCTQUANTUM _IO(SCULL_IOC_MAGIC, 3)
+#define SCULL_IOCTQSET _IO(SCULL_IOC_MAGIC, 4)
+#define SCULL_IOCGQUANTUM _IOR(SCULL_IOC_MAGIC, 5, int)
+#define SCULL_IOCGQSET _IOR(SCULL_IOC_MAGIC, 6, int)
+#define SCULL_IOCQQUANTUM _IO(SCULL_IOC_MAGIC, 7)
+#define SCULL_IOCQQSET _IO(SCULL_IOC_MAGIC, 8)
+#define SCULL_IOCXQUANTUM _IOWR(SCULL_IOC_MAGIC, 9, int)
+#define SCULL_IOCXQSET _IOWR(SCULL_IOC_MAGIC,10, int)
+#define SCULL_IOCHQUANTUM _IO(SCULL_IOC_MAGIC, 11)
+#define SCULL_IOCHQSET _IO(SCULL_IOC_MAGIC, 12)
+
+#define SCULL_IOC_MAXNR 14
+</pre>
+<p>真正的源文件定義幾個額外的這裡沒有出現的命令.</p>
+<p>我們選擇實現 2 種方法傳遞整數參數: 通過指針和通過明確的值(儘管, 由於一個已存在的慣例, ioclt 應當通過指針交換值). 類似地, 2 種方法被用來返回一個整數值:通過指針和通過設置返回值. 這個有效只要返回值是一個正的整數; 如同你現在所知道的, 在從任何系統調用返回時, 一個正值被保留(如同我們在 read 和 write 中見到的), 而一個負值被看作一個錯誤並且被用來在用戶空間設置 errno.<sup>[<a name="id433917" href="#ftn.id433917">21</a>]</sup></p>
+<p>"exchange"和"shift"操作對於 scull 沒有特別的用處. 我們實現"exchange"來顯示驅動如何結合獨立的操作到單個的原子的操作, 並且"shift"來連接"tell"和"query". 有時需要像這樣的原子的測試-和-設置操作, 特別地, 當應用程序需要設置和釋放鎖.</p>
+<p>命令的明確的序號沒有特別的含義. 它只用來區分命令. 實際上, 你甚至可使用相同的序號給一個讀命令和一個寫命令, 因為實際的 ioctl 號在"方向"位是不同的, 但是你沒有理由這樣做. 我們選擇在任何地方不使用命令的序號除了聲明中, 因此我們不分配一個返回值給它. 這就是為什麼明確的號出現在之前給定的定義中. 這個例子展示了一個使用命令號的方法, 但是你有自由不這樣做.</p>
+<p>除了少數幾個預定義的命令(馬上就討論), ioctl 的 cmd 參數的值當前不被內核使用, 並且在將來也很不可能. 因此, 你可以, 如果你覺得懶, 避免前面展示的複雜的聲明並明確聲明一組調整數字. 另一方面, 如果你做了, 你不會從使用這些位段中獲益, 並且你會遇到困難如果你曾提交你的代碼來包含在主線內核中. 頭文件&lt;linux/kd.h&gt; 是這個老式方法的例子, 使用 16-位的調整值來定義 ioctl 命令. 那個源代碼依靠調整數因為使用那個時候遵循的慣例, 不是由於懶惰. 現在改變它可能導致無理由的不兼容.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheReturnValue.sect2"></a>6.1.2.&#160;返回值</h3></div></div></div>
+<p>ioctl 的實現常常是一個 switch 語句, 基於命令號. 但是當命令號沒有匹配一個有效的操作時缺省的選擇應當是什麼? 這個問題是有爭議的. 幾個內核函數返回 -ENIVAL("Invalid argument"), 它有意義是因為命令參數確實不是一個有效的. POSIX 標準, 但是, 說如果一個不合適的 ioctl 命令被發出, 那麼 -ENOTTY 應當被返回. 這個錯誤碼被 C 庫解釋為"設備的不適當的 ioctl", 這常常正是程序員需要聽到的. 然而, 它仍然是相當普遍的來返回 -EINVAL, 對於響應一個無效的 ioctl 命令.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ThePredefinedCommands.sect2"></a>6.1.3.&#160;預定義的命令</h3></div></div></div>
+<p>儘管 ioctl 系統調用最常用來作用於設備, 內核能識別幾個命令. 注意這些命令, 當用到你的設備時, 在你自己的文件操作被調用之前被解碼. 因此, 如果你選擇相同的號給一個你的 ioctl命令, 你不會看到任何的給那個命令的請求, 並且應用程序獲得某些不期望的東西, 因為在 ioctl 號之間的衝突.</p>
+<p>預定義命令分為 3 類:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>可對任何文件發出的(常規, 設備, FIFO, 或者 socket) 的那些.</p></li>
+<li><p>只對常規文件發出的那些.</p></li>
+<li><p>對文件系統類型特殊的那些.</p></li>
+</ul></div>
+<p>最後一類的命令由宿主文件系統的實現來執行(這是 chattr 命令如何工作的). 設備驅動編寫者只對第一類命令感興趣, 它們的魔數是 "T". 查看其他類的工作留給讀者作為練習; ext2_ioctl 是最有趣的函數(並且比預期的要容易理解), 因為它實現 append-only 標誌和 immutable 標誌.</p>
+<p>下列 ioctl 命令是預定義給任何文件, 包括設備特殊的文件:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>FIOCLEX </span></span></dt>
+<dd><p>設置 close-on-exec 標誌(File IOctl Close on EXec). 設置這個標誌使文件描述符被關閉, 當調用進程執行一個新程序時.</p></dd>
+<dt><span class="term"><span>FIONCLEX </span></span></dt>
+<dd><p>清除 close-no-exec 標誌(File IOctl Not CLose on EXec). 這個命令恢復普通文件行為, 復原上面 FIOCLEX 所做的. FIOASYNC 為這個文件設置或者復位異步通知(如同在本章中"異步通知"一節中討論的). 注意直到 Linux 2.2.4 版本的內核不正確地使用這個命令來修改 O_SYNC 標誌. 因為兩個動作都可通過 fcntl 來完成, 沒有人真正使用 FIOASYNC 命令, 它在這裡出現只是為了完整性.</p></dd>
+<dt><span class="term"><span>FIOQSIZE </span></span></dt>
+<dd><p>這個命令返回一個文件或者目錄的大小; 當用作一個設備文件, 但是, 它返回一個 ENOTTY 錯誤.</p></dd>
+<dt><span class="term"><span>FIONBIO</span></span></dt>
+<dd><p>"File IOctl Non-Blocking I/O"(在"阻塞和非阻塞操作"一節中描述). 這個調用修改在 filp-&gt;f_flags 中的 O_NONBLOCK 標誌. 給這個系統調用的第 3 個參數用作指示是否這個標誌被置位或者清除. (我們將在本章看到這個標誌的角色). 注意常用的改變這個標誌的方法是使用 fcntl 系統調用, 使用 F_SETFL 命令.</p></dd>
+</dl></div>
+<p>列表中的最後一項介紹了一個新的系統調用, fcntl, 它看來像 ioctl. 事實上, fcntl 調用非常類似 ioctl, 它也是獲得一個命令參數和一個額外的(可選地)參數. 它保持和 ioctl 獨立主要是因為歷史原因: 當 Unix 開發者面對控制 I/O 操作的問題時, 他們決定文件和設備是不同的. 那時, 有 ioctl 實現的唯一設備是 ttys, 它解釋了為什麼 -ENOTTY 是標準的對不正確 ioctl 命令的回答. 事情已經改變, 但是 fcntl 保留為一個獨立的系統調用.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="UsingtheioctlArgument.sect2"></a>6.1.4.&#160;使用 ioctl 參數</h3></div></div></div>
+<p>在看 scull 驅動的 ioctl 代碼之前, 我們需要涉及的另一點是如何使用這個額外的參數. 如果它是一個整數, 就容易: 它可以直接使用. 如果它是一個指針, 但是, 必須小心些.</p>
+<p>當用一個指針引用用戶空間, 我們必須確保用戶地址是有效的. 試圖存取一個沒驗證過的用戶提供的指針可能導致不正確的行為, 一個內核 oops, 系統崩潰, 或者安全問題. 它是驅動的責任來對每個它使用的用戶空間地址進行正確的檢查, 並且返回一個錯誤如果它是無效的.</p>
+<p>在第 3 章, 我們看了 copy_from_user 和 copy_to_user 函數, 它們可用來安全地移動數據到和從用戶空間. 這些函數也可用在 ioctl 方法中, 但是 ioctl 調用常常包含小數據項, 可通過其他方法更有效地操作. 開始, 地址校驗(不傳送數據)由函數 access_ok 實現, 它定義在 &lt;asm/uaccess.h&gt;:</p>
+<pre class="programlisting">
+int access_ok(int type, const void *addr, unsigned long size); 
+</pre>
+<p>第一個參數應當是 VERIFY_READ 或者 VERIFY_WRITE, 依據這個要進行的動作是否是讀用戶空間內存區或者寫它. addr 參數持有一個用戶空間地址, size 是一個字節量. 例如, 如果 ioctl 需要從用戶空間讀一個整數, size 是 sizeof(int). 如果你需要讀和寫給定地址, 使用 VERIFY_WRITE, 因為它是 VERIRY_READ 的超集.</p>
+<p>不像大部分的內核函數, access_ok 返回一個布爾值: 1 是成功(存取沒問題)和 0 是失敗(存取有問題). 如果它返回假, 驅動應當返回 -EFAULT 給調用者.</p>
+<p>關於 access_ok有多個有趣的東西要注意. 首先, 它不做校驗內存存取的完整工作; 它只檢查看這個內存引用是在這個進程有合理權限的內存範圍中. 特別地, access_ok 確保這個地址不指向內核空間內存. 第2, 大部分驅動代碼不需要真正調用 access_ok. 後面描述的內存存取函數為你負責這個. 但是, 我們來演示它的使用, 以便你可見到它如何完成.</p>
+<p>scull 源碼利用了 ioclt 號中的位段來檢查參數, 在 switch 之前:</p>
+<pre class="programlisting">
+int err = 0, tmp;
+int retval = 0;
+/*
+ * extract the type and number bitfields, and don't decode
+ * wrong cmds: return ENOTTY (inappropriate ioctl) before access_ok()
+ */
+if (_IOC_TYPE(cmd) != SCULL_IOC_MAGIC)
+        return -ENOTTY;
+if (_IOC_NR(cmd) &gt; SCULL_IOC_MAXNR)
+        return -ENOTTY;
+
+/*
+ * the direction is a bitmask, and VERIFY_WRITE catches R/W
+ * transfers. `Type' is user-oriented, while
+ * access_ok is kernel-oriented, so the concept of "read" and
+ * "write" is reversed
+ */
+if (_IOC_DIR(cmd) &amp; _IOC_READ)
+        err = !access_ok(VERIFY_WRITE, (void __user *)arg, _IOC_SIZE(cmd));
+else if (_IOC_DIR(cmd) &amp; _IOC_WRITE)
+        err = !access_ok(VERIFY_READ, (void __user *)arg, _IOC_SIZE(cmd));
+if (err)
+        return -EFAULT;
+</pre>
+<p>在調用 access_ok 之後, 驅動可安全地進行真正的傳輸. 加上 copy_from_user 和 copy_to_user_ 函數, 程序員可利用一組為被最多使用的數據大小(1, 2, 4, 和 8 字節)而優化過的函數. 這些函數在下面列表中描述, 它們定義在 &lt;asm/uaccess.h&gt;:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>put_user(datum, ptr)</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__put_user(datum, ptr)</span></span></dt>
+<dd>
+<p>這些宏定義寫 datum 到用戶空間; 它們相對快, 並且應當被調用來代替 copy_to_user 無論何時要傳送單個值時. 這些宏已被編寫來允許傳遞任何類型的指針到 put_user, 只要它是一個用戶空間地址. 傳送的數據大小依賴 prt 參數的類型, 並且在編譯時使用 sizeof 和 typeof 等編譯器內建宏確定. 結果是, 如果 prt 是一個 char 指針, 傳送一個字節, 以及對於 2, 4, 和 可能的 8 字節.</p>
+<p>put_user 檢查來確保這個進程能夠寫入給定的內存地址. 它在成功時返回 0, 並且在錯誤時返回 -EFAULT. __put_user 進行更少的檢查(它不調用 access_ok), 但是仍然能夠失敗如果被指向的內存對用戶是不可寫的. 因此, __put_user 應當只用在內存區已經用 access_ok 檢查過的時候.</p>
+<p>作為一個通用的規則, 當你實現一個 read 方法時, 調用 __put_user 來節省幾個週期, 或者當你拷貝幾個項時, 因此, 在第一次數據傳送之前調用 access_ok 一次, 如同上面 ioctl 所示.</p>
+</dd>
+<dt><span class="term"><span>get_user(local, ptr)</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__get_user(local, ptr)</span></span></dt>
+<dd><p>這些宏定義用來從用戶空間接收單個數據. 它們象 put_user 和 __put_user, 但是在相反方向傳遞數據. 獲取的值存儲於本地變量 local; 返回值指出這個操作是否成功. 再次, __get_user 應當只用在已經使用 access_ok 校驗過的地址.</p></dd>
+</dl></div>
+<p>如果做一個嘗試來使用一個列出的函數來傳送一個不適合特定大小的值, 結果常常是一個來自編譯器的奇怪消息, 例如"coversion to non-scalar type requested". 在這些情況中, 必須使用 copy_to_user 或者 copy_from_user.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="CapabilitiesandRestrictedOperations.sect2"></a>6.1.5.&#160;兼容性和受限操作</h3></div></div></div>
+<p>存取一個設備由設備文件上的許可權控制, 並且驅動正常地不涉及到許可權的檢查. 但是, 有些情形, 在保證給任何用戶對設備的讀寫許可的地方, 一些控制操作仍然應當被拒絕. 例如, 不是所有的磁帶驅動器的用戶都應當能夠設置它的缺省塊大小, 並且一個已經被給予對一個磁盤設備讀寫權限的用戶應當仍然可能被拒絕來格式化它. 在這樣的情況下, 驅動必須進行額外的檢查來確保用戶能夠進行被請求的操作.</p>
+<p>傳統上 unix 系統對超級用戶帳戶限制了特權操作. 這意味著特權是一個全有-或-全無的東西 -- 超級用戶可能任意做任何事情, 但是所有其他的用戶被高度限制了. Linux 內核提供了一個更加靈活的系統, 稱為能力. 一個基於能力的系統丟棄了全有-或全無模式, 並且打破特權操作為獨立的子類. 這種方式, 一個特殊的用戶(或者是程序)可被授權來進行一個特定的特權操作而不必洩漏進行其他的, 無關的操作的能力. 內核在許可權管理上排他地使用能力, 並且輸出 2 個系統調用 capget 和 capset, 來允許它們被從用戶空間管理.</p>
+<p>全部能力可在 &lt;linux/capability.h&gt; 中找到. 這些是對系統唯一可用的能力; 對於驅動作者或者系統管理員, 不可能不修改內核源碼而來定義新的. 設備驅動編寫者可能感興趣的這些能力的一個子集, 包括下面:</p>
+<div class="variablelist"><dl>
+<dt><span class="term">CAP_DAC_OVERRIDE <span></span></span></dt>
+<dd><p>這個能力來推翻在文件和目錄上的存取的限制(數據存取控制, 或者 DAC).</p></dd>
+<dt><span class="term">CAP_NET_ADMIN <span></span></span></dt>
+<dd><p>進行網絡管理任務的能力, 包括那些能夠影響網絡接口的.</p></dd>
+<dt><span class="term">CAP_SYS_MODULE <span></span></span></dt>
+<dd><p>加載或去除內核模塊的能力.</p></dd>
+<dt><span class="term">CAP_SYS_RAWIO <span></span></span></dt>
+<dd><p>進行 "raw" I/O 操作的能力. 例子包括存取設備端口或者直接和 USB 設備通訊.</p></dd>
+<dt><span class="term">CAP_SYS_ADMIN <span></span></span></dt>
+<dd><p>一個捕獲-全部的能力, 提供對許多系統管理操作的存取.</p></dd>
+<dt><span class="term">CAP_SYS_TTY_CONFIG <span></span></span></dt>
+<dd><p>進行 tty 配置任務的能力.</p></dd>
+</dl></div>
+<p>在進行一個特權操作之前, 一個設備驅動應當檢查調用進程有合適的能力; 不這樣做可能導致用戶進程進行非法的操作, 對系統的穩定和安全有壞的後果. 能力檢查是通過 capable 函數來進行的(定義在 &lt;linux/sched.h&gt;):</p>
+<pre class="programlisting">
+ int capable(int capability); 
+</pre>
+<p>在 scull 例子驅動中, 任何用戶被許可來查詢 quantum 和 quantum 集的大小. 只有特權用戶, 但是, 可改變這些值, 因為不適當的值可能很壞地影響系統性能. 當需要時, ioctl 的 scull 實現檢查用戶的特權級別, 如下:</p>
+<pre class="programlisting">
+ if (! capable (CAP_SYS_ADMIN))
+ return -EPERM;
+</pre>
+<p>在這個任務缺乏一個更加特定的能力時, CAP_SYS_ADMIN 被選擇來做這個測試.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheImplementationoftheioctl.sect2"></a>6.1.6.&#160;ioctl 命令的實現</h3></div></div></div>
+<p>ioctl 的 scull 實現只傳遞設備的配置參數, 並且象下面這樣容易:</p>
+<pre class="programlisting">
+switch(cmd)
+{
+case SCULL_IOCRESET:
+        scull_quantum = SCULL_QUANTUM;
+        scull_qset = SCULL_QSET;
+        break;
+
+case SCULL_IOCSQUANTUM: /* Set: arg points to the value */
+        if (! capable (CAP_SYS_ADMIN))
+
+                return -EPERM;
+        retval = __get_user(scull_quantum, (int __user *)arg);
+        break;
+
+case SCULL_IOCTQUANTUM: /* Tell: arg is the value */
+        if (! capable (CAP_SYS_ADMIN))
+
+                return -EPERM;
+        scull_quantum = arg;
+        break;
+
+case SCULL_IOCGQUANTUM: /* Get: arg is pointer to result */
+        retval = __put_user(scull_quantum, (int __user *)arg);
+        break;
+
+case SCULL_IOCQQUANTUM: /* Query: return it (it's positive) */
+        return scull_quantum;
+
+case SCULL_IOCXQUANTUM: /* eXchange: use arg as pointer */
+        if (! capable (CAP_SYS_ADMIN))
+
+                return -EPERM;
+        tmp = scull_quantum;
+        retval = __get_user(scull_quantum, (int __user *)arg);
+        if (retval == 0)
+
+                retval = __put_user(tmp, (int __user *)arg);
+        break;
+
+case SCULL_IOCHQUANTUM: /* sHift: like Tell + Query */
+        if (! capable (CAP_SYS_ADMIN))
+                return -EPERM;
+        tmp = scull_quantum;
+        scull_quantum = arg;
+        return tmp;
+
+default: /* redundant, as cmd was checked against MAXNR */
+        return -ENOTTY;
+}
+return retval;
+</pre>
+<p>scull 還包含 6 個入口項作用於 scull_qset. 這些入口項和給 scull_quantum 的是一致的, 並且不值得展示出來.</p>
+<p>從調用者的觀點看(即從用戶空間), 這 6 種傳遞和接收參數的方法看來如下:</p>
+<pre class="programlisting">
+int quantum;
+ioctl(fd,SCULL_IOCSQUANTUM, &amp;quantum);  /* Set by pointer */
+ioctl(fd,SCULL_IOCTQUANTUM, quantum);  /* Set by value */
+ioctl(fd,SCULL_IOCGQUANTUM, &amp;quantum);  /* Get by pointer */
+quantum = ioctl(fd,SCULL_IOCQQUANTUM);  /* Get by return value */
+ioctl(fd,SCULL_IOCXQUANTUM, &amp;quantum);  /* Exchange by pointer */
+
+quantum = ioctl(fd,SCULL_IOCHQUANTUM, quantum); /* Exchange by value */
+</pre>
+<p>當然, 一個正常的驅動不可能實現這樣一個調用模式的混合體. 我們這裡這樣做只是為了演示做事情的不同方式. 但是, 正常地, 數據交換將一致地進行, 通過指針或者通過值, 並且要避免混合這 2 種技術.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="DeviceControlWithoutioctl.sect2"></a>6.1.7.&#160;不用 ioctl 的設備控制</h3></div></div></div>
+<p>有時控制設備最好是通過寫控制序列到設備自身來實現. 例如, 這個技術用在控制台驅動中, 這裡所謂的 escape 序列被用來移動光標, 改變缺省的顏色, 或者進行其他的配置任務. 這樣實現設備控制的好處是用戶可僅僅通過寫數據控制設備, 不必使用(或者有時候寫)只為配置設備而建立的程序. 當設備可這樣來控制, 發出命令的程序甚至常常不需要運行在和它要控制的設備所在的同一個系統上.</p>
+<p>例如, setterm 程序作用於控制台(或者其他終端)配置, 通過打印 escape 序列. 控制程序可位於和被控制的設備不同的一台計算機上, 因為一個簡單的數據流重定向可完成這個配置工作. 這是每次你運行一個遠程 tty 會話時所發生的事情: escape 序列在遠端被打印但是影響到本地的 tty; 然而, 這個技術不局限於 ttys.</p>
+<p>通過打印來控制的缺點是它給設備增加了策略限制; 例如, 它僅僅當你確信在正常操作時控制序列不會出現在正被寫入設備的數據中. 這對於 ttys 只是部分正確的. 儘管一個文本顯示意味著只顯示 ASCII 字符, 有時控制字符可潛入正被寫入的數據中, 並且可能, 因此, 影響控制台的配置. 例如, 這可能發生在你顯示一個二進制文件到屏幕時; 產生的亂碼可能包含任何東西, 並且最後你常常在你的控制台上出現錯誤的字體.</p>
+<p>通過寫來控制是當然的使用方法了, 對於不用傳送數據而只是響應命令的設備, 例如遙控設備.</p>
+<p>例如, 被你們作者當中的一個編寫來好玩的驅動, 移動一個 2 軸上的攝像機. 在這個驅動裡, 這個"設備"是一對老式步進電機, 它們不能真正讀或寫. 給一個步進電機"發送數據流"的概念沒有任何意義. 在這個情況下, 驅動解釋正被寫入的數據作為 ASCII 命令並且轉換這個請求為脈衝序列, 來操縱步進電機. 這個概念類似於, 有些, 你發給貓的 AT 命令來建立通訊, 主要的不同是和貓通訊的串口必須也傳送真正的數據. 直接設備控制的好處是你可以使用 cat 來移動攝像機, 而不必寫和編譯特殊的代碼來發出 ioctl 調用.</p>
+<p>當編寫面向命令的驅動, 沒有理由實現 ioctl 命令. 一個解釋器中的額外命令更容易實現並使用.</p>
+<p>有時, 然而, 你可能選擇使用其他的方法:不必轉變 write 方法為一個解釋器和避免 ioctl, 你可能選擇完全避免寫並且專門使用 ioctl 命令, 而實現驅動為使用一個特殊的命令行工具來發送這些命令到驅動. 這個方法轉移複雜性從內核空間到用戶空間, 這裡可能更易處理, 並且幫助保持驅動小, 而拒絕使用簡單的 cat 或者 echo 命令.</p>
+</div>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id433758" href="#id433758">20</a>] </sup>但是, 這個文件的維護在後來有些少見了.</p></div>
+<div class="footnote"><p><sup>[<a name="ftn.id433917" href="#id433917">21</a>] </sup>實際上, 所有的當前使用的 libc 實現(包括 uClibc) 僅將 -4095 到 -1 的值當作錯誤碼. 不幸的是, 能夠返回大的負數而不是小的, 沒有多大用處.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch05s08.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch06s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">5.8.&#160;快速參考&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;6.2.&#160;阻塞 I/O</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

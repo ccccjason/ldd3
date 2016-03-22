@@ -1,0 +1,100 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s08.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>2.8.&#160;模塊參數-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch02.html" title="第&#160;2&#160;章&#160;建立和運行模塊">
+<link rel="prev" href="ch02s07.html" title="2.7.&#160;初始化和關停">
+<link rel="next" href="ch02s09.html" title="2.9.&#160;在用戶空間做">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">2.8.&#160;模塊參數</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch02s07.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;2&#160;章&#160;建立和運行模塊</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch02s09.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="ModuleParameters.sect1"></a>2.8.&#160;模塊參數</h2></div></div></div>
+<p>驅動需要知道的幾個參數因不同的系統而不同. 從使用的設備號( 如我們在下一章見到的 )到驅動應當任何操作的幾個方面. 例如, SCSI 適配器的驅動常常有選項控制標記命令隊列的使用, IDE 驅動允許用戶控制 DMA 操作. 如果你的驅動控制老的硬件, 還需要被明確告知哪裡去找硬件的 I/O 端口或者 I/O 內存地址. 內核通過在加載驅動的模塊時指定可變參數的值, 支持這些要求.  </p>
+<p> 這些參數的值可由 insmod 或者 modprobe 在加載時指定; 後者也可以從它的配置文件(/etc/modprobe.conf)讀取參數的值. 這些命令在命令行裡接受幾類規格的值. 作為演示這種能力的一種方法, 想像一個特別需要的對本章開始的"hello world"模塊(稱為 hellop)的改進. 我們增加 2 個參數: 一個整型值, 稱為 howmany, 一個字符串稱為 whom. 我們的特別多功能的模塊就在加載時, 歡迎 whom 不止一次, 而是 howmany 次. 這樣一個模塊可以用這樣的命令行加載: </p>
+<pre class="screen">
+insmod hellop howmany=10 whom="Mom" 
+</pre>
+<p> 一旦以那樣的方式加載, hellop 會說 "hello, Mom" 10 次.  </p>
+<p> 但是, 在 insmod 可以修改模塊參數前, 模塊必須使它們可用. 參數用 moudle_param 宏定義來聲明, 它定義在 moduleparam.h. module_param 使用了 3 個參數: 變量名, 它的類型, 以及一個權限掩碼用來做一個輔助的 sysfs 入口. 這個宏定義應當放在任何函數之外, 典型地是出現在源文件的前面. 因此 hellop 將聲明它的參數, 並如下使得對 insmod 可用: </p>
+<pre class="programlisting">
+static char *whom = "world";
+static int howmany = 1;
+module_param(howmany, int, S_IRUGO);
+module_param(whom, charp, S_IRUGO);
+</pre>
+<p> 模塊參數支持許多類型: </p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>bool </span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>invbool </span></span></dt>
+<dd><p>一個布爾型( true 或者 false)值(相關的變量應當是 int 類型). invbool 類型顛倒了值, 所以真值變成 false, 反之亦然.  </p></dd>
+<dt><span class="term"><span>charp </span></span></dt>
+<dd><p>一個字符指針值. 內存為用戶提供的字串分配, 指針因此設置.  </p></dd>
+<dt><span class="term"><span>int</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>long</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>short</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>uint</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>ulong</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>ushort </span></span></dt>
+<dd><p>基本的變長整型值. 以 u 開頭的是無符號值.  </p></dd>
+</dl></div>
+<p>數組參數, 用逗號間隔的列表提供的值, 模塊加載者也支持. 聲明一個數組參數, 使用:</p>
+<pre class="programlisting">
+module_param_array(name,type,num,perm);
+</pre>
+<p>這裡 name 是你的數組的名子(也是參數名), type 是數組元素的類型, num 是一個整型變量, perm 是通常的權限值. 如果數組參數在加載時設置, num 被設置成提供的數的個數. 模塊加載者拒絕比數組能放下的多的值.</p>
+<p> 如果你確實需要一個沒有出現在上面列表中的類型, 在模塊代碼裡有鉤子會允許你來定義它們; 任何使用它們的細節見 moduleparam.h. 所有的模塊參數應當給定一個缺省值; insmod 只在用戶明確告知它的時候才改變這些值. 模塊可檢查明顯的參數, 通過對應它們的缺省值檢查這些參數.  </p>
+<p> 最後的 module_param 字段是一個權限值; 你應當使用 &lt;linux/stat.h&gt; 中定義的值. 這個值控制誰可以存取這些模塊參數在 sysfs 中的表示. 如果 perm 被設為 0, 就根本沒有 sysfs 項. 否則, 它出現在 /sys/module<sup>[<a name="id410890" href="#ftn.id410890">5</a>]</sup> 下面, 帶有給定的權限. 使用 S_IRUGO 作為參數可以被所有人讀取, 但是不能改變; S_IRUGO|S_IWUSR 允許 root 來改變參數. 注意, 如果一個參數被 sysfs 修改, 你的模塊看到的參數值也改變了, 但是你的模塊沒有任何其他的通知. 你應當不要使模塊參數可寫, 除非你準備好檢測這個改變並且因而作出反應.</p>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id410890" href="#id410890">5</a>] </sup> 然而, 在本書寫作時, 有討論將參數移出 sysfs.  </p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch02s07.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch02.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch02s09.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">2.7.&#160;初始化和關停&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;2.9.&#160;在用戶空間做</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s08.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

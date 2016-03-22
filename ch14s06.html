@@ -1,0 +1,189 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch14s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>14.6.&#160;集成起來-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch14.html" title="第&#160;14&#160;章&#160;Linux 設備模型">
+<link rel="prev" href="ch14s05.html" title="14.5.&#160;類">
+<link rel="next" href="ch14s07.html" title="14.7.&#160;熱插拔">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">14.6.&#160;集成起來</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch14s05.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;14&#160;章&#160;Linux 設備模型</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch14s07.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="PuttingItAllTogether.sect1"></a>14.6.&#160;集成起來</h2></div></div></div>
+<p>為更好理解驅動模型做什麼, 讓我們通覽一個設備在內核中的生命週期的階段. 我們描述 PCI 子系統如何與驅動模型交互, 一個驅動如何被加入和去除的基本概念, 以及一個設備如何從系統中被加入和去除. 這些細節, 即便特別地描述 PCI 內核代碼, 適用所有其他的使用驅動核心來管理它們的驅動和設備的子系統.</p>
+<p>PCI 核心, 驅動核心和單獨的 PCI 驅動之間的交互是非常複雜, 如同圖 <a href="ch14s06.html#ldd3-14-3.fig" title="圖&#160;14.3.&#160;創建設備過程">創建設備過程</a>所示.</p>
+<div class="figure">
+<a name="ldd3-14-3.fig"></a><p class="title"><b>圖&#160;14.3.&#160;創建設備過程</b></p>
+<div><img src="images/snagitldd3/ldd3-14-3.png" alt="創建設備過程"></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AddaDevice.sect2"></a>14.6.1.&#160;添加一個設備</h3></div></div></div>
+<p>PCI 子系統聲明一個單個 struct bus_type 稱為 pci_bus_type, 它使用下列值初始化:</p>
+<pre class="programlisting">
+struct bus_type pci_bus_type = {
+ .name  = "pci", 
+ .match  = pci_bus_match, 
+ .hotplug  = pci_hotplug, 
+ .suspend  = pci_device_suspend, 
+ .resume  = pci_device_resume, 
+ .dev_attrs = pci_dev_attrs, };
+</pre>
+<p>這個 pci_bus_type 變量被註冊到驅動內核, 當 PCI 子系統通過對 bus_register 的調用被加載入內核時. 當這個發生時, 驅動核心創建一個 sysfs 目錄在 /sys/bus/pci 裡, 它包含 2 個目錄: devices 和 drivers.</p>
+<p>所有的 PCI 驅動必須定義一個 struct pci_driver 變量, 它定義了這個 PCI 驅動能夠做的不同的功能(更多的關於 PCI 子系統和如何編寫一個 PCI 驅動的信息, 見 12 章). 那個結構包含一個 struct device_driver, 它接著被 PCI 核心初始化, 當 PCI 驅動被註冊時.</p>
+<pre class="programlisting">
+/* initialize common driver fields */
+drv-&gt;driver.name = drv-&gt;name;
+drv-&gt;driver.bus = &amp;pci_bus_type;
+drv-&gt;driver.probe = pci_device_probe;
+drv-&gt;driver.remove = pci_device_remove; 
+drv-&gt;driver.kobj.ktype = &amp;pci_driver_kobj_type;
+</pre>
+<p>這個代碼為驅動建立總線來指向 pci_bus_type 以及使 probe 和 remove 函數來指向 PCI 核心內的函數. 驅動的 kobject 的 ktype 被設置為變量 pci_driver_kobj_type, 為使 PCI 驅動的屬性文件正常工作. 接著 PCI 核心註冊 PCI 驅動到驅動核心:</p>
+<pre class="programlisting">
+/* register with core */
+error = driver_register(&amp;drv-&gt;driver);
+</pre>
+<p>驅動現在準備好被綁定到任何一個它支持的 PCI 設備.</p>
+<p>PCI 核心, 在來自特定結構的實際和 PCI 總線交談的代碼的幫助下, 開始探測 PCI 地址空間, 查找所有的 PCI 設備. 當一個PCI 設備被發現, PCI 核心在內存中創建一個 struct pci_dev 類型的新變量. struct pci_dev 結構的一部分看來如下:</p>
+<pre class="programlisting">
+struct pci_dev {
+ /* ... */
+ unsigned int devfn;
+ unsigned short vendor;
+ unsigned short device;
+ unsigned short subsystem_vendor;
+ unsigned short subsystem_device;
+ unsigned int class;
+ /* ... */
+ struct pci_driver *driver;
+ /* ... */
+ struct device dev;
+ /* ... */
+
+}; 
+</pre>
+<p>這個 PCI 設備的總線特定的成員被 PCI 核心初始化( devfn, vendor, device, 和其他成員), 並且 struct device 變量的 parent 變量被設置為這個 PCI 設備所在的 PCI 總線設備. bus 變量被設置指向 pci_bus_type 結構. 接下來 name 和 bus_id 變量被設置, 根據讀自 PCI 設備的 name 和 ID.</p>
+<p>在 PCI 設備結構被初始化之後, 設備被註冊到驅動核心, 使用:</p>
+<pre class="programlisting">
+device_register(&amp;dev-&gt;dev); 
+</pre>
+<p>在 device_register 函數中, 驅動核心初始化設備的許多成員, 註冊設備的 kobject 到 kobject 核心( 它導致一個熱插拔事件產生, 但是我們在本章後面討論), 接著添加設備到驅動的 parent 所持有的設備列表中. 完成這個使所有的設備可被以正確的順序瀏覽, 一直知道每一個位於設備層次中哪裡.</p>
+<p>設備接著被添加到所有設備的總線特定的列表中, 在本例中, pci_bus_type 列表. 接著註冊到這個總線的所有驅動的列表被檢查, 並且總線的匹配功能被調用給每個驅動, 指定這個設備. 對於 pci_bus_type 總線, 匹配函數被 PCI 核心設定為指向 pci_bus_match 函數, 在設備被提交給驅動核心前.</p>
+<p>pci_bus_match 函數轉換驅動核心傳遞給它的 struct device 為一個 struct pci_dev. 它還轉換 struct device_driver 為一個 struct pci_driver , 並接著查看設備的 PCI 設備特定信息和驅動, 看是否這個驅動聲明它能夠支持這類設備. 如果匹配不成功, 函數返回 0 給驅動核心, 並且驅動核心移向列表中的下一個驅動.</p>
+<p>如果匹配成功, 函數返回 1 給驅動核心. 這使驅動核心設置struct device 中的驅動指針指向這個驅動, 並且接著調用在 struct device_driver 中特定的 probe 函數.</p>
+<p>早些時候, 在 PCI 驅動註冊到驅動核心之前, probe 變量被設為指向 pci_device_probe 函數. 這個函數轉換(又一次) struct device 為一個struct pci_dev, 在設備中設置的 struct driver 為一個 struct pci_driver. 它再次驗證這個驅動聲明它可以支持這個設備( 這意味著一個重複的額外檢查, 某些未知的原因), 遞增設備的引用計數, 並且接著調用 PCI 驅動的 probe 函數, 用一個指向它應當被綁定到的 struct pci_dev 結構的指針.</p>
+<p>如果這個 PCI 驅動的 probe 函數認為它不能處理這個設備由於某些原因, 它返回一個負的錯誤值, 這個值被傳遞回驅動核心並且使它繼續深入設備列表來和這個設備匹配一個. 如果這個 probe 函數能夠認領這個設備, 它做所有的需要的初始化來正確處理這個設備, 並且接著它返回 0 給驅動核心. 這使驅動核心來添加設備到當前被這個特定驅動所綁定的所有設備列表, 並且創建一個符號連接到這個它現在控制的設備, 在這個驅動在 sysfs 的目錄. 這個符號連接允許用戶準確見到哪個設備被綁定到哪個設備. 這可被見到, 如:</p>
+<pre class="screen">
+$ tree /sys/bus/pci
+/sys/bus/pci/
+|-- devices
+|  |-- 0000:00:00.0 -&gt; ../../../devices/pci0000:00/0000:00:00.0  
+|  |-- 0000:00:00.1 -&gt; ../../../devices/pci0000:00/0000:00:00.1  
+|  |-- 0000:00:00.2 -&gt; ../../../devices/pci0000:00/0000:00:00.2  
+|  |-- 0000:00:02.0 -&gt; ../../../devices/pci0000:00/0000:00:02.0  
+|  |-- 0000:00:04.0 -&gt; ../../../devices/pci0000:00/0000:00:04.0  
+|  |-- 0000:00:06.0 -&gt; ../../../devices/pci0000:00/0000:00:06.0  
+|  |-- 0000:00:07.0 -&gt; ../../../devices/pci0000:00/0000:00:07.0  
+|  |-- 0000:00:09.0 -&gt; ../../../devices/pci0000:00/0000:00:09.0  
+|  |-- 0000:00:09.1 -&gt; ../../../devices/pci0000:00/0000:00:09.1  
+|  |-- 0000:00:09.2 -&gt; ../../../devices/pci0000:00/0000:00:09.2  
+|  |-- 0000:00:0c.0 -&gt; ../../../devices/pci0000:00/0000:00:0c.0  
+|  |-- 0000:00:0f.0 -&gt; ../../../devices/pci0000:00/0000:00:0f.0  
+|  |-- 0000:00:10.0 -&gt; ../../../devices/pci0000:00/0000:00:10.0  
+|  |-- 0000:00:12.0 -&gt; ../../../devices/pci0000:00/0000:00:12.0  
+|  |-- 0000:00:13.0 -&gt; ../../../devices/pci0000:00/0000:00:13.0  
+|  `-- 0000:00:14.0 -&gt; ../../../devices/pci0000:00/0000:00:14.0  
+`-- drivers
+ |-- ALI15x3_IDE
+ | `-- 0000:00:0f.0 -&gt; ../../../../devices/pci0000:00/0000:00:0f.0
+ |-- ehci_hcd
+ | `-- 0000:00:09.2 -&gt; ../../../../devices/pci0000:00/0000:00:09.2
+ |-- ohci_hcd
+ | |-- 0000:00:02.0 -&gt; ../../../../devices/pci0000:00/0000:00:02.0
+ | |-- 0000:00:09.0 -&gt; ../../../../devices/pci0000:00/0000:00:09.0
+ | `-- 0000:00:09.1 -&gt; ../../../../devices/pci0000:00/0000:00:09.1
+ |-- orinoco_pci
+ | `-- 0000:00:12.0 -&gt; ../../../../devices/pci0000:00/0000:00:12.0
+ |-- radeonfb
+ | `-- 0000:00:14.0 -&gt; ../../../../devices/pci0000:00/0000:00:14.0
+ |-- serial
+ `-- trident
+ `-- 0000:00:04.0 -&gt; ../../../../devices/pci0000:00/0000:00:04.0 
+</pre>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RemoveaDevice.sect2"></a>14.6.2.&#160;去除一個設備</h3></div></div></div>
+<p>一個 PCI 可用多個不同的方法被從系統中去除. 所有的 card-bus 設備在一個不同的物理因素上是真正的 PCI 設備, 並且內核 PCI 核心不區分它們. 允許在機器運行時加減 PCI 設備的系統正變得更加普遍, 並且 Linux 支持它們. 還有一個偽 PCI 熱插拔驅動允許開發者來測試看是否他們的 PCI 驅動正確處理系統運行中的設備去除. 這個模塊稱為 fakephp 並且使內核認為 PCI 設備已消失, 但是它不允許用戶物理上從系統中去除一個 PCI 設備, 這個系統沒有合適的硬件來這樣做. 見這個驅動的文檔來獲取更多關於如何使用它測試你的 PCI 驅動的信息.</p>
+<p>PCI 核心發揮了不少於它增加設備的努力到去除它. 當一個 PCI 設備要被去除, pci_remove_bus_device 函數被調用. 這個函數做一些 PCI-特定 的清理和日常工作, 並且接著使用一個指向 struct pci_dev 的 struct device 成員的指針調用 device_unregister 函數.</p>
+<p>在 device_unregister 函數中, 驅動核心只從綁定到這個設備(如果有)的驅動解除連接 sysfs 文件, 從它的內部設備列表中去除這個設備, 並且使用指向包含在 struct device 結構中的 struct kobject 的指針調用 kobject_del. 這個函數用一個 hotplug 調用到用戶空間來聲明 kobject 現在被從系統中去除, 並且接著它刪除所有的和 kobject 關聯的 sysfs 文件以及這個 kobject 起初已創建的 sysfs 目錄自身.</p>
+<p>kobject_del 函數也去除設備自身的 kobject 引用. 如果那個引用是最後一個( 意味著沒有用戶空間文件為這個 sysfs 的設備入口而打開 ), 接著是 PCI 設備自身的 release 函數, pci_release_dev, 被調用. 這個函數只釋放 struct pci_dev 佔用的內存.</p>
+<p>此後, 所有的和這個設備關聯的 sysfs 入口被去除, 並且和這個設備關聯的內存被釋放. PCI 設備現在完全從系統中被去除.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AddaDriver.sect2"></a>14.6.3.&#160;添加一個驅動</h3></div></div></div>
+<p>一個 PCI 驅動被添加到 PCI 核心, 當它調用 pci_register_driver 函數時. 這個函數只初始化 struct device_driver 結構, 這個結構包含在 struct pci_driver 結構裡面, 如同之前在關於添加設備的一節中提過的. 接著 PCI 核心使用指向包含在 struct pci_driver 結構中的 sturct device_driver 結構的指針調用在驅動核心的 driver_register 函數.</p>
+<p>driver_register 函數初始化在 struct device_driver 結構中的幾個鎖, 並且接著調用 bus_add_driver 函數. 這個函數進行下面的步驟:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>查找驅動要被關聯的總線. 如果這個總線被發現, 函數立刻返回.</p></li>
+<li><p>驅動的 sysfs 目錄被創建, 基於驅動的名子和它被關聯的總線.</p></li>
+<li><p>總線的內部鎖被獲取, 接著所有的已經註冊到總線的設備被檢查, 匹配函數為它們被調用, 就像當一個新設備被添加時. 如果那個匹配函數成功, 接著剩下的綁定過程發生, 如同在前面章節描述過的.</p></li>
+</ul></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RemoveaDriver.sect2"></a>14.6.4.&#160;去除一個驅動</h3></div></div></div>
+<p>去除一個驅動是一個非常容易的動作. 對於一個 PCI 驅動, 驅動調用 pci_unregister_driver 函數. 這個函數只調用驅動核心函數 driver_unregister, 使用一個指向傳遞給它的 struct pci_driver 的 struct devie_driver 的指針.</p>
+<p>deiver_unregister 函數處理一些基本的日常工作, 通過清理某些在 sysfs 樹中連接到這個驅動入口的 sysfs 屬性. 它接著列舉所有的連接到這個驅動的設備並且為它調用 release 函數. 發生這個恰好像前面提過的 release 函數, 當一個設備從系統中去除時.</p>
+<p>在所有的設備從驅動中被解綁定後, 驅動代碼完成這個獨特的邏輯:</p>
+<pre class="programlisting">
+down(&amp;drv-&gt;unload_sem);
+up(&amp;drv-&gt;unload_sem);
+</pre>
+<p>這就在返回函數的調用者之前完成. 這個鎖被獲取因為代碼需要等待所有的對這個驅動的引用計數在它可安全返回前掉到 0. 需要這樣是因為 driver_unregister 函數最普遍被作為一個要卸載的模塊退出的路徑來調用. 模塊需要保留在內存只要驅動被設備引用並且等待這個鎖被釋放, 這允許內核知道當可以安全從內存去除驅動時.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch14s05.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch14.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch14s07.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">14.5.&#160;類&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;14.7.&#160;熱插拔</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch14s06.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

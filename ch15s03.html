@@ -1,0 +1,207 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch15s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:41 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>15.3.&#160;進行直接 I/O-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch15.html" title="第&#160;15&#160;章&#160;內存映射和 DMA ">
+<link rel="prev" href="ch15s02.html" title="15.2.&#160;mmap 設備操作">
+<link rel="next" href="ch15s04.html" title="15.4.&#160;直接內存存取">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">15.3.&#160;進行直接 I/O</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch15s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;15&#160;章&#160;內存映射和 DMA </th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch15s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="PerformingDirectIO.sect1"></a>15.3.&#160;進行直接 I/O</h2></div></div></div>
+<p>大部分 I/O 操作是通過內核緩衝的. 一個內核空間緩衝區的使用允許一定程度的用戶空間和實際設備的分離; 這種分離能夠使編程容易並且還可以在許多情況下有性能的好處. 但是, 有這樣的情況它對於進行 I/O 直接到或從一個用戶空間緩衝區是有好處的. 如果正被傳輸的數據量大, 不使用一個額外的拷貝直接通過內核空間傳輸數據可以加快事情進展.</p>
+<p>2.6 內核中一個直接 I/O 使用的例子是 SCSI 磁帶驅動. 流動的磁帶能夠傳送大量數據通過系統, 並且磁帶傳送常常是面向記錄的, 因此在內核中緩衝數據沒有好處. 因此, 當條件正確(用戶空間緩衝區是頁對齊的, 例如), SCSI 磁帶驅動進行它的 I/O 而不拷貝數據.</p>
+<p>就是說, 重要的是認識到直接 I/O 不是一直提供人們期望的性能提高. 設置直接 I/O (它調用出錯換入並且除下相關的用戶空間)的開銷可能是不小的, 並且被緩衝的 I/O 的好處丟失了. 例如, 直接 I/O 的使用要求 write 系統調用同步操作; 否則應用程序不能知道什麼時間它可以重新使用它的 I/O 緩衝. 停止應用程序直到每個 write 完成可能拖慢事情, 這是為什麼使用直接 I/O 的應用程序也常常使用異步 I/O 操作的原因.</p>
+<p>事情的真正內涵是, 在任何情況下, 在一個字符驅動實現直接 I/O 常常是不必要並且可能是有害的. 你應當只在你確定緩衝的 I/O 的開銷確實拖慢了系統的情況下採取這個步驟. 還要注意, 塊和網絡驅動不必擔心實現直接 I/O; 這 2 種情況下, 內核中的高級的代碼在需要時建立和使用直接 I/O, 並且驅動級別的代碼甚至不需要知道直接 I/O 在被進行中.</p>
+<p>實現直接 I/O 的關鍵是一個稱為 get_user_pages 的函數, 它在 &lt;linux/mm.h&gt; 中定義使用下列原型:</p>
+<pre class="programlisting">
+int get_user_pages(struct task_struct *tsk,
+ struct mm_struct *mm,
+ unsigned long start,
+ int len,
+ int write,
+ int force,
+ struct page **pages,
+ struct vm_area_struct **vmas); 
+</pre>
+<p>這個函數有幾個參數:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>tsk </span></span></dt>
+<dd><p>一個指向進行 I/O 的任務的指針; 它的主要目的是告知內核誰應當負責任何一個當設置緩衝時導致的頁錯. 這個參數幾乎一直作為 current 傳遞.</p></dd>
+<dt><span class="term"><span>mm</span></span></dt>
+<dd><p>一個內存管理結構的指針, 描述被映射的地址空間. mm_struct 結構是捆綁一個進程的虛擬地址空間所有的部分在一起的. 對於驅動的使用, 這個參數應當一直是 current-&gt;mm.</p></dd>
+<dt><span class="term"><span>start len</span></span></dt>
+<dd><p>start 是(頁對齊的)用戶空間緩衝的地址, 並且 len 是緩衝的長度以頁計.</p></dd>
+<dt><span class="term"><span>write force </span></span></dt>
+<dd><p>如果 write 是非零, 這些頁被映射來寫(當然, 隱含著用戶空間在進行一個讀操作). force 標誌告知 get_user_pages 來覆蓋在給定頁上的保護, 來提供要求的權限; 驅動應當一直傳遞 0 在這裡.</p></dd>
+<dt><span class="term"><span>pages vmas </span></span></dt>
+<dd><p>輸出參數. 在成功完成後, 頁包含一系列指向 struct page 結構的指針來描述用戶空間緩衝, 並且 vmas 包含指向被關聯的 VMA 的指針. 這些參數應當, 顯然, 指向能夠持有至少 len 個指針的數組. 任一個參數可能是 NULL, 但是你需要, 至少, struct page 指針來實際對緩衝操作.</p></dd>
+</dl></div>
+<p>get_user_pages 是一個低級內存管理函數, 帶一個相稱的複雜的接口. 它還要求給這個地址空間的 mmap 讀者/寫者 旗標在調用前被以讀模式獲得. 結果是, 對 get_user_pages 常常看來像:</p>
+<pre class="programlisting">
+down_read(&amp;current-&gt;mm-&gt;mmap_sem);
+
+result = get_user_pages(current, current-&gt;mm, ...);
+up_read(&amp;current-&gt;mm-&gt;mmap_sem);
+</pre>
+<p>返回值是實際映射的頁數, 它可能小於請求的數目(但是大於 0).</p>
+<p>一旦成功完成, 調用者有一個頁數組指向用戶空間緩衝, 它被鎖入內存. 為直接在緩衝上操作, 內核空間代碼必須將每個 struct page 指針轉換為一個內核虛擬地址, 使用 kmap 或者 kmap_atomic. 常常地, 但是, 對於可以使用直接 I/O 的設備在使用 DMA 操作, 因此你的驅動將可能想從 struct page 指針數組創建一個發散/匯聚列表. 我們在 "發散/匯聚映射"一節中討論如何做這個.</p>
+<p>一旦你的直接 I/O 操作完成了, 你必須釋放用戶頁. 在這樣做之前, 但是, 你必須通知內核如果你改變了這些頁的內容. 否則, 內核可能認為這些頁是"乾淨"的, 意味著它們匹配一個在交換設備中發現的一個拷貝, 並且釋放它們不寫出它們到備份存儲. 因此, 如果你已改變了這些頁(響應一個用戶空間寫請求), 你必須標誌每個被影響到的頁為髒, 使用一個調用:</p>
+<pre class="programlisting">
+void SetPageDirty(struct page *page); 
+</pre>
+<p>(這個宏定義在 &lt;linux/page-flags.h&gt;). 進行這個操作的代碼首先檢查來保證頁不在內存映射的保留部分, 這部分從不被換出. 因此, 代碼常常看來如此:</p>
+<pre class="programlisting">
+if (! PageReserved(page))
+ SetPageDirty(page);
+</pre>
+<p>因為用戶空間內存正常地不置為保留的, 這個檢查嚴格地不應當是必要的, 但是當你深入內存管理子系統時, 最好全面並且仔細.</p>
+<p>不管這些頁是否已被改變, 它們必須從頁緩存中釋放, 或者它們一直留在那裡. 這個調用是:</p>
+<pre class="programlisting">
+void page_cache_release(struct page *page); 
+</pre>
+<p>這個調用應當, 當然, 在頁已被標識為髒之後進行, 如果需要.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AsynchronousIO.sect2"></a>15.3.1.&#160;異步 I/O</h3></div></div></div>
+<p>增加到 2.6 內核的一個新的特性是異步 I/O 能力. 異步 I/O 允許用戶空間來初始化操作而不必等待它們的完成; 因此, 一個應用程序可以在它的 I/O 在進行中時做其他的處理. 一個複雜的, 高性能的應用程序還可使用異步 I/O 來使多個操作在同一個時間進行.</p>
+<p>異步 I/O 的實現是可選的, 並且很少幾個驅動作者關心; 大部分設備不會從這個能力中受益. 如同我們將在接下來的章節中見到的, 塊和網絡驅動在整個時間是完全異步的, 因此只有字符驅動對於明確的異步 I/O 支持是候選的. 一個字符設備能夠從這個支持中受益, 如果有好的理由來使多個 I/O 操作在任一給定時間同時進行. 一個好例子是流化磁帶驅動, 這裡這個驅動可停止並且明顯慢下來如果 I/O 操作沒有盡快到達. 一個應用程序試圖從一個流驅動中獲得最好的性能, 可以使用異步 I/O 來使多個操作在任何時間準備好進行.</p>
+<p>對於少見的需要實現異步 I/O 的驅動作者, 我們提供一個快速的關於它如何工作的概觀. 我們涉及異步 I/O 在本章, 因為它的實現幾乎一直也包括直接 I/O 操作(如果你在內核中緩衝數據, 你可能常常實現異步動作而不必在用戶空間出現不必要的複雜性).</p>
+<p>支持異步 I/O 的驅動應當包含 &lt;linux/aio.h&gt;. 有 3 個 file_operation 方法給異步 I/O 實現:</p>
+<pre class="programlisting">
+ssize_t (*aio_read) (struct kiocb *iocb, char *buffer,
+ size_t count, loff_t offset);
+ssize_t (*aio_write) (struct kiocb *iocb, const char *buffer,
+ size_t count, loff_t offset);
+int (*aio_fsync) (struct kiocb *iocb, int datasync);
+</pre>
+<p>aio_fsync 操作只對文件系統代碼感興趣, 因此我們在此不必討論它. 其他 2 個, aio_read 和 aio_write, 看起來非常像常規的 read 和 write 方法, 但是有幾個例外. 一個是 offset 參數由值傳遞; 異步操作從不改變文件位置, 因此沒有理由傳一個指針給它. 這些方法還使用 iocb ("I/O 控制塊")參數, 這個我們一會兒就到.</p>
+<p>aio_read 和 aio_write 方法的目的是初始化一個讀或寫操作, 在它們返回時可能完成或者可能沒完成. 如果有可能立刻完成操作, 這個方法應當這樣做並且返回通常的狀態: 被傳輸的字節數或者一個負的錯誤碼. 因此, 如果你的驅動有一個稱為 my_read 的讀方法, 下面的 aio_read 方法是全都正確的(儘管特別無意義):</p>
+<pre class="programlisting">
+static ssize_t my_aio_read(struct kiocb *iocb, char *buffer, ssize_t count, loff_t offset)
+{
+ return my_read(iocb-&gt;ki_filp, buffer, count, &amp;offset);
+}
+</pre>
+<p>注意,  struct file 指針在 kocb 結構的 ki_filp 成員中.</p>
+<p>如果你支持異步 I/O, 你必須知道這個事實, 內核可能, 偶爾, 創建"異步 IOCB". 它們是, 本質上, 必須實際上被同步執行的異步操作. 有人可能非常奇怪為什麼要這樣做, 但是最好只做內核要求做的. 同步操作在 IOCB 中標識; 你的驅動應當詢問狀態, 使用:</p>
+<pre class="programlisting">
+int is_sync_kiocb(struct kiocb *iocb); 
+</pre>
+<p>如果這個函數返回一個非零值, 你的驅動必須同步執行這個操作.</p>
+<p>但是, 最後, 所有這個結構的意義在於使能異步操作. 如果你的驅動能夠初始化這個操作(或者, 簡單地, 將它排隊到它能夠被執行時), 它必須做兩件事情: 記住它需要知道的關於這個操作的所有東西, 並且返回 -EIOCBQUEUED 給調用者. 記住操作信息包括安排對用戶空間緩衝的存取; 一旦你返回, 你將不再有機會來存取緩衝, 當再調用進程的上下文運行時. 通常, 那意味著你將可能不得不建立一個直接內核映射( 使用 get_user_pages ) 或者一個 DMA 映射. -EIOCBQUEUED 錯誤碼指示操作還沒有完成, 並且它最終的狀態將之後傳遞.</p>
+<p>當"之後"到來時, 你的驅動必須通知內核操作已經完成. 那通過調用 aio_complete 來完成:</p>
+<pre class="programlisting">
+int aio_complete(struct kiocb *iocb, long res, long res2);
+</pre>
+<p>這裡, iocb 是起初傳遞給你的同一個 IOCB, 並且 res 是這個操作的通常的結果狀態. res2 是將被返回給用戶空間的第 2 個結果碼; 大部分的異步 I/O 實現作為 0 傳遞 res2. 一旦你調用 aio_complete, 你不應當再碰 IOCB 或者用戶緩衝.</p>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="AnasynchronousIOexample.sect3"></a>15.3.1.1.&#160;一個異步 I/O 例子</h4></div></div></div>
+<p>例子代碼中的面向頁的 scullp 驅動實現異步 I/O. 實現是簡單的, 但是足夠來展示異步操作應當如何被構造.</p>
+<p>aio_read 和 aio_write 方法實際上不做太多:</p>
+<pre class="programlisting">
+static ssize_t scullp_aio_read(struct kiocb *iocb, char *buf, size_t count, loff_t pos)
+{
+        return scullp_defer_op(0, iocb, buf, count, pos);
+}
+
+static ssize_t scullp_aio_write(struct kiocb *iocb, const char *buf, size_t count, loff_t pos)
+{
+        return scullp_defer_op(1, iocb, (char *) buf, count, pos);
+}
+</pre>
+<p>這些方法僅僅調用一個普通的函數:</p>
+<pre class="programlisting">
+struct async_work
+{
+        struct kiocb *iocb;
+        int result;
+        struct work_struct work;
+
+};
+
+static int scullp_defer_op(int write, struct kiocb *iocb, char *buf, size_t count, loff_t pos)
+{
+        struct async_work *stuff;
+        int result;
+
+        /* Copy now while we can access the buffer */
+        if (write)
+                result = scullp_write(iocb-&gt;ki_filp, buf, count, &amp;pos);
+        else
+                result = scullp_read(iocb-&gt;ki_filp, buf, count, &amp;pos);
+
+        /* If this is a synchronous IOCB, we return our status now. */
+        if (is_sync_kiocb(iocb))
+                return result;
+
+        /* Otherwise defer the completion for a few milliseconds. */
+        stuff = kmalloc (sizeof (*stuff), GFP_KERNEL);
+        if (stuff == NULL)
+
+                return result; /* No memory, just complete now */
+        stuff-&gt;iocb = iocb;
+        stuff-&gt;result = result;
+        INIT_WORK(&amp;stuff-&gt;work, scullp_do_deferred_op, stuff);
+        schedule_delayed_work(&amp;stuff-&gt;work, HZ/100);
+        return -EIOCBQUEUED;
+}
+</pre>
+<p>一個更加完整的實現應當使用 get_user_pages 來映射用戶緩衝到內核空間. 我們選擇來使生活簡單些, 通過只拷貝在 outset 的數據. 接著調用 is_sync_kiocb 來看是否這個操作必須同步完成; 如果是, 結果狀態被返回, 並且我們完成了. 否則我們記住相關的信息在一個小結構, 通過一個工作隊列來為"完成"而安排, 並且返回 -EIOCBQUEUED. 在這點上, 控制返回到用戶空間.</p>
+<p>之後, 工作隊列執行我們的完成函數:</p>
+<pre class="programlisting">
+static void scullp_do_deferred_op(void *p) 
+{
+ struct async_work *stuff = (struct async_work *) p;
+ aio_complete(stuff-&gt;iocb, stuff-&gt;result, 0);
+ kfree(stuff); 
+} 
+</pre>
+<p>這裡, 只是用我們保存的信息調用 aio_complete 的事情. 一個真正的驅動的異步 I/O 實現是有些複雜, 當然, 但是它遵循這類結構.</p>
+</div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch15s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch15.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch15s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">15.2.&#160;mmap 設備操作&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;15.4.&#160;直接內存存取</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch15s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:41 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

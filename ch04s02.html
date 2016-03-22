@@ -1,0 +1,204 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch04s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>4.2.&#160;用打印調試-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch04.html" title="第&#160;4&#160;章&#160;調試技術">
+<link rel="prev" href="ch04.html" title="第&#160;4&#160;章&#160;調試技術">
+<link rel="next" href="ch04s03.html" title="4.3.&#160;用查詢來調試">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">4.2.&#160;用打印調試</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;4&#160;章&#160;調試技術</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch04s03.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="DebuggingbyPrinting"></a>4.2.&#160;用打印調試</h2></div></div></div>
+<p>最常用的調試技術是監視, 在應用程序編程當中是通過在合適的地方調用 printf 來實現. 在你調試內核代碼時, 你可以通過 printk 來達到這個目的.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="printk"></a>4.2.1.&#160;printk</h3></div></div></div>
+<p>我們在前面幾章中使用 printk 函數, 簡單地假設它如同 printf 一樣使用. 現在到時候介紹一些不同的地方了.</p>
+<p>一個不同是 printk 允許你根據消息的嚴重程度對其分類, 通過附加不同的記錄級別或者優先級在消息上. 你常常用一個宏定義來指示記錄級別. 例如, KERN_INFO, 我們之前曾在一些打印語句的前面看到過, 是消息記錄級別的一種可能值. 記錄宏定義擴展成一個字串, 在編譯時與消息文本連接在一起; 這就是為什麼下面的在優先級和格式串之間沒有逗號的原因. 這裡有 2 個 printk 命令的例子, 一個調試消息, 一個緊急消息:</p>
+<pre class="programlisting">
+printk(KERN_DEBUG "Here I am: %s:%i\n", __FILE__, __LINE__);
+printk(KERN_CRIT "I'm trashed; giving up on %p\n", ptr);
+</pre>
+<p>有 8 種可能的記錄字串, 在頭文件 &lt;linux/kernel.h&gt; 裡定義; 我們按照嚴重性遞減的順序列出它們:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>KERN_EMERG</span></span></dt>
+<dd><p>用於緊急消息, 常常是那些崩潰前的消息.</p></dd>
+<dt><span class="term"><span>KERN_ALERT</span></span></dt>
+<dd><p>需要立刻動作的情形.</p></dd>
+<dt><span class="term"><span>KERN_CRIT</span></span></dt>
+<dd><p>嚴重情況, 常常與嚴重的硬件或者軟件失效有關.</p></dd>
+<dt><span class="term"><span>KERN_ERR</span></span></dt>
+<dd><p>用來報告錯誤情況; 設備驅動常常使用 KERN_ERR 來報告硬件故障.</p></dd>
+<dt><span class="term"><span>KERN_WARNING</span></span></dt>
+<dd><p>有問題的情況的警告, 這些情況自己不會引起系統的嚴重問題.</p></dd>
+<dt><span class="term"><span>KERN_NOTICE</span></span></dt>
+<dd><p>正常情況, 但是仍然值得注意. 在這個級別一些安全相關的情況會報告.</p></dd>
+<dt><span class="term"><span>KERN_INFO</span></span></dt>
+<dd><p>信息型消息. 在這個級別, 很多驅動在啟動時打印它們發現的硬件的信息.</p></dd>
+<dt><span class="term"><span>KERN_DEBUG</span></span></dt>
+<dd><p>用作調試消息.</p></dd>
+</dl></div>
+<p>每個字串( 在宏定義擴展裡 )代表一個在角括號中的整數. 整數的範圍從 0 到 7, 越小的數表示越大的優先級.</p>
+<p>一條沒有指定優先級的 printk 語句缺省是 DEFAULT_MESSAGE_LOGLEVEL, 在 kernel/printk.c 裡指定作為一個整數. 在 2.6.10 內核中, DEFAULT_MESSAGE_LOGLEVEL 是 KERN_WARNING, 但是在過去已知是改變的.</p>
+<p>基於記錄級別, 內核可能打印消息到當前控制台, 可能是一個文本模式終端, 串口, 或者是一台並口打印機. 如果優先級小於整型值 console_loglevel, 消息被遞交給控制台, 一次一行( 除非提供一個新行結尾, 否則什麼都不發送 ). 如果 klogd 和 syslogd 都在系統中運行, 內核消息被追加到 /var/log/messages (或者另外根據你的 syslogd 配置處理), 獨立於 console_loglevel. 如果 klogd 沒有運行, 你只有讀 /proc/kmsg ( 用 dmsg 命令最易做到 )將消息取到用戶空間. 當使用 klogd 時, 你應當記住, 它不會保存連續的同樣的行; 它只保留第一個這樣的行, 隨後是, 它收到的重複行數.</p>
+<p>變量 console_loglevel 初始化成 DEFAULT_CONSOLE_LOGLEVEL, 並且可通過 sys_syslog 系統調用修改. 一種修改它的方法是在調用 klogd 時指定 -c 開關, 在 klogd 的 manpage 裡有指定. 注意要改變當前值, 你必須先殺掉 klogd, 接著使用 -c 選項重啟它. 另外, 你可寫一個程序來改變控制台記錄級別. 你會發現這樣一個程序的版本在由 O' Reilly 提供的 FTP 站點上的 miscprogs/setlevel.c. 新的級別指定未一個整數, 在 1 和 8 之前, 包含 1 和 8. 如果它設為 1, 只有 0 級消息( KERN_EMERG )到達控制台; 如果它設為 8, 所有消息, 包括調試消息, 都顯示.</p>
+<p>也可以通過文本文件 /proc/sys/kernel/printk 讀寫控制台記錄級別. 這個文件有 4 個整型值: 當前記錄級別, 適用沒有明確記錄級別的消息的缺省級別, 允許的最小記錄級別, 以及啟動時缺省記錄級別. 寫一個單個值到這個文件就改變當前記錄級別成這個值; 因此, 例如, 你可以使所有內核消息出現在控制台, 通過簡單地輸入:</p>
+<pre class="screen"> # echo 8 &gt; /proc/sys/kernel/printk </pre>
+<p>現在應當清楚了為什麼 hello.c 例子使用 KERN_ALERT 標誌; 它們是要確保消息會出現在控制台上.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RedirectingConsoleMessages"></a>4.2.2.&#160;重定向控制台消息</h3></div></div></div>
+<p>Linux 在控制台記錄策略上允許一些靈活性, 它允許你發送消息到一個指定的虛擬控制台(如果你的控制台使用的是文本屏幕). 缺省地, 這個"控制台"是當前虛擬終端. 為了選擇一個不同地虛擬終端來接收消息, 你可對任何控制台設備調用 ioctl(TIOCLINUX). 下面的程序, setconsole, 可以用來選擇哪個控制台接收內核消息; 它必須由超級用戶運行, 可以從 misc-progs 目錄得到.</p>
+<p>下面是全部程序. 應當使用一個參數來指定用以接收消息的控制台的編號.</p>
+<pre class="programlisting">
+int main(int argc, char **argv)
+{
+    char bytes[2] = {11,0}; /* 11 is the TIOCLINUX cmd number */
+    if (argc==2) bytes[1] = atoi(argv[1]); /* the chosen console */
+    else {
+
+        fprintf(stderr, "%s: need a single arg\n",argv[0]); exit(1); } if (ioctl(STDIN_FILENO, TIOCLINUX, bytes)&lt;0) { /* use stdin */
+        fprintf(stderr,"%s: ioctl(stdin, TIOCLINUX): %s\n",
+                argv[0], strerror(errno));
+        exit(1);
+    }
+    exit(0);
+}
+</pre>
+<p>setconsole 使用特殊的 ioctl 命令 TIOCLINUX, 來實現特定於 linux 的功能. 為使用 TIOCLINUX, 你傳遞它一個指向字節數組的指針作為參數. 數組的第一個字節是一個數, 指定需要的子命令, 下面的字節是特對於子命令的. 在 setconsole 裡, 使用子命令 11, 下一個字節(存於 bytes[1])指定虛擬控制台. TIOCLINUX 的完整描述在內核源碼的 drivers/char/tty_io.c 裡.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="HowMessageGetLogged"></a>4.2.3.&#160;消息是如何記錄的</h3></div></div></div>
+<p>printk 函數將消息寫入一個 __LOG_BUF_LEN 字節長的環形緩存, 長度值從 4 KB 到 1 MB, 由配置內核時選擇. 這個函數接著喚醒任何在等待消息的進程, 就是說, 任何在系統調用中睡眠或者在讀取 /proc/kmsg 的進程. 這 2 個日誌引擎的接口幾乎是等同的, 但是注意, 從 /proc/kmsg 中讀取是從日誌緩存中消費數據, 然而 syslog 系統調用能夠選擇地在返回日誌數據地同時保留它給其他進程. 通常, 讀取 /proc 文件容易些並且是 klogd 的缺省做法. dmesg 命令可用來查看緩存的內容, 不會沖掉它; 實際上, 這個命令將緩存區的整個內容返回給 stdout, 不管它是否已經被讀過.</p>
+<p>在停止 klogd 後, 如果你偶爾手工讀取內核消息, 你會發現 /proc 看起來像一個 FIFO, 讀者阻塞在裡面, 等待更多數據. 顯然, 你無法以這種方式讀消息, 如果 klogd 或者其他進程已經在讀同樣的數據, 因為你要競爭它.</p>
+<p>如果環形緩存填滿, printk 繞回並在緩存的開頭增加新數據, 覆蓋掉最老的數據. 因此, 這個記錄過程會丟失最老的數據. 這個問題相比於使用這樣一個環形緩存的優點是可以忽略的. 例如, 環形緩存允許系統即便沒有一個日誌進程也可運行, 在沒有人讀它的時候可以通過覆蓋舊數據浪費最少的內存. Linux 對於消息的解決方法的另一個特性是, printk 可以從任何地方調用, 甚至從一個中斷處理裡面, 沒有限制能打印多少數據. 唯一的缺點是可能丟失一些數據.</p>
+<p>如果 klogd 進程在運行, 它獲取內核消息並分發給 syslogd, syslogd 接著檢查 /etc/syslog.conf 來找出如何處理它們. syslogd 根據一個設施和一個優先級來區分消息; 這個設施和優先級的允許值在 &lt;sys/syslog.h&gt; 中定義. 內核消息由 LOG_KERN 設施來記錄, 在一個對應於 printk 使用的優先級上(例如, LOG_ERR 用於 KERN_ERR 消息). 如果 klogd 沒有運行, 數據保留在環形緩存中直到有人讀它或者緩存被覆蓋.</p>
+<p>如果你要避免你的系統被來自你的驅動的監視消息擊垮, 你或者給 klogd 指定一個 -f (文件) 選項來指示它保存消息到一個特定的文件, 或者定制 /etc/syslog.conf 來適應你的要求. 但是另外一種可能性是採用粗暴的方式: 殺掉 klogd 和詳細地打印消息在一個沒有用到的虛擬終端上,<sup>[<a name="id420973" href="#ftn.id420973">13</a>]</sup> 或者從一個沒有用到的 xterm 上發出命令 cat /proc/kmsg.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TurningtheMessagesOnandOff"></a>4.2.4.&#160;打開和關閉消息</h3></div></div></div>
+<p>在驅動開發的早期, printk 非常有助於調試和測試新代碼. 當你正式發行驅動時, 換句話說, 你應當去掉, 或者至少關閉, 這些打印語句. 不幸的是, 你很可能會發現, 就在你認為你不再需要這些消息並去掉它們時, 你要在驅動中實現一個新特性(或者有人發現了一個 bug), 你想要至少再打開一個消息. 有幾個方法來解決這 2 個問題, 全局性地打開或關閉你地調試消息和打開或關閉單個消息.</p>
+<p>這裡我們展示一種編碼 printk 調用的方法, 你可以單獨或全局地打開或關閉它們; 這個技術依靠定義一個宏, 在你想使用它時就轉變成一個 printk (或者 printf)調用.</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>每個 printk 語句可以打開或關閉, 通過去除或添加單個字符到宏定義的名子.</p></li>
+<li><p>所有消息可以馬上關閉, 通過在編譯前改變 CFLAGS 變量的值.</p></li>
+<li><p>同一個 print 語句可以在內核代碼和用戶級代碼中使用, 因此對於格外的消息, 驅動和測試程序能以同樣的方式被管理.</p></li>
+</ul></div>
+<p>下面的代碼片斷實現了這些特性, 直接來自頭文件 scull.h:</p>
+<pre class="programlisting">
+#undef PDEBUG /* undef it, just in case */
+#ifdef SCULL_DEBUG
+# ifdef __KERNEL__
+
+/* This one if debugging is on, and kernel space */
+# define PDEBUG(fmt, args...) printk( KERN_DEBUG "scull: " fmt, ## args)
+# else
+
+/* This one for user space */
+# define PDEBUG(fmt, args...) fprintf(stderr, fmt, ## args)
+# endif
+#else
+# define PDEBUG(fmt, args...) /* not debugging: nothing */
+#endif
+
+#undef PDEBUGG #define PDEBUGG(fmt, args...) /* nothing: it's a placeholder */
+</pre>
+<p>符號 PDEBUG 定義和去定義, 取決於 SCULL_DEBUG 是否定義, 和以何種方式顯示消息適合代碼運行的環境: 當它在內核中就使用內核調用 printk, 在用戶空間運行就使用 libc 調用 fprintf 到標準錯誤輸出. PDEBUGG 符號, 換句話說, 什麼不作; 他可用來輕易地"註釋" print 語句, 而不用完全去掉它們.</p>
+<p>為進一步簡化過程, 添加下面的行到你的 makfile 裡:</p>
+<pre class="screen">
+# Comment/uncomment the following line to disable/enable debugging
+DEBUG = y
+
+# Add your debugging flag (or not) to CFLAGS
+ifeq ($(DEBUG),y)
+ DEBFLAGS = -O -g -DSCULL_DEBUG # "-O" is needed to expand inlines
+else
+ DEBFLAGS = -O2
+endif
+
+CFLAGS += $(DEBFLAGS) 
+</pre>
+<p>本節中出現的宏定義依賴 gcc 對 ANSI C 預處理器的擴展, 支持帶可變個數參數的宏定義. 這個 gcc 依賴不應該是個問題, 因為無論如何內核固有的非常依賴於 gcc 特性. 另外, makefile 依賴 GNU 版本的 make; 再一次, 內核也依賴 GNU make, 所以這個依賴不是問題.</p>
+<p>如果你熟悉 C 預處理器, 你可以擴展給定的定義來實現一個"調試級別"的概念, 定義不同的級別, 安排一個整數(或者位掩碼)值給每個級別, 以便決定它應當多麼詳細.</p>
+<p>但是每個驅動有它自己的特性和監視需求. 好的編程技巧是在靈活性和效率之間選擇最好的平衡, 我們無法告訴你什麼是最好的. 記住, 預處理器條件(連同代碼中的常數表達式)在編譯時執行, 因此你必須重新編譯來打開或改變消息. 一個可能的選擇是使用 C 條件句, 它在運行時執行, 因而, 能允許你在出現執行時打開或改變消息機制. 這是一個好的特性, 但是它在每次代碼執行時需要額外的處理, 這樣即便消息給關閉了也會影響效率. 有時這個效率損失無法接受.</p>
+<p>本節出現的宏定義已經證明在多種情況下是有用的, 唯一的缺點是要求在任何對它的消息改變後重新編譯.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RateLimiting"></a>4.2.5.&#160;速率限制</h3></div></div></div>
+<p>如果你不小心, 你會發現自己用 printk 產生了上千條消息, 壓倒了控制台並且, 可能地, 使系統日誌文件溢出. 當使用一個慢速控制台設備(例如, 一個串口), 過量的消息速率也能拖慢系統或者只是使它不反應了. 非常難於著手於系統出錯的地方, 當控制台不停地輸出數據. 因此, 你應當非常注意你打印什麼, 特別在驅動的產品版本以及特別在初始化完成後. 通常, 產品代碼在正常操作時不應當打印任何東西; 打印的輸出應當是指示需要注意的異常情況.</p>
+<p>另一方面, 你可能想發出一個日誌消息, 如果你驅動的設備停止工作. 但是你應當小心不要做過了頭. 一個面對失敗永遠繼續的傻瓜進程能產生每秒上千次的嘗試; 如果你的驅動每次都打印"my device is broken", 它可能產生大量的輸出, 如果控制台設備慢就有可能霸佔 CPU -- 沒有中斷用來驅動控制台, 就算是一個串口或者一個行打印機.</p>
+<p>在很多情況下, 最好的做法是設置一個標誌說, "我已經抱怨過這個了", 並不打印任何後來的消息只要這個標誌設置著. 然而, 有幾個理由偶爾發出一個"設備還是壞的"的提示. 內核已經提供了一個函數幫助這個情況:</p>
+<pre class="programlisting">
+int printk_ratelimit(void); 
+</pre>
+<p>這個函數應當在你認為打印一個可能會常常重複的消息之前調用. 如果這個函數返回非零值, 繼續打印你的消息, 否則跳過它. 這樣, 典型的調用如這樣:</p>
+<pre class="programlisting">
+if (printk_ratelimit())
+    printk(KERN_NOTICE "The printer is still on fire\n");
+</pre>
+<p>printk_ratelimit 通過跟蹤多少消息發向控制台而工作. 當輸出級別超過一個限度, printk_ratelimit 開始返回 0 並使消息被扔掉.</p>
+<p>printk_ratelimit 的行為可以通過修改 /proc/sys/kern/printk_ratelimit( 在重新使能消息前等待的秒數 ) 和 /proc/sys/kernel/printk_ratelimit_burst(限速前可接收的消息數)來定制.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="PrintingDeviceNumbers"></a>4.2.6.&#160;打印設備編號</h3></div></div></div>
+<p>偶爾地, 當從一個驅動打印消息, 你會想打印與感興趣的硬件相關聯的設備號. 打印主次編號不是特別難, 但是, 為一致性考慮, 內核提供了一些實用的宏定義( 在 &lt;linux/kdev_t.h&gt; 中定義)用於這個目的:</p>
+<pre class="programlisting">
+int print_dev_t(char *buffer, dev_t dev); 
+char *format_dev_t(char *buffer, dev_t dev);
+</pre>
+<p>兩個宏定義都將設備號編碼進給定的緩衝區; 唯一的區別是 print_dev_t 返回打印的字符數, 而 format_dev_t 返回緩存區; 因此, 它可以直接用作 printk 調用的參數, 但是必須記住 printk 只有提供一個結尾的新行才會刷行. 緩衝區應當足夠大以存放一個設備號; 如果 64 位編號在以後的內核發行中明顯可能, 這個緩衝區應當可能至少是 20 字節長.</p>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id420973" href="#id420973">13</a>] </sup>* 例如, 使用 setlevel 8; setconsole 10 來配置終端 10 來顯示消息.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch04.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch04s03.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">第&#160;4&#160;章&#160;調試技術&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;4.3.&#160;用查詢來調試</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch04s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

@@ -1,0 +1,73 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch11s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>11.2.&#160;安排一個明確大小給數據項-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch11.html" title="第&#160;11&#160;章&#160;內核中的數據類型">
+<link rel="prev" href="ch11.html" title="第&#160;11&#160;章&#160;內核中的數據類型">
+<link rel="next" href="ch11s03.html" title="11.3.&#160;接口特定的類型">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">11.2.&#160;安排一個明確大小給數據項</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch11.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;11&#160;章&#160;內核中的數據類型</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch11s03.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="AssigninganExplicitSizetoDataItems.sect"></a>11.2.&#160;安排一個明確大小給數據項</h2></div></div></div>
+<p>有時內核代碼需要一個特定大小的數據項, 也許要匹配預定義的二進制結構,<sup>[<a name="id466598" href="#ftn.id466598">39</a>]</sup> 來和用戶空間通訊, 或者來用插入"填充"字段來對齊結構中的數據( 但是關於對齊問題的信息參考 "數據對齊" 一節 ).</p>
+<p>內核提供了下列數據類型來使用, 無論你什麼時候需要知道你的數據的大小. 所有的數據聲明在 &lt;asm/types.h&gt;, 它又被 &lt;linux/types.h&gt; 包含.</p>
+<pre class="programlisting">
+u8; /* unsigned byte (8 bits) */
+u16; /* unsigned word (16 bits) */
+u32; /* unsigned 32-bit value */
+u64; /* unsigned 64-bit value */
+</pre>
+<p>存在對應的有符號類型, 但是很少需要; 如果你需要它們, 只要在名子裡用 s 代替 u. </p>
+<p>如果一個用戶空間程序需要使用這些類型, 可用使用一個雙下劃線前綴在名子上: __u8 和其它獨立於 __KERNEL__ 定義的類型. 例如, 如果, 一個驅動需要與用戶空間中運行的程序交換二進制結構, 通過 ioctl, 頭文件應當在結構中聲明 32-位 成員為 __u32.</p>
+<p>重要的是記住這些類型是 Linux 特定的, 並且使用它們妨礙了移植軟件到其他的 Unix 口味上. 使用近期編譯器的系統支持 C99-標準 類型, 例如 uint8_t 和 uint32_t; 如果考慮到移植性, 使用這些類型比 Linux-特定的變體要好.</p>
+<p>你可能也注意到有時內核使用傳統的類型, 例如 unsigned int, 給那些維數與體系無關的項. 這是為後向兼容而做的. 當 u32 和它的類似物在版本 1.1.67 引入時, 開發者不能改變存在的數據結構為新的類型, 因為編譯器發出一個警告當在結構成員和安排給它的值之間有一個類型不匹配時.. Linus 不希望他寫給自己使用的操作系統稱為多平台的; 結果是, 老的結構有時被鬆散的鍵入.</p>
+<p>事實上, 編譯器指示類型不一致, 甚至在 2 個類型只是同一個對象的不同名子, 例如在 PC 上 unsigned long 和 u32.</p>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id466598" href="#id466598">39</a>] </sup>這發生在當讀取分區表時, 當執行一個二進制文件時, 或者當解碼一個網絡報文時.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch11.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch11.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch11s03.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">第&#160;11&#160;章&#160;內核中的數據類型&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;11.3.&#160;接口特定的類型</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch11s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

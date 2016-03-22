@@ -1,0 +1,217 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch15s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:41 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>15.5.&#160;快速參考-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch15.html" title="第&#160;15&#160;章&#160;內存映射和 DMA ">
+<link rel="prev" href="ch15s04.html" title="15.4.&#160;直接內存存取">
+<link rel="next" href="ch16.html" title="第&#160;16&#160;章&#160;塊驅動">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">15.5.&#160;快速參考</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch15s04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;15&#160;章&#160;內存映射和 DMA </th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch16.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="MemoryMappingandDMAqr.sect1"></a>15.5.&#160;快速參考</h2></div></div></div>
+<p>本章介紹了下列關於內存處理的符號:</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="IntroductoryMaterial.sect2"></a>15.5.1.&#160;介紹性材料</h3></div></div></div>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>#include &lt;linux/mm.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>#include &lt;asm/page.h&gt;</span></span></dt>
+<dd><p>和內存管理相關的大部分函數和結構, 原型和定義在這些頭文件.</p></dd>
+<dt><span class="term"><span>void *__va(unsigned long physaddr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned long __pa(void *kaddr);</span></span></dt>
+<dd><p>在內核邏輯地址和物理地址之間轉換的宏定義.</p></dd>
+<dt><span class="term"><span>PAGE_SIZE</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>PAGE_SHIFT </span></span></dt>
+<dd><p>常量, 給出底層硬件的頁的大小(字節)和一個頁面號必須被移位來轉變為一個物理地址的位數.</p></dd>
+<dt><span class="term"><span>struct page </span></span></dt>
+<dd><p>在系統內存映射中表示一個硬件頁的結構.</p></dd>
+<dt><span class="term"><span>struct page *virt_to_page(void *kaddr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void *page_address(struct page *page);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct page *pfn_to_page(int pfn);</span></span></dt>
+<dd><p>宏定義, 在內核邏輯地址和它們相關的內存映射入口之間轉換的. page_address 只用在低地址頁或者已被明確映射的高地址頁. pfn_to_page 轉換一個頁面號到它的相關的 struct page 指針.</p></dd>
+<dt><span class="term"><span>unsigned long kmap(struct page *page);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void kunmap(struct page *page);</span></span></dt>
+<dd><p>kmap 返回一個內核虛擬地址, 被映射到給定頁, 如果需要並創建映射. kunmap 為給定頁刪除映射.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/highmem.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>#include &lt;asm/kmap_types.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void *kmap_atomic(struct page *page, enum km_type type);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void kunmap_atomic(void *addr, enum km_type type);</span></span></dt>
+<dd><p>kmap 的高性能版本; 結果的映射只能被原子代碼持有. 對於驅動, type 應當是 KM_USER1, KM_USER1, KM_IRQ0, 或者 KM_IRQ1.</p></dd>
+<dt><span class="term"><span>struct vm_area_struct;</span></span></dt>
+<dd><p>描述一個 VMA 的結構.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Implementingmmap.sect2"></a>15.5.2.&#160;實現 mmap</h3></div></div></div>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int remap_pfn_range(struct vm_area_struct *vma, unsigned long virt_add, unsigned long pfn, unsigned long size, pgprot_t prot);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int io_remap_page_range(struct vm_area_struct *vma, unsigned long virt_add,
+ unsigned long phys_add, unsigned long size, pgprot_t prot);</span></span></dt>
+<dd><p>位於 mmap 核心的函數. 它們映射 size 字節的物理地址, 從 pfn 指出的頁號開始到虛擬地址 virt_add. 和虛擬空間相關聯的保護位在 prot 裡指定. io_remap_page_range 應當在目標地址在 I/O 內存空間裡時被使用.</p></dd>
+<dt><span class="term"><span>struct page *vmalloc_to_page(void *vmaddr);</span></span></dt>
+<dd><p>轉換一個由 vmalloc 獲得的內核虛擬地址到它的對應的 struct page 指針.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ImplementingDirectIO.sect2"></a>15.5.3.&#160;實現直接 I/O</h3></div></div></div>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int get_user_pages(struct task_struct *tsk, struct mm_struct *mm, unsigned long start, int len, int write, int force, struct page **pages, struct vm_area_struct **vmas);</span></span></dt>
+<dd><p>函數, 加鎖一個用戶空間緩衝到內存並且返回對應的 struct page 指針. 調用者必須持有 mm-&gt;mmap_sem.</p></dd>
+<dt><span class="term"><span>SetPageDirty(struct page *page);</span></span></dt>
+<dd><p>宏定義, 標識給定的頁為"髒"(被修改)並且需要寫到它的後備存儲, 在它被釋放前.</p></dd>
+<dt><span class="term"><span>void page_cache_release(struct page *page);</span></span></dt>
+<dd><p>釋放給定的頁從頁緩存中.</p></dd>
+<dt><span class="term"><span>int is_sync_kiocb(struct kiocb *iocb);</span></span></dt>
+<dd><p>宏定義, 返回非零如果給定的 IOCB 需要同步執行.</p></dd>
+<dt><span class="term"><span>int aio_complete(struct kiocb *iocb, long res, long res2);</span></span></dt>
+<dd><p>函數, 指示一個異步 I/O 操作完成.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="DirectMemoryAccess.sect2"></a>15.5.4.&#160;直接內存存取</h3></div></div></div>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>#include &lt;asm/io.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned long virt_to_bus(volatile void * address);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void * bus_to_virt(unsigned long address);</span></span></dt>
+<dd><p>過時的不好的函數, 在內核, 虛擬, 和總線地址之間轉換. 總線地址必須用來和外設通訊.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/dma-mapping.h&gt;</span></span></dt>
+<dd><p>需要來定義通用 DMA 函數的頭文件.</p></dd>
+<dt><span class="term"><span>int dma_set_mask(struct device *dev, u64 mask);</span></span></dt>
+<dd><p>對於無法尋址整個 32-位範圍的外設, 這個函數通知內核可尋址的地址範圍並且如果可進行 DMA 返回非零.</p></dd>
+<dt><span class="term"><span>void *dma_alloc_coherent(struct device *dev, size_t size, dma_addr_t *bus_addr, int flag);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void dma_free_coherent(struct device *dev, size_t size, void *cpuaddr, dma_handle_t bus_addr);</span></span></dt>
+<dd><p>分配和釋放一致 DMA 映射, 對一個將持續在驅動的生命週期中的緩衝.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/dmapool.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct dma_pool *dma_pool_create(const char *name, struct device *dev, size_t size, size_t align, size_t allocation);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void dma_pool_destroy(struct dma_pool *pool);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void *dma_pool_alloc(struct dma_pool *pool, int mem_flags, dma_addr_t
+ *handle);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void dma_pool_free(struct dma_pool *pool, void *vaddr, dma_addr_t handle);</span></span></dt>
+<dd><p>創建, 銷毀, 和使用 DMA 池來管理小 DMA 區的函數.</p></dd>
+<dt><span class="term"><span>enum dma_data_direction;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>DMA_TO_DEVICE</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>DMA_FROM_DEVICE</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>DMA_BIDIRECTIONAL</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>DMA_NONE </span></span></dt>
+<dd><p>符號, 用來告知流映射函數在什麼方向數據移入或出緩衝. </p></dd>
+<dt><span class="term"><span>dma_addr_t dma_map_single(struct device *dev, void *buffer, size_t size, enum dma_data_direction direction);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void dma_unmap_single(struct device *dev, dma_addr_t bus_addr, size_t size, enum dma_data_direction direction);</span></span></dt>
+<dd><p>創建和銷毀一個單使用, 流 DMA 映射.</p></dd>
+<dt><span class="term"><span>void dma_sync_single_for_cpu(struct device *dev, dma_handle_t bus_addr, size_t size, enum dma_data_direction direction);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void dma_sync_single_for_device(struct device *dev, dma_handle_t bus_addr, size_t size, enum dma_data_direction direction);</span></span></dt>
+<dd><p>同步一個由一個流映射的緩衝. 必須使用這些函數, 如果處理器必須存取一個緩衝當使用流映射時.(即, 當設備擁有緩衝時).</p></dd>
+<dt><span class="term"><span>#include &lt;asm/scatterlist.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct scatterlist { /* ... */ };</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>dma_addr_t sg_dma_address(struct scatterlist *sg);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned int sg_dma_len(struct scatterlist *sg);</span></span></dt>
+<dd><p>這個散佈表結構描述一個涉及不止一個緩衝的 I/O 操作. 宏 sg_dma_address he sg_dma_len 可用來抽取總線地址和緩衝長度來傳遞給設備, 當實現發散/匯聚操作時.</p></dd>
+<dt><span class="term"><span>dma_map_sg(struct device *dev, struct scatterlist *list, int nents, enum dma_data_direction direction);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>dma_unmap_sg(struct device *dev, struct scatterlist *list, int nents, enum dma_data_direction direction);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void dma_sync_sg_for_cpu(struct device *dev, struct scatterlist *sg, int nents, enum dma_data_direction direction);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void dma_sync_sg_for_device(struct device *dev, struct scatterlist *sg, int nents, enum dma_data_direction direction);</span></span></dt>
+<dd><p>dma_map_sg 映射一個 發散/匯聚 操作, 並且 dma_unmap_sg 恢復這些映射. 如果在這個映射被激活時緩衝必須被存取, dma_sync_sg_* 可用來同步.</p></dd>
+<dt><span class="term"><span>/proc/dma 
+</span></span></dt>
+<dd><p>包含在 DMA 控制器中的被分配的通道的文本快照的文件. 基於 PCI 的 DMA 不顯示, 因為每個板獨立工作, 不需要分配一個通道在 DMA 控制器中.</p></dd>
+<dt><span class="term"><span>#include &lt;asm/dma.h&gt;</span></span></dt>
+<dd><p>定義或者原型化所有和 DMA 相關的函數和宏定義. 它必須被包含來使用任何下面符號.</p></dd>
+<dt><span class="term"><span>int request_dma(unsigned int channel, const char *name);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void free_dma(unsigned int channel);</span></span></dt>
+<dd><p>存取 DMA 註冊. 註冊必須在使用 ISA DMA 通道之前進行.</p></dd>
+<dt><span class="term"><span>unsigned long claim_dma_lock( );</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void release_dma_lock(unsigned long flags);</span></span></dt>
+<dd><p>獲取和釋放 DMA 自旋鎖, 它必須被持有, 在調用其他的在這個列表中描述的 ISA DMA 函數之前. 它們在本地處理器上也關閉和重新使能中斷</p></dd>
+<dt><span class="term"><span>void set_dma_mode(unsigned int channel, char mode);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void set_dma_addr(unsigned int channel, unsigned int addr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void set_dma_count(unsigned int channel, unsigned int count);</span></span></dt>
+<dd><p>編程 DMA 信息在 DMA 控制器中. addr 是一個總線地址. </p></dd>
+<dt><span class="term"><span>void disable_dma(unsigned int channel);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void enable_dma(unsigned int channel);</span></span></dt>
+<dd><p>一個 DMA 通道必須被關閉在配置期間. 這些函數改變 DMA 通道的狀態.</p></dd>
+<dt><span class="term"><span>int get_dma_residue(unsigned int channel);</span></span></dt>
+<dd><p>如果這驅動需要知道一個 DMA 傳送在進行, 它可調用這個函數, 返回尚未完成的數據傳輸的數目. 在成功的 DMA 完成後, 這個函數返回 0; 值是不可預測的當數據仍然在傳送時.</p></dd>
+<dt><span class="term"><span>void clear_dma_ff(unsigned int channel);</span></span></dt>
+<dd><p>DMA flip-flop 被控制器用來傳送 16-位值, 通過 2 個 8 位操作. 它必須被清除, 在發送任何數據給處理器之前.</p></dd>
+</dl></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch15s04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch15.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch16.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">15.4.&#160;直接內存存取&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;第&#160;16&#160;章&#160;塊驅動</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch15s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:41 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

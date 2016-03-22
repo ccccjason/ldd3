@@ -1,0 +1,491 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch12.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:36 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;12&#160;章&#160;PCI 驅動-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch11s06.html" title="11.6.&#160;快速參考">
+<link rel="next" href="ch12s02.html" title="12.2.&#160;回顧: ISA">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;12&#160;章&#160;PCI 驅動</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch11s06.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch12s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="PCIDrivers.chap"></a>第&#160;12&#160;章&#160;PCI 驅動</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch12.html#ThePCIInterface.sect1">12.1. PCI 接口</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch12.html#PCIAddressing.sect2">12.1.1. PCI 尋址</a></span></dt>
+<dt><span class="sect2"><a href="ch12.html#BootTime.sect2">12.1.2. 啟動時間</a></span></dt>
+<dt><span class="sect2"><a href="ch12.html#ConfigurationRegistersandInitialization.sect2">12.1.3. 配置寄存器和初始化</a></span></dt>
+<dt><span class="sect2"><a href="ch12.html#MODULEDEVICETABLE.sect2">12.1.4. MODULEDEVICETABLE 宏</a></span></dt>
+<dt><span class="sect2"><a href="ch12.html#RegisteringaPCIDriver.sect2">12.1.5. 註冊一個 PCI 驅動</a></span></dt>
+<dt><span class="sect2"><a href="ch12.html#OldStypePCIProbing.sect2">12.1.6. 老式 PCI 探測</a></span></dt>
+<dt><span class="sect2"><a href="ch12.html#EnablingthePCIDevice.sect2">12.1.7. 使能 PCI 設備</a></span></dt>
+<dt><span class="sect2"><a href="ch12.html#AccessingtheConfigurationSpace.sect2">12.1.8. 存取配置空間</a></span></dt>
+<dt><span class="sect2"><a href="ch12.html#AccessingtheIOandMemorySpaces.sect2">12.1.9. 存取 I/O 和內存空間</a></span></dt>
+<dt><span class="sect2"><a href="ch12.html#PCIInterrupts.sect2">12.1.10. PCI 中斷</a></span></dt>
+<dt><span class="sect2"><a href="ch12.html#HardwareAbstractions.sect2">12.1.11. 硬件抽像</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch12s02.html">12.2. 回顧: ISA</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch12s02.html#HardwareResources.sect2">12.2.1. 硬件資源</a></span></dt>
+<dt><span class="sect2"><a href="ch12s02.html#ISAProgramming.sect2">12.2.2. ISA 編程</a></span></dt>
+<dt><span class="sect2"><a href="ch12s02.html#ThePlugandPlaySpecification.sect2">12.2.3. 即插即用規範</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch12s03.html">12.3. PC/104 和 PC/104+</a></span></dt>
+<dt><span class="sect1"><a href="ch12s04.html">12.4. 其他的 PC 總線</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch12s04.html#MCA.sect2">12.4.1. MCA 總線</a></span></dt>
+<dt><span class="sect2"><a href="ch12s04.html#EISA.sect2">12.4.2. EISA 總線</a></span></dt>
+<dt><span class="sect2"><a href="ch12s04.html#VLB.sect2">12.4.3. VLB 總線</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch12s05.html">12.5. SBus</a></span></dt>
+<dt><span class="sect1"><a href="ch12s06.html">12.6. NuBus 總線</a></span></dt>
+<dt><span class="sect1"><a href="ch12s07.html">12.7. 外部總線</a></span></dt>
+<dt><span class="sect1"><a href="ch12s08.html">12.8. 快速參考</a></span></dt>
+</dl>
+</div>
+<p>雖然第 9 章介紹了硬件控制的最低層, 本章提供了總線結構的高級一些的概括. 一個總線由電路接口和一個編程接口組成. 在本章, 我們涉及編程接口.</p>
+<p>本章涉及許多總線結構. 但是, 主要的焦點在存取 PCI 外設的內核函數, 因為如今 PCI 總線是在桌面計算機和更大的計算機上最普遍使用的外設總線. 這個總線是被內核支持得最好的. ISA 對於電子愛好者仍然是普遍的, 在後面描述它, 儘管它更多的是一個裸露金屬類型的總線, 並且沒有更多的要講的, 除了在第 9 章和第 10 章涵蓋到的.</p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="ThePCIInterface.sect1"></a>12.1.&#160;PCI 接口</h2></div></div></div>
+<p>儘管許多計算機用戶認為 PCI 是一種電路布線方法, 實際上它是一套完整的規格, 定義了一個計算機的不同部分應當如何交互.</p>
+<p>PCI 規範涉及和計算機接口相關的大部分問題. 我們不會在這裡涵蓋全部; 在本節, 我們主要關注一個 PCI 驅動如何能找到它的硬件並獲得對它的存取. 在第 2 章的"模塊參數"一節和第 10 章的"自動探測 IRQ 號"一節討論的探測技術可被用在 PCI 設備, 但是這個規範提供了一個更適合探測的選擇.</p>
+<p>PCI 體系被設計為 ISA 標準的替代品, 有 3 個主要目的: 當在計算機和它的外設之間傳送數據時獲得更好的性能, 盡可能平台無關, 以及簡化添加和去除系統的外設.</p>
+<p>PCI 總線通過使用一個比 ISA 更高的時鐘頻率, 獲得更好的性能; 它的設置運行在 25 或者 33 MHz (它的實際頻率是系統時鐘的一個因數), 以及 66-MHz 甚至 133-MHz 的實現最近也已經被採用. 但是, 它配備有 32-位 數據線, 並且一個 64-位擴展已經被包含在規範中. 平台獨立性常常是一個計算機總線設計的目標, 並且它是 PCI 的一個特別重要的特性, 因為 PC 世界已一直被處理器特定的接口標準佔據. PCI 當前廣泛用在IA-32, Alpha, PowerPC, SPARC64, 和 IA-64 系統中, 以及一些其他的平台.</p>
+<p>但是, 和驅動作者最相關的, 是 PCI 對接口板的自動探測的支持. PCI 設備是無跳線的(不像大部分的老式外設)並且是在啟動時自動配置的. 接著, 設備驅動必須能夠存取設備中的配置信息以便能完成初始化. 這不用進行任何探測.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="PCIAddressing.sect2"></a>12.1.1.&#160;PCI 尋址</h3></div></div></div>
+<p>每個 PCI 外設有一個總線號, 一個設備號, 一個功能號標識. PCI 規範允許單個系統佔用多達 256 個總線, 但是因為 256 個總線對許多大系統是不夠的, Linux 現在支持 PCI 域. 每個 PCI 域可以佔用多達 256 個總線. 每個總線佔用 32 個設備, 每個設備可以是一個多功能卡(例如一個聲音設備, 帶有一個附加的 CD-ROM 驅動)有最多 8 個功能. 因此, 每個功能可在硬件層次被一個 16-位地址或者 key , 標識. Linux 的設備驅動編寫者, 然而, 不需要處理這些二進制地址, 因為它們使用一個特定的數據結構, 稱為 pci_dev, 來在設備上操作. </p>
+<p>大部分近期的工作站至少有 2 個 PCI 總線. 在單個系統插入多於 1 個總線要通過橋實現, 橋是特殊用途的 PCI 外設, 它的工作是連接 2 個總線. 一個 PCI 系統的全部分佈是一個樹, 這裡每個總線都連接到一個上層總線, 直到在樹根的總線 0 . CardBus PC-card 系統也通過橋連接到 PCI 系統. 圖<a href="ch12.html#ldd3-12-1.fig" title="圖&#160;12.1.&#160;一個典型 PCI 系統的佈局">一個典型 PCI 系統的佈局</a>表示了一個典型的 PCI 系統, 其中各種橋被突出表示了.</p>
+<div class="figure">
+<a name="ldd3-12-1.fig"></a><p class="title"><b>圖&#160;12.1.&#160;一個典型 PCI 系統的佈局</b></p>
+<div><img src="images/snagitldd3/ldd3-12-1.png" alt="一個典型 PCI 系統的佈局"></div>
+</div>
+<p>和 PCI 外設相關的 16-位硬件地址, 儘管大部分隱藏在 struct pci_dev 結構中, 仍然是可偶爾見到, 特別是當使用設備列表. 一個這樣的情形是 lspci 的輸出( pciutils 的一部分, 在大部分發佈中都有)和在 /proc/pci 和 /porc/bus/pci 中的信息排布. PCI 設備的 sysfs 表示也顯示了這種尋址方案, 還有 PCI 域信息. <sup>[<a name="id469697" href="#ftn.id469697">40</a>]</sup>當顯示硬件地址時, 它可被顯示為 2 個值( 一個 8-位總線號和一個 8-位 設備和功能號), 作為 3 個值( bus, device, 和 function), 或者作為 4 個值(domain, bus, device, 和 function); 所有的值常常用 16 進制顯示.</p>
+<p>例如, /proc/bus/pci/devices 使用一個單個 16-位 字段(來便於分析和排序), 而 /proc/bus/busnumber 劃分地址為 3 個字段. 下面內容顯示了這些地址如何顯示, 只顯示了輸出行的開始:</p>
+<pre class="screen">
+$ lspci | cut -d: -f1-3
+0000:00:00.0 Host bridge
+0000:00:00.1 RAM memory
+0000:00:00.2 RAM memory
+0000:00:02.0 USB Controller
+0000:00:04.0 Multimedia audio controller
+0000:00:06.0 Bridge
+0000:00:07.0 ISA bridge
+0000:00:09.0 USB Controller
+0000:00:09.1 USB Controller
+0000:00:09.2 USB Controller
+0000:00:0c.0 CardBus bridge
+0000:00:0f.0 IDE interface
+0000:00:10.0 Ethernet controller
+0000:00:12.0 Network controller
+0000:00:13.0 FireWire (IEEE 1394)
+0000:00:14.0 VGA compatible controller
+$ cat /proc/bus/pci/devices | cut -f1
+0000
+0001
+0002
+0010
+0020
+0030
+0038
+0048
+0049
+004a
+0060
+0078
+0080
+0090
+0098
+00a0
+$ tree /sys/bus/pci/devices/
+/sys/bus/pci/devices/
+|-- 0000:00:00.0 -&gt; ../../../devices/pci0000:00/0000:00:00.0
+|-- 0000:00:00.1 -&gt; ../../../devices/pci0000:00/0000:00:00.1
+|-- 0000:00:00.2 -&gt; ../../../devices/pci0000:00/0000:00:00.2
+|-- 0000:00:02.0 -&gt; ../../../devices/pci0000:00/0000:00:02.0
+|-- 0000:00:04.0 -&gt; ../../../devices/pci0000:00/0000:00:04.0
+|-- 0000:00:06.0 -&gt; ../../../devices/pci0000:00/0000:00:06.0
+|-- 0000:00:07.0 -&gt; ../../../devices/pci0000:00/0000:00:07.0
+|-- 0000:00:09.0 -&gt; ../../../devices/pci0000:00/0000:00:09.0
+|-- 0000:00:09.1 -&gt; ../../../devices/pci0000:00/0000:00:09.1
+|-- 0000:00:09.2 -&gt; ../../../devices/pci0000:00/0000:00:09.2
+|-- 0000:00:0c.0 -&gt; ../../../devices/pci0000:00/0000:00:0c.0
+|-- 0000:00:0f.0 -&gt; ../../../devices/pci0000:00/0000:00:0f.0
+|-- 0000:00:10.0 -&gt; ../../../devices/pci0000:00/0000:00:10.0
+|-- 0000:00:12.0 -&gt; ../../../devices/pci0000:00/0000:00:12.0
+|-- 0000:00:13.0 -&gt; ../../../devices/pci0000:00/0000:00:13.0
+`-- 0000:00:14.0 -&gt; ../../../devices/pci0000:00/0000:00:14.0
+</pre>
+<p>所有的 3 個設備列表都以相同順序排列, 因為 lspci 使用 /proc 文件作為它的信息源. 拿 VGA 視頻控制器作一個例子, 0x00a 意思是 0000:00:14.0 當劃分為域(16位), 總線(8位), 設備(5位)和功能(3位).</p>
+<p>每個外設板的硬件電路回應查詢, 固定在 3 個地址空間: 內存位置, I/O 端口, 和配置寄存器. 前 2 個地址空間由所有在同一個 PCI 總線上的設備共享(即, 當你存取一個內存位置, 在那個 PCI 總線上的所有的設備在同一時間都看到總線週期). 配置空間, 另外的, 採用地理式尋址. 配置只一次一個插槽地查詢地址, 因此它們從不衝突.</p>
+<p>至於驅動, 內存和 I/O 區用通常的方法, 通過 inb, readb, 等等來存取. 另一方面, 配置傳輸通過調用特殊的內核函數來存取配置寄存器. 考慮到中斷, 每個 PCI 插槽有 4 個中斷腳, 並且每個設備功能可以使用它們中的一個, 不必關心這些引腳如何連入 CPU. 這樣的連接是計算機平台的責任並且是在 PCI 總線之外實現的. 因為 PCI 規範要求中斷線是可共享的, 即便一個處理器有有限的 IRQ 線數, 例如 x86, 可以駐有許多 PCI 接口板( 每個有 4 個中斷腳).</p>
+<p>PCI 總線的 I/O 空間使用一個 32-位地址總線( 產生了 4 GB 的 I/O 端口), 而內存空間可使用 32-位或者 64-位地址存取. 64-位地址在大部分近期的平台上可用. 假設地址對每個設備是唯一的, 但是軟件可能錯誤地配置 2 個設備到同樣的地址, 使得不可能存取任何一個. 但是這個問題不會產生, 除非一個驅動想玩弄不應當觸動的寄存器. 好消息是每個由接口板提供的內存和 I/O 地址區可被重新映射, 通過配置交易. 那是, 在系統啟動時固件初始化 PCI 硬件, 映射每個區到不同地址來避免衝突.<sup>[<a name="id469764" href="#ftn.id469764">41</a>]</sup>這些區當前被映射到的地址可從配置空間讀出, 因此 Linux 驅動可存取它的設備而不用探測. 在讀取了配置寄存器後, 驅動可安全地存取它的硬件.</p>
+<p>PCI 配置空間為每個設備包含 256 字節(除了 PCI Express 設備, , 它每個功能有 4 KB 地配置空間), 並且配置寄存器的排布是標準化的. 配置空間的 4 個字節含有一個唯一的功能 ID, 因此驅動可標識它的設備, 通過查找那個設備的特定的 ID.<sup>[<a name="id469852" href="#ftn.id469852">42</a>]</sup> 總之, 每個設備板被地理式尋址來獲取它的配置寄存器; 這些寄存器中的信息可接著被用來進行正常的 I/O 存取, 不必進一步的地理式尋址. </p>
+<p>從這個描述應當清楚, PCI 接口標準對比 ISA 主要的創新是配置地址空間. 因此, 除了通常的驅動代碼, 一個 PCI 驅動需要存取配置空間的能力, 為了從冒險的探測任務中解放自己.</p>
+<p>本章的剩餘部分, 我們使用詞語設備來指一個設備功能, 因為在多功能板的每個功能如同一個獨立的實體. 當我們引用一個設備, 我們的意思是"域號, 總線號, 設備號, 和功能號"的組合.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="BootTime.sect2"></a>12.1.2.&#160;啟動時間</h3></div></div></div>
+<p>為見到 PCI 如何工作的, 我們從系統啟動開始, 因為那是設備被配置的時候.</p>
+<p>當一個PCI設備上電時, 硬件保持非激活. 換句話說, 設備只響應配置交易. 在上電時, 設備沒有內存並且沒有 I/O 端口被映射在計算機的地址空間; 每個其他的設備特定的特性, 例如中斷報告, 也被關閉.</p>
+<p>幸運的是, 每個 PCI 主板都裝配有識別 PCI 固件, 稱為 BIOS, NVRAM, 或者 PROM, 依賴平台. 這個固件提供對設備配置地址空間的存取, 通過讀和寫 PCI 控制器中的寄存器.</p>
+<p>在系統啟動時, 固件(或者 Linux 內核, 如果配置成這樣)和每個 PCI 外設進行配置交易, 為了分配一個安全的位置給每個它提供的地址區. 在驅動存取設備的時候, 它的內存和I/O區已經被映射到處理器的地址空間. 驅動可改變這個缺省的分配, 但是它從不需要這樣做.</p>
+<p>如同被建議的一樣, 用戶可查看 PCI 設備列表和設備的配置寄存器, 通過讀 /proc/bus/pcidevices 和 /proc/bus/pci/*/*. 前者是一個帶有(16進制)設備信息的文本文件, 並且後者是二進制文件來報告每個設備的每個配置寄存器的一個快照, 每個設備一個文件. 在 sysfs 目錄樹中的單個的 PCI 設備目錄可在 /sys/bus/pci/devices 中找到. 一個 PCI 設備目錄包含許多不同的文件:</p>
+<pre class="screen">
+$ tree /sys/bus/pci/devices/0000:00:10.0
+/sys/bus/pci/devices/0000:00:10.0
+|-- class
+|-- config
+|-- detach_state
+|-- device
+|-- irq
+|-- power
+| `-- state
+|-- resource
+|-- subsystem_device
+|-- subsystem_vendor
+`-- vendor
+</pre>
+<p>文件 config 是一個二進制文件, 它允許原始的 PCI 配置信息從設備中讀出(就像由 /proc/bus/pci/*/* 提供的一樣). 文件 verndor, subsytem_device, subsystem_vernder, 和 class 都指的是這個 PCI 設備的特定值( 所有的 PCI 設備都提供這個信息). 文件 irq 顯示分配給這個 PCI 設備的當前的 IRQ, 並且文件 resource 顯示這個設備分配的當前內存資源.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ConfigurationRegistersandInitialization.sect2"></a>12.1.3.&#160;配置寄存器和初始化</h3></div></div></div>
+<p>本節, 我們看 PCI 設備包含的配置寄存器. 所有的 PCI 設備都有至少一個 256-字節 地址空間. 前 64 字節是標準的, 而剩下的是依賴設備的. 圖 <a href="ch12.html#ldd3-12-2.fig" title="圖&#160;12.2.&#160;標準 PCI 配置寄存器">標準 PCI 配置寄存器</a>顯示了設備獨立的配置空間的排布.</p>
+<div class="figure">
+<a name="ldd3-12-2.fig"></a><p class="title"><b>圖&#160;12.2.&#160;標準 PCI 配置寄存器</b></p>
+<div><img src="images/snagitldd3/ldd3-12-2.png" alt="標準 PCI 配置寄存器"></div>
+</div>
+<p>如圖所示, 一些 PCI 配置寄存器是要求的, 一些是可選的. 每個 PCI 設備必須包含有意義的值在被要求的寄存器中, 而可選寄存器的內容依賴外設的實際功能. 可選的字段不被使用, 除非被要求的字段的內容指出它們是有效的. 因此, 被要求的字段聲稱板的功能, 包括其他的字段是否可用.</p>
+<p>注意 PCI 寄存器一直是小端模式. 儘管標準被設計為獨立於體系, PCI 設計者有時露出一些傾向 PC 環境. 驅動編寫者應當小心處理字節序, 當存取多字節配置寄存器時; 在 PC 上使用的代碼可能在其他平台上不工作. Linux 開發者已經處理了這個字節序問題(見下一節, "存取配置空間"), 但是這個問題必須記住. 如果你曾需要轉換數據從主機序到 PCI 序, 或者反之, 你可求助在 &lt;asm/byteorder.h&gt; 中定義的函數, 在第 11 章介紹, 知道 PCI 字節序是小端.</p>
+<p>描述所有的配置項超出了本書的範圍. 常常地, 隨每個設備發佈的技術文檔描述被支持的寄存器. 我們感興趣的是一個驅動如何能知道它的設備以及它如何能存取設備的配置空間.</p>
+<p>3 個或者 4 個 PCI 寄存器標識一個設備: verdorID, deviceID, 和 class 是 3 個常常用到的. 每個 PCI 製造商分配正確的值給這些只讀寄存器, 並且驅動可使用它們來查找設備. 另外, 字段 subsystem verdorID 和 subsystem deviceID 有時被供應商設置來進一步區分類似的設備.</p>
+<p>我們看這些寄存器的細節:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>vendorID </span></span></dt>
+<dd><p>這個 16-位 寄存器標識一個硬件製造商. 例如, 每個 Intel 設備都標有相同的供應商號, 0x8086. 這樣的號有一個全球的註冊, 由 PCI 特別利益體所維護, 並且供應商必須申請有一個唯一的分配給它們的號.</p></dd>
+<dt><span class="term"><span>deviceID </span></span></dt>
+<dd><p>這是另一個 16-位 寄存器, 由供應商選擇; 對於這個設備 ID 沒有要求官方的註冊. 這個 ID 常常和 供應商 ID 成對出現來組成一個唯一的 32-位 標識符給一個硬件設備. 我們使用詞語"簽名"來指代供應商和設備 ID 對. 一個設備驅動常常依靠簽名來標識它的設備; 你可在硬件手冊中找到對於目標設備要尋找的值.</p></dd>
+<dt><span class="term"><span>class </span></span></dt>
+<dd><p>每個外設都屬於一個類. 類寄存器是一個 16-位 值, 它的高 8 位標識"基類"(或者群). 例如, "ethernet"和"token ring"是 2 個類都屬於"network"群, 而"serial"和"parallel"屬於"communication"群. 一些驅動可支持幾個類似的設備, 每個都有一個不同的簽名但是都屬於同樣的類; 這些驅動可依賴類寄存器標識它們的外設, 就像後面所示.</p></dd>
+<dt><span class="term"><span>subsystem vendorID</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>subsystem deviceID </span></span></dt>
+<dd><p>這些字段可用來進一步標識一個設備. 如果芯片對於本地總線是一個通用接口芯片, 它常常被用在幾個完全不同的地方, 並且驅動必須標識出它在與之通話的實際設備. 子系統標誌用作此目的.</p></dd>
+</dl></div>
+<p>使用這些不同的標識符, 一個 PCI 驅動可告知內核它支持什麼類型的設備. struct pci_device_id 結構被用來定義一個驅動支持的不同類型 PCI 設備的列表. 這個結構包含不同的成員:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>__u32 vendor;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__u32 device;</span></span></dt>
+<dd><p>這些指定一個設備的 PCI 供應商和設備 ID. 如果驅動可處理任何供應商或者設備 ID, 值 PCI_ANY_ID 應當用作這些成員上.</p></dd>
+<dt><span class="term"><span>__u32 subvendor;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__u32 subdevice;</span></span></dt>
+<dd><p>這些指定一個設備的 PCI 子系統供應商和子系統設備 ID. 如果驅動可處理任何類型的子系統 ID, 值 PCI_ANY_ID 應當用作這些成員上.</p></dd>
+<dt><span class="term"><span>__u32 class;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>__u32 class_mask;</span></span></dt>
+<dd><p>這 2 個值允許驅動來指定它支持一類 PCI 類設備. 不同的 PCI 設備類( 一個 VAG 控制器是一個例子 )在 PCI 規範裡被描述. 如果一個驅動可處理任何子系統 ID, 值 PCI_ANY_ID 應當用作這些字段.</p></dd>
+<dt><span class="term"><span>kernel_ulong_t driver_data;</span></span></dt>
+<dd><p>這個值不用來匹配一個設備, 但是用來持有信息, PCI 驅動可用來區分不同的設備, 如果它想這樣.</p></dd>
+</dl></div>
+<p>有 2 個幫助宏定義應當被用來初始化一個 struct pci_device_id 結構:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>PCI_DEVICE(vendor, device)</span></span></dt>
+<dd><p>這個創建一個 struct pci_device_id , 它只匹配特定的供應商和設備 ID. 這個宏設置這個結構的子供應商和子設備成員為 PCI_ANY_ID.</p></dd>
+<dt><span class="term"><span>PCI_DEVICE_CLASS(device_class, device_class_mask)</span></span></dt>
+<dd><p>這個創建一個 struct pci_device_id, 它匹配一個特定的 PCI 類.</p></dd>
+</dl></div>
+<p>一個使用這些宏來定義一個驅動支持的設備類型的例子, 在下面的內核文件中可找到:</p>
+<pre class="programlisting">
+drivers/usb/host/ehci-hcd.c: 
+static const struct pci_device_id pci_ids[] = { {
+ /* handle any USB 2.0 EHCI controller */
+ PCI_DEVICE_CLASS(((PCI_CLASS_SERIAL_USB &lt;&lt; 8) | 0x20), ~0),
+ .driver_data = (unsigned long) &amp;ehci_driver,
+ },
+ { /* end: all zeroes */ }
+
+}; 
+drivers/i2c/busses/i2c-i810.c: 
+
+static struct pci_device_id i810_ids[] = {
+ { PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82810_IG1) },
+ { PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82810_IG3) },
+ { PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82810E_IG) },
+ { PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82815_CGC) },
+ { PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82845G_IG) },
+ { 0, }, 
+}; 
+</pre>
+<p>這些例子創建一個 struct pci_device_id 結構的列表, 列表中最後一個是被設置為全零的的空結構. 這個 ID 的數組用在 struct pci_driver (下面講述), 並且它還用來告訴用戶空間這個特定的驅動支持哪個設備.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="MODULEDEVICETABLE.sect2"></a>12.1.4.&#160;MODULEDEVICETABLE 宏</h3></div></div></div>
+<p>這個 pci_device_id 結構需要被輸出到用戶空間, 來允許熱插拔和模塊加載系統知道什麼模塊使用什麼硬件設備. 宏 MODULE_DEVICE_TABLE 完成這個. 例如:</p>
+<pre class="programlisting">
+MODULE_DEVICE_TABLE(pci, i810_ids); 
+</pre>
+<p>這個語句創建一個局部變量稱為 __mod_pci_device_table, 它指向 struct pci_device_id 的列表. 稍後在內核建立過程中, depmod 程序在所有的模塊中尋找 __mod_pci_device_table. 如果找到這個符號, 它將數據拉出模塊並且添加到文件 /lib/modules/KERNEL_VERSION/modules.pcimap. 在 depmod 完成後, 所有的被內核中的模塊支持的 PCI 設備被列出, 帶有它們的模塊名子, 在那個文件中. 當內核告知熱插拔系統有新的 PCI 設備已找到, 熱插拔系統使用 moudles.pcimap 文件來找到正確的驅動來加載.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="RegisteringaPCIDriver.sect2"></a>12.1.5.&#160;註冊一個 PCI 驅動</h3></div></div></div>
+<p>為了被正確註冊到內核, 所有的 PCI 驅動必須創建的主結構是 struct pci_driver 結構. 這個結構包含許多函數回調和變量, 來描述 PCI 驅動給 PCI 核心. 這裡是這個結構的一個 PCI 驅動需要知道的成員:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>const char *name;</span></span></dt>
+<dd><p>驅動的名子. 它必須是唯一的, 在內核中所有 PCI 驅動裡面. 通常被設置為和驅動模塊名子相同的名子. 它顯示在 sysfs 中在 /sys/bus/pci/drivers/ 下, 當驅動在內核時.</p></dd>
+<dt><span class="term"><span>const struct pci_device_id *id_table;</span></span></dt>
+<dd><p>指向 struct pci_device_id 表的指針, 在本章後面描述它.</p></dd>
+<dt><span class="term"><span>int (*probe) (struct pci_dev *dev, const struct pci_device_id *id);</span></span></dt>
+<dd><p>指向 PCI 驅動中 probe 函數的指針. 這個函數被 PCI 核心調用, 當它有一個它認為這個驅動想控制的 struct pci_dev 時. 一個指向 struct pci_device_id 的指針, PCI 核心用來做這個決定的, 也被傳遞給這個函數. 如果這個 PCI 驅動需要這個傳遞給它的 struct pci_dev, 它應當正確初始化這個設備並且返回 0. 如果這個驅動不想擁有這個設備, 或者產生一個錯誤, 它應當返回一個負的錯誤值. 關於這個函數的更多的細節在本章後面. </p></dd>
+<dt><span class="term"><span>void (*remove) (struct pci_dev *dev);</span></span></dt>
+<dd><p>指向 PCI 核心在 struct pci_dev 被從系統中去除時調用的函數的指針, 或者當 PCI 驅動被從內核中卸載時. 關於這個函數的更多的細節在本章後面. </p></dd>
+<dt><span class="term"><span>int (*suspend) (struct pci_dev *dev, u32 state);</span></span></dt>
+<dd><p>當 struct pci_dev 被掛起時 PCI 核心調用的函數的指針. 掛起狀態在 state 變量裡傳遞. 這個函數是可選的; 一個驅動不必提供它.</p></dd>
+<dt><span class="term"><span>int (*resume) (struct pci_dev *dev);</span></span></dt>
+<dd><p>當 pci_dev 被恢復時 PCI 核心調用的函數的指針. 它一直被調用在調用掛起之後. 這個函數時可選的; 一個驅動不必提供它.</p></dd>
+</dl></div>
+<p>總之, 為創建一個正確的 struct pci_driver 結構, 只有 4 個字段需要被初始化:</p>
+<pre class="programlisting">
+static struct pci_driver pci_driver = {
+ .name = "pci_skel",
+ .id_table = ids,
+ .probe = probe,
+ .remove = remove,
+}; 
+</pre>
+<p>為註冊 struct pci_driver 到 PCI 核心, 用一個帶有指向 struct pci_driver 的指針調用 pci_register_driver. 傳統上這在 PCI 驅動的模塊初始化代碼中完成:</p>
+<pre class="programlisting">
+static int __init pci_skel_init(void)
+{
+ return pci_register_driver(&amp;pci_driver);
+}
+</pre>
+<p>注意, pci_register_driver 函數要麼返回一個負的錯誤碼, 要麼是 0 當所有都成功註冊. 它不返回綁定到驅動上的設備號,或者一個錯誤碼如果沒有設備被綁定到驅動上. 這是自 2.6 發佈之前的內核的一個改變, 並且是因為下列的情況而來的:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>在支持 PCI 熱插拔的系統上, 或者 CardBus 系統, 一個 PCI 設備可在任何時間點出現或消失. 如果驅動可在設備出現前被加載是有幫助的, 可以減少用來初始化一個設備的時間.</p></li>
+<li><p>2.6 內核允許新 PCI ID 被動態地分配給一個驅動, 在它被加載之後. 這是通過被創建在 sysfs 中的所有 PCI 驅動目錄的文件 new_id 來完成的. 如果一個新設備在被使用而內核對它還不知道時, 這是非常有用的. 一個用戶可寫 PCI ID 值到 new_id 文件, 並且接著驅動綁定到新設備. 如果一個驅動不被允許加載直到一個設備在系統中出現, 這個接口將不能工作.</p></li>
+</ul></div>
+<p>當 PCI 驅動被卸載, struct pci_drive 需要從內核中註銷. 這通過調用 pci_unregister_driver 完成. 當發生這個調用, 任何當前綁定到這個驅動的 PCI 設備都被去除, 並且這個 PCI 驅動的 remove 函數在 pci_unregister_driver 函數返回之前被調用.</p>
+<pre class="programlisting">
+static void __exit pci_skel_exit(void)
+{
+
+ pci_unregister_driver(&amp;pci_driver);
+}
+</pre>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="OldStypePCIProbing.sect2"></a>12.1.6.&#160;老式 PCI 探測</h3></div></div></div>
+<p>在老的內核版本中, 函數 pci_register_driver, 不是一直被 PCI 驅動使用. 相反, 它們要麼手工瀏覽系統中的 PCI 設備列表, 要麼它們將調用一個能夠搜索一個特定 PCI 設備的函數. 驅動的瀏覽系統中 PCI 設備列表的能力已被從 2.6 內核中去除, 為了阻止驅動破壞內核, 如果它們偶爾修改 PCI 設備列表當一個設備同時被去除時.</p>
+<p>如果發現一個特定 PCI 設備的能力真正被需要, 下列的函數可用:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct pci_dev *pci_get_device(unsigned int vendor, unsigned int device, struct pci_dev *from);</span></span></dt>
+<dd>
+<p>這個函數掃瞄當前系統中 PCI 設備的列表, 並且如果輸入參數匹配指定的供應商和設備 ID, 它遞增在 struct pci_dev 變量 found 中的引用計數, 並且返回它給調用者. 這阻止了這個結構沒有任何通知地消失, 並且確保內核不會 oops. 在驅動用完由這個函數返回的 struct pci_dev, 它必須調用函數 pci_dev_put 來正確地遞減回使用計數, 以允許內核清理設備如果它被去除.參數 from 用同一個簽名來得到多個設備; 這個參數應答指向已被找到的最後一個設備, 以便搜索能夠繼續, 而不必從列表頭開始. 為找到第一個設備, from 被指定為 NULL. 如果沒有找到(進一步)設備, 返回 NULL.</p>
+<p></p>
+<p>一個如何正確使用這個函數的例子是:</p>
+<pre class="programlisting">
+struct pci_dev *dev;
+dev = pci_get_device(PCI_VENDOR_FOO, PCI_DEVICE_FOO, NULL);
+if (dev)
+{
+        /* Use the PCI device */
+        ...
+        pci_dev_put(dev);
+}
+</pre>
+<p>這個函數不能從中斷上下文中被調用. 如果這樣做了, 一個警告被打印到系統日誌.</p>
+</dd>
+<dt><span class="term"><span>struct pci_dev *pci_get_subsys(unsigned int vendor, unsigned int device, unsigned int ss_vendor, unsigned int ss_device, struct pci_dev *from);</span></span></dt>
+<dd><p>這個函數就像 pci_get_device 一樣, 但是它允許當尋找設備時指定子系統供應商和子系統設備 ID. 這個函數不能從中斷上下文調用. 如果是, 一個警告被打印到系統日誌.</p></dd>
+<dt><span class="term"><span>struct pci_dev *pci_get_slot(struct pci_bus *bus, unsigned int devfn);</span></span></dt>
+<dd><p>這個函數查找系統中的 PCI 設備的列表, 在指定的 struct pci_bus 上, 一個指定的 PCI 設備的設備和功能號. 如果找到一個匹配的設備, 它的引用計數被遞增並且返回指向它的一個指針. 當調用者完成存取 struct pci_dev, 它必須調用 pci_dev_put.</p></dd>
+</dl></div>
+<p>所有指向函數都不能從中斷上下文調用. 如果是, 一個警告被打印到系統日誌中.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="EnablingthePCIDevice.sect2"></a>12.1.7.&#160;使能 PCI 設備</h3></div></div></div>
+<p>在 PCI 驅動的探測函數中, 在驅動可存取 PCI 設備的任何設備資源(I/O 區或者中斷)之前, 驅動必須調用 pci_enable_device 函數:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int pci_enable_device(struct pci_dev *dev);</span></span></dt>
+<dd><p>這個函數實際上使能設備. 它喚醒設備以及在某些情況下也分配它的中斷線和 I/O 區. 例如, 這發生在 CardBus 設備上(它在驅動層次上已經完全和 PCI 等同了).</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AccessingtheConfigurationSpace.sect2"></a>12.1.8.&#160;存取配置空間</h3></div></div></div>
+<p>在驅動已探測到設備後, 它常常需要讀或寫 3 個地址空間: 內存, 端口, 和配置. 特別地, 存取配置空間對驅動是至關重要的, 因為這是唯一的找到設備被映射到內存和 I/O 空間的位置的方法.</p>
+<p>因為微處理器無法直接存取配置空間, 計算機供應商不得不提供一個方法來完成它. 為存取配置空間, CPU 必須寫和讀 PCI 控制器中的寄存器, 但是確切的實現是依賴於供應商的, 並且和這個討論無關, 因為 Linux提供了一個標準接口來存取配置空間.</p>
+<p>對於驅動, 配置空間可通過8-位, 16-位, 或者 32-位數據傳輸來存取. 相關的函數原型定義於 &lt;linux/pci.h&gt;:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int pci_read_config_byte(struct pci_dev *dev, int where, u8 *val);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int pci_read_config_word(struct pci_dev *dev, int where, u16 *val);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int pci_read_config_dword(struct pci_dev *dev, int where, u32 *val);</span></span></dt>
+<dd><p>從由 dev 所標識出的設備的配置空間讀 1 個, 2 個或者 4 個字節. where 參數是從配置空間開始的字節偏移. 從配置空間取得的值通過 val 指針返回, 並且這個函數的返回值是一個錯誤碼. word 和 dword 函數轉換剛剛讀的值從小端到處理器的本地字節序, 因此你不必處理字節序.</p></dd>
+<dt><span class="term"><span>int pci_write_config_byte(struct pci_dev *dev, int where, u8 val);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int pci_write_config_word(struct pci_dev *dev, int where, u16 val);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int pci_write_config_dword(struct pci_dev *dev, int where, u32 val);</span></span></dt>
+<dd><p>寫 1 個, 2 個或者 4 個字節到配置空間. 象通常一樣, 設備由 dev 所標識, 並且象通常一樣被寫的值被傳遞. word 和 dword 函數轉換這個值到小端, 在寫到外設之前.</p></dd>
+</dl></div>
+<p>所有的之前的函數被實現為真正調用下列函數的內聯函數. 可自由使用這些函數代替上面這些, 如果這個驅動在任何特別時刻不能及時存取 struct pci_dev :</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int pci_bus_read_config_byte (struct pci_bus *bus, unsigned int devfn, int where, u8 *val);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int pci_bus_read_config_word (struct pci_bus *bus, unsigned int devfn, int where, u16 *val);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int pci_bus_read_config_dword (struct pci_bus *bus, unsigned int devfn, int where, u32 *val);</span></span></dt>
+<dd><p>就像 pci_read_function 一樣, 但是 struct pci_bus * 和 devfn 變量需要來代替 struct pci_dev *.</p></dd>
+<dt><span class="term"><span>int pci_bus_write_config_byte (struct pci_bus *bus, unsigned int devfn, int where, u8 val);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int pci_bus_write_config_word (struct pci_bus *bus, unsigned int devfn, int where, u16 val);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int pci_bus_write_config_dword (struct pci_bus *bus, unsigned int devfn, int where, u32 val);</span></span></dt>
+<dd><p>如同 pci_write_ 函數, 但是 struct pci_bus * 和 devfn 變量需要來替代 struct pci_dev *.</p></dd>
+</dl></div>
+<p>使用 pci_read_ 函數尋址配置變量的最好方法是通過定義在 &lt;linux/pci.h&gt; 中的符號名. 例如, 下面的小函數獲取一個設備的版本 ID , 通過在使用 pci_read_config_bye 時傳遞一個符號名.</p>
+<pre class="programlisting">
+static unsigned char skel_get_revision(struct pci_dev *dev)
+{
+ u8 revision;
+ pci_read_config_byte(dev, PCI_REVISION_ID, &amp;revision);
+ return revision;
+}
+</pre>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AccessingtheIOandMemorySpaces.sect2"></a>12.1.9.&#160;存取 I/O 和內存空間</h3></div></div></div>
+<p>一個 PCI 設備實現直至 6 個 I/O 地址區. 每個區由要麼內存要麼 I/O 區組成. 大部分設備實現它們的 I/O 寄存器在內存區中, 因為通常它是一個完善的方法(如同在"	I/O 端口和 I/O 內存"一節中解釋的, 在第 9 章). 但是, 不像正常的內存, I/O 寄存器不應當被 CPU 緩存, 因為每次存取都可能有邊際效果. 作為內存區來實現 I/O 寄存器的 PCI 設備, 通過設置一個在它的配置寄存器的"內存可預取"位來標誌出這個不同.<sup>[<a name="id471074" href="#ftn.id471074">43</a>]</sup> 如果這個內存區被標識為可預取的, CPU 可緩存它的內容並且對它做所有類型的優化. 非可預取的內存存取, 另一方面, 不能被優化因為每次存取可能有邊際效果, 就像 I/O 端口. 映射它們的寄存器到一個內存地址範圍的外設聲明這個範圍是非可預取的, 而像在 PCI 板的視頻內存的一些是可預取的. 在本節, 我們使用詞語"區"來指代一個通用的 I/O  地址空間, 這個空間要麼是內存映射的, 要麼是端口映射的.</p>
+<p>一個接口板報告它的區的大小和當前位置, 使用配置寄存器- 6 個 32 位寄存器, 在圖12-2中顯示的, 它們的符號名是 PCI_ADDRESS_0 到 PCI_BASE_ADDRESS_5. 因為 PCI 定義的 I/O 空間是 32-位空間, 使用同樣的配置接口給內存和 I/O是有意義的. 如果設備使用 64-位地址總線, 它可以在 64-位內存空間聲明各個區, 使用 2 個連續的 PCI_BASE_ADDRESS 寄存器給每個區, 低位在前. 對一個設備可能提供 32-位 和 64-位區.</p>
+<p>內核中, PCI 設備的 I/O 區已被集成到通用的資源管理中. 由於這個原因, 你不必存取配置變量來知道你的設備映射到內存或者 I/O 空間什麼地方. 首選的用來獲得區信息的接口包括下列函數:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>unsigned long pci_resource_start(struct pci_dev *dev, int bar);</span></span></dt>
+<dd><p>這個函數返回第一個地址(內存地址或者 I/O 端口號), 和 6 個 PCI I/O 區中的一個相關聯的. 這個區通過整數 bar (the base address register), 範圍從 0-5 (包含).</p></dd>
+<dt><span class="term"><span>unsigned long pci_resource_end(struct pci_dev *dev, int bar);</span></span></dt>
+<dd><p>這個函數返回最後一個地址, I/O 區號 bar 的一部分. 注意這是最後一個可用地址, 不是這個區後的第一個地址.</p></dd>
+<dt><span class="term"><span>unsigned long pci_resource_flags(struct pci_dev *dev, int bar);</span></span></dt>
+<dd><p>這個函數返回和這個資源相關聯的標識.</p></dd>
+</dl></div>
+<p>資源標識用來定義單個資源的一些特性. 對於和 PCI I/O 區相關聯的 PCI資源, 這個信息從基地址寄存器中抽取出來, 但是可來自其他地方, 對於沒有和 PCI 設備關聯的資源.</p>
+<p>所有的資源標誌都定義在 &lt;linux/ioport.h&gt;; 最重要的是:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>IORESOURCE_IO</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>IORESOURCE_MEM </span></span></dt>
+<dd><p>如果被關聯的 I/O 區存在, 一個並且只有一個這樣的標誌被設置.</p></dd>
+<dt><span class="term"><span>IORESOURCE_PREFETCH</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>IORESOURCE_READONLY </span></span></dt>
+<dd><p>這些標誌告訴是否一個內存區是可預取的並且/或者寫保護的. 後一個標誌對 PCI 資源從不設置.</p></dd>
+</dl></div>
+<p>通過使用 pci_resource_ 函數, 一個設備驅動可完全忽略底層的 PCI 寄存器, 因為系統已經使用它們來構造資源信息.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="PCIInterrupts.sect2"></a>12.1.10.&#160;PCI 中斷</h3></div></div></div>
+<p>對於中斷, PCI 是容易處理的. 在 Linux 啟動時, 計算機的固件已經分配一個唯一的中斷號給設備, 並且驅動只需要使用它. 中斷號被存儲於配置寄存器 60 (PCI_INTERRUPT_LINE), 它是一個字節寬. 這允許最多 256 個中斷線, 但是實際的限制依賴於使用CPU. 驅動不必費心去檢查中斷號, 因為在 PCI_INTERRUPT_LINE 中找到的值保證是正確的一個.</p>
+<p>如果設備不支持中斷, 寄存器 61 (PCI_INTERRUPT_PIN) 是 0; 否則, 它是非零的值. 但是, 因為驅動知道設備是否是被中斷驅動的, 它常常不需要讀 PCI_INTERRUPT_PIN.</p>
+<p>因此, 用來處理中斷的 PCI 特定的代碼需要讀配置字節來獲得保存在一個局部變量中的中斷號, 如同在下面代碼中顯示的. 除此之外, 在第 10 章的信息適用.</p>
+<pre class="programlisting">
+result = pci_read_config_byte(dev, PCI_INTERRUPT_LINE, &amp;myirq);
+if (result)
+{
+        /* deal with error */
+}
+</pre>
+<p>本節剩下的提供了額外的信息給好奇的讀者, 但是對編寫程序不必要.</p>
+<p>一個 PCI 連接器有 4 個中斷線, 並且外設板可使用任何一個或者多個. 每個管腳被獨立連接到主板的中斷控制器中, 因此中斷可被共享而沒有任何電路上的問題. 中斷控制器接著負責映射中斷線(引腳)到處理器的硬件; 這種依賴平台的操作留給控制器以便在總線自身上獲得平台獨立性.</p>
+<p>位於 PCI_INTERRUPT_PIN 的只讀的配置寄存器用來告知計算機實際上使用哪個管腳. 值得記住每個設備板可有多到 8 個設備; 每個設備使用一個單個中斷腳並且在它的配置寄存器中報告它. 在同一個設備板上的不同設備可使用不同的中斷腳或者共享同一個.</p>
+<p>PCI_INTERRUPT_LINE 寄存器, 另一方面, 是讀/寫的. 當啟動計算機, 固件掃瞄它的 PCI 設備並為每個設備設置寄存器固件中斷腳是如何連接給它的 PCI 槽位. 這個值由固件分配, 因為只有固件知道主板如何連接不同的中斷腳到處理器. 對於設備驅動, 但是,  PCI_INTERRUPT_LINE 寄存器是只讀的. 有趣的是, 近期的 Linux 內核版本在某些情況下可分配中斷線, 不用依靠 BIOS.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="HardwareAbstractions.sect2"></a>12.1.11.&#160;硬件抽像</h3></div></div></div>
+<p>我們結束 PCI 的討論, 通過快速看一下系統如何處理在市場上的多種 PCI 控制器. 這只是一個信息性的小節, 打算來展示給好奇的讀者, 內核的面向對像分佈如何向下擴展到最低層.</p>
+<p>用來實現硬件抽像的機制是通常的包含方法的結構. 它是一個很強功能的技術, 只添加最小的解引用一個指針的開銷到正常的函數調用開銷當中. 在 PCI 管理的情況下, 唯一的硬件相關的操作是讀和寫配置寄存器的那些, 因為在 PCI 世界中所有其他的都通過直接讀和寫 I/O 和內存地址空間來完成, 並且那些是在 CPU 的直接控制之下.</p>
+<p>因此, 配置寄存器存取的相關的結構只包含 2 個成員:</p>
+<pre class="programlisting">
+struct pci_ops
+{
+        int (*read)(struct pci_bus *bus, unsigned int devfn, int where, int size, u32 *val);
+        int (*write)(struct pci_bus *bus, unsigned int devfn, int where, int size, u32 val);
+};
+</pre>
+<p>這個結構定義在 &lt;linux/pci.h&gt; 並且被 drivers/pci/pci.c 使用, 這裡定義了實際的公共函數.</p>
+<p>作用於 PCI 配置空間的這 2 個函數有更大的開銷, 比解引用一個指針; 由於代碼的面向對像特性, 它們使用層疊指針, 但是操作中開銷不是一個問題, 這些操作很少被進行並且從不處於速度-關鍵的路徑中. pci_read_config_byte(dev, where, val)的實際實現, 例如, 擴展為:</p>
+<pre class="programlisting">
+dev-&gt;bus-&gt;ops-&gt;read(bus, devfn, where, 8, val); 
+</pre>
+<p>系統中各種 PCI 總線在系統啟動時被探測, 並且此時 struct pci_bus 項被創建並且和它們的特性所關聯, 包括 ops 字節.</p>
+<p>通過"硬件操作"數據結構來實現硬件抽像在 Linux 內核中是典型的. 一個重要的例子是 struct alpha_machine_vector 數據結構. 它定義於 &lt;asm-alpha/machvec.h&gt; 和負責任何可能的跨不同基於 Alpha 的計算機的改變.</p>
+</div>
+</div>
+
+SBus 
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id469697" href="#id469697">40</a>] </sup>一些體系也顯示 PCI 域信息在 /proc/pci 和 /proc/bus/pci 文件.</p></div>
+<div class="footnote"><p><sup>[<a name="ftn.id469764" href="#id469764">41</a>] </sup>實際上, 那個配置不限定在系統啟動時; 可熱插拔的設備, 例如, 在啟動時不可用並且相反在之後出現. 這裡的要點是設備啟動必須不改變 I/O 或者內存區的地址.</p></div>
+<div class="footnote"><p><sup>[<a name="ftn.id469852" href="#id469852">42</a>] </sup>你將在設備自己的硬件手冊裡發現它的 ID. 在文件 pci.ids 中包含一個列表, 這個文件是 pciutils 軟件包和內核代碼的一部分; 它不假裝是完整的, 只是列出最知名的供應商和設備. 這個文件的內核版本將來不會被包含在內核系列中. </p></div>
+<div class="footnote"><p><sup>[<a name="ftn.id471074" href="#id471074">43</a>] </sup>信息位於一個基地址 PCI 寄存器的低位. 這些位定義在 &lt;linux/pci.h&gt;.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch11s06.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch12s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">11.6.&#160;快速參考&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;12.2.&#160;回顧: ISA</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch12.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

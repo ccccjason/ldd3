@@ -1,0 +1,113 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch06s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>6.4.&#160;異步通知-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch06.html" title="第&#160;6&#160;章&#160;高級字符驅動操作">
+<link rel="prev" href="ch06s03.html" title="6.3.&#160;poll 和 select">
+<link rel="next" href="ch06s05.html" title="6.5.&#160;移位一個設備">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">6.4.&#160;異步通知</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch06s03.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;6&#160;章&#160;高級字符驅動操作</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch06s05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="AsynchronousNotification.sect1"></a>6.4.&#160;異步通知</h2></div></div></div>
+<p>儘管阻塞和非阻塞操作和 select 方法的結合對於查詢設備在大部分時間是足夠的, 一些情況還不能被我們迄今所見到的技術來有效地解決.</p>
+<p>讓我們想像一個進程, 在低優先級上執行一個長計算循環, 但是需要盡可能快的處理輸入數據. 如果這個進程在響應新的來自某些數據獲取外設的報告, 它應當立刻知道當新數據可用時. 這個應用程序可能被編寫來調用 poll 有規律地檢查數據, 但是, 對許多情況, 有更好的方法. 通過使能異步通知, 這個應用程序可能接受一個信號無論何時數據可用並且不需要讓自己去查詢.</p>
+<p>用戶程序必須執行 2 個步驟來使能來自輸入文件的異步通知. 首先, 它們指定一個進程作為文件的擁有者. 當一個進程使用 fcntl 系統調用發出 F_SETOWN 命令, 這個擁有者進程的 ID 被保存在 filp-&gt;f_owner 給以後使用. 這一步對內核知道通知誰是必要的. 為了真正使能異步通知, 用戶程序必須設置 FASYNC 標誌在設備中, 通過 F_SETFL fcntl 命令.</p>
+<p>在這 2  個調用已被執行後, 輸入文件可請求遞交一個 SIGIO 信號, 無論何時新數據到達. 信號被發送給存儲於 filp-&gt;f_owner 中的進程(或者進程組, 如果值為負值).</p>
+<p>例如, 下面的用戶程序中的代碼行使能了異步的通知到當前進程, 給 stdin 輸入文件:</p>
+<pre class="programlisting">
+signal(SIGIO, &amp;input_handler); /* dummy sample; sigaction() is better */
+fcntl(STDIN_FILENO, F_SETOWN, getpid());
+oflags = fcntl(STDIN_FILENO, F_GETFL);
+fcntl(STDIN_FILENO, F_SETFL, oflags | FASYNC);
+</pre>
+<p>這個在源碼中名為 asynctest 的程序是一個簡單的程序, 讀取 stdin. 它可用來測試 scullpipe 的異步能力. 這個程序和 cat 類似但是不結束於文件尾; 它只響應輸入, 而不是沒有輸入.</p>
+<p>注意, 但是, 不是所有的設備都支持異步通知, 並且你可選擇不提供它. 應用程序常常假定異步能力只對 socket 和 tty 可用.</p>
+<p>輸入通知有一個剩下的問題. 當一個進程收到一個 SIGIO, 它不知道哪個輸入文件有新數據提供. 如果多於一個文件被使能異步地通知掛起輸入的進程, 應用程序必須仍然靠 poll 或者 select 來找出發生了什麼.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheDriversPointofView.sect2"></a>6.4.1.&#160;驅動的觀點</h3></div></div></div>
+<p>對我們來說一個更相關的主題是設備驅動如何實現異步信號. 下面列出了詳細的操作順序, 從內核的觀點:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>1. 當發出 F_SETOWN, 什麼都沒發生, 除了一個值被賦值給 filp-&gt;f_owner.</p></li>
+<li><p>2. 當 F_SETFL 被執行來打開 FASYNC, 驅動的 fasync 方法被調用. 這個方法被調用無論何時 FASYNC 的值在 filp-&gt;f_flags 中被改變來通知驅動這個變化, 因此它可正確地響應. 這個標誌在文件被打開時缺省地被清除. 我們將看這個驅動方法的標準實現, 在本節.</p></li>
+<li><p>3. 當數據到達, 所有的註冊異步通知的進程必須被發出一個 SIGIO 信號.</p></li>
+</ul></div>
+<p>雖然實現第一步是容易的--在驅動部分沒有什麼要做的--其他的步驟包括維護一個動態數據結構來跟蹤不同的異步讀者; 可能有幾個. 這個動態數據結構, 但是, 不依賴特殊的設備, 並且內核提供了一個合適的通用實現這樣你不必重新編寫同樣的代碼給每個驅動.</p>
+<p>Linux 提供的通用實現是基於一個數據結構和 2 個函數(它們在前面所說的第 2 步和第 3 步被調用). 聲明相關材料的頭文件是&lt;linux/fs.h&gt;(這裡沒新東西), 並且數據結構被稱為 struct fasync_struct. 至於等待隊列, 我們需要插入一個指針在設備特定的數據結構中.</p>
+<p>驅動調用的 2 個函數對應下面的原型:</p>
+<pre class="programlisting">
+int fasync_helper(int fd, struct file *filp, int mode, struct fasync_struct **fa);
+void kill_fasync(struct fasync_struct **fa, int sig, int band);
+</pre>
+<p>fasync_helper 被調用來從相關的進程列表中添加或去除入口項, 當 FASYNC 標誌因一個打開文件而改變. 它的所有參數除了最後一個, 都被提供給 fasync 方法並且被直接傳遞. 當數據到達時 kill_fasync 被用來通知相關的進程. 它的參數是被傳遞的信號(常常是 SIGIO)和 band, 這幾乎都是 POLL_IN<sup>[<a name="id437432" href="#ftn.id437432">25</a>]</sup>(但是這可用來發送"緊急"或者帶外數據, 在網絡代碼裡).</p>
+<p>這是 scullpipe 如何實現 fasync 方法的:</p>
+<pre class="programlisting">
+static int scull_p_fasync(int fd, struct file *filp, int mode)
+{
+ struct scull_pipe *dev = filp-&gt;private_data;
+ return fasync_helper(fd, filp, mode, &amp;dev-&gt;async_queue);
+}
+</pre>
+<p>顯然所有的工作都由 fasync_helper 進行. 但是, 不可能實現這個功能在沒有一個方法在驅動裡的情況下, 因為這個幫忙函數需要存取正確的指向 struct fasync_struct (這裡是 與dev-&gt;async_queue)的指針, 並且只有驅動可提供這個信息.</p>
+<p>當數據到達, 下面的語句必須被執行來通知異步讀者. 因為對 sucllpipe 讀者的新數據通過一個發出 write 的進程被產生, 這個語句出現在 scullpipe 的 write 方法中.</p>
+<pre class="programlisting">
+if (dev-&gt;async_queue)
+ kill_fasync(&amp;dev-&gt;async_queue, SIGIO, POLL_IN);
+</pre>
+<p>注意, 一些設備還實現異步通知來指示當設備可被寫入時; 在這個情況, 當然, kill_fasnyc 必須被使用一個 POLL_OUT 模式來調用.</p>
+<p>可能會出現我們已經完成但是仍然有一件事遺漏. 我們必須調用我們的 fasync 方法, 當文件被關閉來從激活異步讀者列表中去除文件. 儘管這個調用僅當 filp-&gt;f_flags 被設置為 FASYNC 時需要, 調用這個函數無論如何不會有問題並且是常見的實現. 下面的代碼行, 例如, 是 scullpipe 的 release 方法的一部分:</p>
+<pre class="programlisting">
+/* remove this filp from the asynchronously notified filp's */
+scull_p_fasync(-1, filp, 0);
+</pre>
+<p>這個在異步通知之下的數據結構一直和結構 struct wait_queue 是一致的, 因為 2 種情況都涉及等待一個事件. 區別是這個 struct file 被用來替代 struct task_struct. 隊列中的結構 file 接著用來存取 f_owner, 為了通知進程.</p>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id437432" href="#id437432">25</a>] </sup>POLL_IN 是一個符號, 用在異步通知代碼中; 它等同於 POLLIN|POLLRDNORM.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch06s03.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch06.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch06s05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">6.3.&#160;poll 和 select&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;6.5.&#160;移位一個設備</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch06s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

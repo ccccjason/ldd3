@@ -1,0 +1,359 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch13s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>13.3.&#160;USB 的 Urbs-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch13.html" title="第&#160;13&#160;章&#160;USB 驅動">
+<link rel="prev" href="ch13s02.html" title="13.2.&#160;USB 和 sysfs">
+<link rel="next" href="ch13s04.html" title="13.4.&#160;編寫一個 USB 驅動">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">13.3.&#160;USB 的 Urbs</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch13s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;13&#160;章&#160;USB 驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch13s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="USBUrbs.sect1"></a>13.3.&#160;USB 的 Urbs</h2></div></div></div>
+<p>linux 內核中的 USB 代碼和所有的 USB 設備通訊使用稱為 urb 的東西( USB request block). 這個請求塊用 struct urb 結構描述並且可在 include/linux/usb.h 中找到.</p>
+<p>一個 urb 用來發送或接受數據到或者從一個特定 USB 設備上的特定的 USB 端點, 以一種異步的方式. 它用起來非常像一個 kiocb 結構被用在文件系統異步 I/O 代碼, 或者如同一個 struct skbuff 用在網絡代碼中. 一個 USB 設備驅動可能分配許多 urb 給一個端點或者可能重用單個 urb 給多個不同的端點, 根據驅動的需要. 設備中的每個端點都處理一個 urb 隊列, 以至於多個 urb 可被發送到相同的端點, 在隊列清空之前. 一個 urb 的典型生命循環如下:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>被一個 USB 設備驅動創建.</p></li>
+<li><p>安排給一個特定 USB 設備的特定端點.</p></li>
+<li><p>提交給 USB 核心, 被 USB 設備驅動.</p></li>
+<li><p>提交給特定設備的被 USB 核心指定的 USB 主機控制器驅動, .</p></li>
+<li><p>被 USB 主機控制器處理, 它做一個 USB 傳送到設備.</p></li>
+<li><p>當 urb 完成, USB 主機控制器驅動通知 USB 設備驅動.</p></li>
+</ul></div>
+<p>urb 也可被提交這個 urb 的驅動在任何時間取消, 或者被 USB 核心如果設備被從系統中移出. urb 被動態創建並且包含一個內部引用計數, 使它們在這個 urb 的最後一個用戶釋放它時被自動釋放.</p>
+<p>本章中描述的處理 urb 的過程是有用的, 因為它允許流和其他複雜的, 交疊的通訊以允許驅動來獲得最高可能的數據傳送速度. 但是有更少麻煩的過程可用, 如果你只是想發送單獨的塊或者控制消息, 並且不關心數據吞吐率.(見"USB 傳送不用 urb"一節).</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="structurb.sect2"></a>13.3.1.&#160;結構 struct urb</h3></div></div></div>
+<p>struct urb 結構中和 USB 設備驅動有關的成員是:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct usb_device *dev </span></span></dt>
+<dd><p>指向這個 urb 要發送到的 struct usb_device 的指針. 這個變量必須被 USB 驅動初始化, 在這個 urb 被發送到 USB 核心之前.</p></dd>
+<dt><span class="term"><span>unsigned int pipe </span></span></dt>
+<dd>
+<p>端點消息, 給這個 urb 要被發送到的特定 struct usb_device. 這個變量必須被 USB 驅動初始化, 在這個 urb 被發送到 USB 核心之前.</p>
+<p>為設置這個結構的成員, 驅動使用下面的函數是適當的, 依據流動的方向. 注意每個端點只可是一個類型.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>unsigned int usb_sndctrlpipe(struct usb_device *dev, unsigned int endpoint)</span></span></dt>
+<dd><p>指定一個控制 OUT 端點給特定的帶有特定端點號的 USB 設備.</p></dd>
+<dt><span class="term"><span>unsigned int usb_rcvctrlpipe(struct usb_device *dev, unsigned int endpoint)</span></span></dt>
+<dd><p>指定一個控制 IN 端點給帶有特定端點號的特定 USB 設備.</p></dd>
+<dt><span class="term"><span>unsigned int usb_sndbulkpipe(struct usb_device *dev, unsigned int endpoint)</span></span></dt>
+<dd><p>指定一個塊 OUT 端點給帶有特定端點號的特定 USB 設備</p></dd>
+<dt><span class="term"><span>unsigned int usb_rcvbulkpipe(struct usb_device *dev, unsigned int endpoint)</span></span></dt>
+<dd><p>指定一個塊 IN 端點給帶有特定端點號的特定 USB 設備</p></dd>
+<dt><span class="term"><span>unsigned int usb_sndintpipe(struct usb_device *dev, unsigned int endpoint)</span></span></dt>
+<dd><p>指定一個中斷 OUT 端點給帶有特定端點號的特定 USB 設備</p></dd>
+<dt><span class="term"><span>unsigned int usb_rcvintpipe(struct usb_device *dev, unsigned int endpoint)</span></span></dt>
+<dd><p>指定一個中斷 IN 端點給帶有特定端點號的特定 USB 設備</p></dd>
+<dt><span class="term"><span>unsigned int usb_sndisocpipe(struct usb_device *dev, unsigned int endpoint)</span></span></dt>
+<dd><p>指定一個同步 OUT 端點給帶有特定端點號的特定 USB 設備</p></dd>
+<dt><span class="term"><span>unsigned int usb_rcvisocpipe(struct usb_device *dev, unsigned int endpoint)</span></span></dt>
+<dd><p>指定一個同步 IN 端點給帶有特定端點號的特定 USB 設備</p></dd>
+</dl></div>
+</dd>
+<dt><span class="term"><span>unsigned int transfer_flags </span></span></dt>
+<dd>
+<p>這個變量可被設置為不同位值, 根據這個 USB 驅動想這個 urb 發生什麼. 可用的值是:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>URB_SHORT_NOT_OK </span></span></dt>
+<dd><p>當置位, 它指出任何在一個 IN 端點上可能發生的短讀, 應當被 USB 核心當作一個錯誤. 這個值只對從 USB 設備讀的 urb 有用, 不是寫 urbs.</p></dd>
+<dt><span class="term"><span>URB_ISO_ASAP </span></span></dt>
+<dd><p>如果這個 urb 是同步的, 這個位可被置位如果驅動想這個 urb 被調度, 只要帶寬允許它這樣, 並且在此點設置這個 urb 中的 start_frame 變量. 如果對於同步 urb 這個位沒有被置位, 驅動必須指定 start_frame 值並且必須能夠正確恢復, 如果沒有在那個時刻啟動. 見下面的章節關於同步 urb 更多的消息.</p></dd>
+<dt><span class="term"><span>URB_NO_TRANSFER_DMA_MAP </span></span></dt>
+<dd><p>應當被置位, 當 urb 包含一個要被發送的 DMA 緩衝. USB 核心使用這個被 transfer_dma 變量指向的緩衝, 不是被 transfer_buffer 變量指向的緩衝.</p></dd>
+<dt><span class="term"><span>URB_NO_SETUP_DMA_MAP </span></span></dt>
+<dd><p>象 URB_NO_TRANSFER_DMA_MAP 位, 這個位用來控制有一個 DMA 緩衝已經建立的 urb. 如果它被置位, USB 核心使用這個被 setup_dma 變量而不是 setup_packet 變量指向的緩衝. </p></dd>
+<dt><span class="term"><span>URB_ASYNC_UNLINK </span></span></dt>
+<dd><p>如果置位, 給這個 urb 的對 usb_unlink_urb 的調用幾乎立刻返回, 並且這個 urb 在後面被解除連接. 否則, 這個函數等待直到 urb 完全被去鏈並且在返回前結束. 小心使用這個位, 因為它可有非常難於調試的同步問題.</p></dd>
+<dt><span class="term"><span>URB_NO_FSBR </span></span></dt>
+<dd><p>只有 UHCI USB 主機控制器驅動使用, 並且告訴它不要試圖做 Front Side Bus Reclamation 邏輯. 這個位通常應當不設置, 因為有 UHCI 主機控制器的機器創建了許多 CPU 負擔, 並且 PCI 總線被等待設置了這個位的 urb 所飽和.</p></dd>
+<dt><span class="term"><span>URB_ZERO_PACKET </span></span></dt>
+<dd><p>如果置位, 一個塊 OUT urb 通過發送不包含數據的短報文而結束, 當數據對齊到一個端點報文邊界. 這被一些壞掉的 USB 設備所需要(例如一些 USB 到 IR 的設備) 為了正確的工作..</p></dd>
+<dt><span class="term"><span>URB_NO_INTERRUPT </span></span></dt>
+<dd><p>如果置位, 硬件當 urb 結束時可能不產生一個中斷. 這個位應當小心使用並且只在排隊多個到相同端點的 urb 時使用. USB 核心函數使用這個為了做 DMA 緩衝傳送.</p></dd>
+</dl></div>
+</dd>
+<dt><span class="term"><span>void *transfer_buffer </span></span></dt>
+<dd><p>指向用在發送數據到設備(對一個 OUT urb)或者從設備中獲取數據(對於一個 IN urb)的緩衝的指針. 對主機控制器為了正確存取這個緩衝, 它必須被使用一個對 kmalloc 調用來創建, 不是在堆棧或者靜態地. 對控制端點, 這個緩衝是給發送的數據階段.</p></dd>
+<dt><span class="term"><span>dma_addr_t transfer_dma </span></span></dt>
+<dd><p>用來使用 DMA 傳送數據到 USB 設備的緩衝.</p></dd>
+<dt><span class="term"><span>int transfer_buffer_length </span></span></dt>
+<dd>
+<p>緩衝的長度, 被 transfer_buffer 或者 transfer_dma 變量指向(由於只有一個可被一個 urb 使用). 如果這是 0, 沒有傳送緩衝被 USB 核心所使用.</p>
+<p>對於一個 OUT 端點, 如果這個端點最大的大小比這個變量指定的值小, 對這個 USB 設備的傳送被分成更小的塊為了正確的傳送數據. 這種大的傳送發生在連續的 USB 幀. 提交一個大塊數據在一個 urb 中是非常快, 並且使 USB 主機控制器去劃分為更小的快, 比以連續的順序發送小緩衝.</p>
+</dd>
+<dt><span class="term"><span>unsigned char *setup_packet </span></span></dt>
+<dd><p>指向給一個控制 urb 的 setup 報文的指針. 它在位於傳送緩衝中的數據之前被傳送. 這個變量只對控制 urb 有效.</p></dd>
+<dt><span class="term"><span>dma_addr_t setup_dma </span></span></dt>
+<dd><p>給控制 urb 的 setupt 報文的 DMA 緩衝. 在位於正常傳送緩衝的數據之前被傳送. 這個變量只對控制 urb 有效.</p></dd>
+<dt><span class="term"><span>usb_complete_t complete </span></span></dt>
+<dd>
+<p>指向完成處理者函數的指針, 它被 USB 核心調用當這個 urb 被完全傳送或者當 urb 發生一個錯誤. 在這個函數中, USB 驅動可檢查這個 urb, 釋放它, 或者重新提交它給另一次傳送.(見"completingUrbs: 完成回調處理者", 關於完成處理者的更多細節).</p>
+<p>usb_complete_t 類型定義如此:</p>
+<pre class="programlisting">
+typedef void (*usb_complete_t)(struct urb *, struct pt_regs *);
+</pre>
+</dd>
+<dt><span class="term"><span>void *context </span></span></dt>
+<dd><p>指向數據點的指針, 它可被 USB 驅動設置. 它可在完成處理者中使用當 urb 被返回到驅動. 關於這個變量的細節見後續章節.</p></dd>
+<dt><span class="term"><span>int actual_length </span></span></dt>
+<dd><p>當這個 urb 被完成, 這個變量被設置為數據的真實長度, 或者由這個 urb (對於 OUT urb)發送或者由這個 urb(對於 IN urb)接受. 對於 IN urb, 這個必須被用來替代 transfer_buffer_length 變量, 因為接收的數據可能比整個緩衝大小小.</p></dd>
+<dt><span class="term"><span>int status </span></span></dt>
+<dd>
+<p>當這個 urb 被結束, 或者開始由 USB 核心處理, 這個變量被設置為 urb 的當前狀態. 一個 USB 驅動可安全存取這個變量的唯一時間是在 urb 完成處理者函數中(在"CompletingUrbs: 完成回調處理者"一節中描述). 這個限制是阻止競爭情況, 發生在這個 urb 被 USB 核心處理當中. 對於同步 urb, 在這個變量中的一個成功的值(0)只指示是否這個 urb 已被去鏈. 為獲得在同步 urb 上的詳細狀態, 應當檢查 iso_frame_desc 變量.</p>
+<p>這個變量的有效值包括:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>0</span></span></dt>
+<dd><p>這個 urb 傳送是成功的.</p></dd>
+<dt><span class="term"><span>-ENOENT </span></span></dt>
+<dd><p>這個 urb 被對 usb_kill_urb 的調用停止.</p></dd>
+<dt><span class="term"><span>-ECONNRESET </span></span></dt>
+<dd><p>urb 被對 usb_unlink_urb 的調用去鏈, 並且 transfer_flags 變量被設置為 URB_ASYNC_UNLINK.</p></dd>
+<dt><span class="term"><span>-EINPROGRESS </span></span></dt>
+<dd><p>這個 urb 仍然在被 USB 主機控制器處理中. 如果你的驅動曾見到這個值, 它是一個你的驅動中的 bug.</p></dd>
+<dt><span class="term"><span>-EPROTO </span></span></dt>
+<dd>
+<p>這個 urb 發生下面一個錯誤:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>一個 bitstuff 錯誤在傳送中發生.</p></li>
+<li><p>硬件沒有及時收到響應幀.</p></li>
+</ul></div>
+</dd>
+<dt><span class="term"><span>-EILSEQ </span></span></dt>
+<dd><p>在這個 urb 傳送中有一個 CRC 不匹配.</p></dd>
+<dt><span class="term"><span>-EPIPE </span></span></dt>
+<dd><p>這個端點現在被停止. 如果這個包含的端點不是一個控制端點, 這個錯誤可被清除通過一個對函數 usb_clear_halt 的調用.</p></dd>
+<dt><span class="term"><span>-ECOMM </span></span></dt>
+<dd><p>在傳送中數據接收快於能被寫入系統內存. 這個錯誤值只對 IN urb.</p></dd>
+<dt><span class="term"><span>-ENOSR </span></span></dt>
+<dd><p>在傳送中數據不能從系統內存中獲取得足夠快, 以便可跟上請求的 USB 數據速率. 這個錯誤只對 OUT urb.</p></dd>
+<dt><span class="term"><span>-EOVERFLOW </span></span></dt>
+<dd><p>這個 urb 發生一個"babble"錯誤. 一個"babble"錯誤發生當端點接受數據多於端點的特定最大報文大小.</p></dd>
+<dt><span class="term"><span>-EREMOTEIO </span></span></dt>
+<dd><p>只發生在當 URB_SHORT_NOT_OK 標誌被設置在 urb 的 transfer_flags 變量, 並且意味著 urb 請求的完整數量的數據沒有收到.</p></dd>
+<dt><span class="term"><span>-ENODEV </span></span></dt>
+<dd><p>這個 USB 設備現在從系統中消失.</p></dd>
+<dt><span class="term"><span>-EXDEV </span></span></dt>
+<dd><p>只對同步 urb 發生, 並且意味著傳送只部分完成. 為了決定傳送什麼, 驅動必須看單獨的幀狀態.</p></dd>
+<dt><span class="term"><span>-EINVAL </span></span></dt>
+<dd>
+<p>這個 urb 發生了非常壞的事情. USB 內核文檔描述了這個值意味著什麼:</p>
+<p>ISO 瘋了, 如果發生這個: 退出並回家.</p>
+<p>它也可發生, 如果一個參數在 urb 結構中被不正確地設置了, 或者如果在提交這個 urb 給 USB 核心的 usb_submit_urb 調用中, 有一個不正確的函數參數.</p>
+</dd>
+<dt><span class="term"><span>-ESHUTDOWN </span></span></dt>
+<dd><p>這個 USB 主機控制器驅動有嚴重的錯誤; 它現在已被禁止, 或者設備和系統去掉連接, 並且這個urb 在設備被去除後被提交. 它也可發生當這個設備的配置改變, 而這個 urb 被提交給設備.</p></dd>
+</dl></div>
+<p></p>通常, 錯誤值 -EPROTO, -EILSEQ, 和 -EOVERFLOW 指示設備的硬件問題, 設備固件, 或者連接設備到計算機的線纜.</dd>
+<dt><span class="term"><span>int start_frame </span></span></dt>
+<dd><p>設置或返回同步傳送要使用的初始幀號.</p></dd>
+<dt><span class="term"><span>int interval </span></span></dt>
+<dd><p>urb 被輪詢的間隔. 這只對中斷或者同步 urb 有效. 這個值的單位依據設備速度而不同. 對於低速和高速的設備, 單位是幀, 它等同於毫秒. 對於設備, 單位是宏幀的設備, 它等同於 1/8 微秒單位. 這個值必須被 USB 驅動設置給同步或者中斷 urb, 在這個 urb被發送到 USB 核心之前.</p></dd>
+<dt><span class="term"><span>int number_of_packets </span></span></dt>
+<dd><p>只對同步 urb 有效, 並且指定這個 urb 要處理的同步傳送緩衝的編號. 這個值必須被 USB 驅動設置給同步 urb, 在這個 urb 發送給 USB 核心之前.</p></dd>
+<dt><span class="term"><span>int error_count </span></span></dt>
+<dd><p>被 USB 核心設置, 只給同步 urb 在它們完成之後. 它指定報告任何類型錯誤的同步傳送的號碼.</p></dd>
+<dt><span class="term"><span>struct usb_iso_packet_descriptor iso_frame_desc[0] </span></span></dt>
+<dd>
+<p>只對同步 urb 有效. 這個變量是組成這個 urb 的一個 struct usb_iso_packet_descriptor 結構數組. 這個結構允許單個 urb 來一次定義多個同步傳送. 它也用來收集每個單獨傳送的傳送狀態.</p>
+<p>結構 usb_iso_packet_descriptor 由下列成員組成:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>unsigned int offset</span></span></dt>
+<dd><p>報文數據所在的傳送緩衝中的偏移(第一個字節從 0 開始).</p></dd>
+<dt><span class="term"><span>unsigned int length </span></span></dt>
+<dd><p>這個報文的傳送緩衝的長度.</p></dd>
+<dt><span class="term"><span>unsigned int actual_length </span></span></dt>
+<dd><p>接收到給這個同步報文的傳送緩衝的數據長度.</p></dd>
+<dt><span class="term"><span>unsigned int status </span></span></dt>
+<dd><p>這個報文的單獨同步傳送的狀態. 它可採用同樣的返回值如同主 struct urb 結構的狀態變量.</p></dd>
+</dl></div>
+</dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="CreatingandDestroyingUrbs.sect2"></a>13.3.2.&#160;創建和銷毀 urb</h3></div></div></div>
+<p>struct urb 結構在驅動中必須不被靜態創建, 或者在另一個結構中, 因為這可能破壞 USB 核心給 urb 使用的引用計數方法. 它必須使用對 usb_alloc_urb 函數的調用而被創建. 這個函數有這個原型:</p>
+<pre class="programlisting">
+struct urb *usb_alloc_urb(int iso_packets, int mem_flags);
+</pre>
+<p>第一個參數, iso_packet, 是這個 urb 應當包含的同步報文的數目. 如果你不想創建一個同步 urb, 這個變量應當被設置為 0. 第 2 個參數, mem_flags, 是和傳遞給 kmalloc 函數調用來從內核分配內存的相同的標誌類型(見"flags 參數"一節, 第 8 章, 關於這些標誌的細節). 如果這個函數在分配足夠內存給這個 urb 成功, 一個指向 urb 的指針被返回給調用者. 如果返回值是 NULL, 某個錯誤在 USB 核心中發生了, 並且驅動需要正確地清理.</p>
+<p>在創建了一個 urb 之後, 它必須被正確初始化在它可被 USB 核心使用之前. 如何初始化不同類型 urb 見下一節</p>
+<p>為了告訴 USB 核心驅動用完這個 urb, 驅動必須調用 usb_free_urb 函數. 這個函數只有一個參數:</p>
+<pre class="programlisting">
+void usb_free_urb(struct urb *urb);
+</pre>
+<p>參數是一個指向你要釋放的 struct urb 的指針. 在這個函數被調用之後, urb 結構消失, 驅動不能再存取它.</p>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Interrupturbs.sect3"></a>13.3.2.1.&#160;中斷 urb</h4></div></div></div>
+<p>函數 usb_fill_int_urb 是一個幫忙函數, 來正確初始化一個urb 來發送給 USB 設備的一個中斷端點:</p>
+<pre class="programlisting">
+void usb_fill_int_urb(struct urb *urb, struct usb_device *dev,
+ unsigned int pipe, void *transfer_buffer,
+ int buffer_length, usb_complete_t complete,
+ void *context, int interval);
+</pre>
+<p>這個函數包含許多參數:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct urb *urb </span></span></dt>
+<dd><p>指向要被初始化的 urb 的指針.</p></dd>
+<dt><span class="term"><span>struct usb_device *dev </span></span></dt>
+<dd><p>這個 urb 要發送到的 USB 設備.</p></dd>
+<dt><span class="term"><span>unsigned int pipe </span></span></dt>
+<dd><p>這個 urb 要被發送到的 USB 設備的特定端點. 這個值被創建, 使用前面提過的 usb_sndintpipe 或者 usb_rcvintpipe 函數.</p></dd>
+<dt><span class="term"><span>void *transfer_buffer </span></span></dt>
+<dd><p>指向緩衝的指針, 從那裡外出的數據被獲取或者進入數據被接受. 注意這不能是一個靜態的緩衝並且必須使用 kmalloc 調用來創建.</p></dd>
+<dt><span class="term"><span>int buffer_length</span></span></dt>
+<dd><p>緩衝的長度, 被 transfer_buffer 指針指向. </p></dd>
+<dt><span class="term"><span>usb_complete_t complete </span></span></dt>
+<dd><p>指針, 指向當這個 urb 完成時被調用的完成處理者.</p></dd>
+<dt><span class="term"><span>void *context </span></span></dt>
+<dd><p>指向數據塊的指針, 它被添加到這個 urb 結構為以後被完成處理者函數獲取.</p></dd>
+<dt><span class="term"><span>int interval </span></span></dt>
+<dd><p>這個 urb 應當被調度的間隔. 見之前的 struct urb 結構的描述, 來找到這個值的正確單位.</p></dd>
+</dl></div>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Bulkurbs.sect3"></a>13.3.2.2.&#160;塊 urb</h4></div></div></div>
+<p>塊 urb 被初始化非常像中斷 urb. 做這個的函數是 usb_fill_bulk_urb, 它看來如此:</p>
+<pre class="programlisting">
+void usb_fill_bulk_urb(struct urb *urb, struct usb_device *dev,
+ unsigned int pipe, void *transfer_buffer,
+ int buffer_length, usb_complete_t complete,
+ void *context);
+</pre>
+<p>這個函數參數和 usb_fill_int_urb 函數的都相同. 但是, 沒有 interval 參數因為 bulk urb 沒有間隔值. 請注意這個 unsiged int pipe 變量必須被初始化用對 usb_sndbulkpipe 或者 usb_rcvbulkpipe 函數的調用.</p>
+<p>usb_fill_int_urb 函數不設置 urb 中的 transfer_flags 變量, 因此任何對這個成員的修改不得不由這個驅動自己完成.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Controlurbs.sect3"></a>13.3.2.3.&#160;控制 urb</h4></div></div></div>
+<p>控制 urb 被初始化幾乎和 塊 urb 相同的方式, 使用對函數 usb_fill_control_urb 的調用:</p>
+<pre class="programlisting">
+void usb_fill_control_urb(struct urb *urb, struct usb_device *dev,
+ unsigned int pipe, unsigned char *setup_packet,
+ void *transfer_buffer, int buffer_length,
+ usb_complete_t complete, void *context);
+</pre>
+<p>函數參數和 usb_fill_bulk_urb 函數都相同, 除了有個新參數, unsigned char *setup_packet, 它必須指向要發送給端點的 setup 報文數據. 還有, unsigned int pipe 變量必須被初始化, 使用對 usb_sndctrlpipe 或者 usb_rcvictrlpipe 函數的調用.</p>
+<p>usb_fill_control_urb 函數不設置 transfer_flags 變量在 urb 中, 因此任何對這個成員的修改必須游驅動自己完成. 大部分驅動不使用這個函數, 因為使用在"USB 傳送不用 urb"一節中介紹的同步 API 調用更簡單.</p>
+</div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Isochronousurbs.sect3"></a>13.3.2.4.&#160;同步 urb</h4></div></div></div>
+<p>不幸的是, 同步 urb 沒有一個象中斷, 控制, 和塊 urb 的初始化函數. 因此它們必須在驅動中"手動"初始化, 在它們可被提交給 USB 核心之前. 下面是一個如何正確初始化這類 urb 的例子. 它是從 konicawc.c 內核驅動中取得的, 它位於主內核源碼樹的 drivers/usb/media 目錄.</p>
+<pre class="programlisting">
+urb-&gt;dev = dev;
+urb-&gt;context = uvd;
+urb-&gt;pipe = usb_rcvisocpipe(dev, uvd-&gt;video_endp-1);
+urb-&gt;interval = 1;
+urb-&gt;transfer_flags = URB_ISO_ASAP;
+urb-&gt;transfer_buffer = cam-&gt;sts_buf[i];
+urb-&gt;complete = konicawc_isoc_irq;
+urb-&gt;number_of_packets = FRAMES_PER_DESC;
+urb-&gt;transfer_buffer_length = FRAMES_PER_DESC;
+for (j=0; j &lt; FRAMES_PER_DESC; j++) {
+
+ urb-&gt;iso_frame_desc[j].offset = j;
+ urb-&gt;iso_frame_desc[j].length = 1;
+}
+</pre>
+</div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="SubmittingUrbs.sect2"></a>13.3.3.&#160;提交 urb</h3></div></div></div>
+<p>一旦 urb 被正確地創建,並且被 USB 驅動初始化, 它已準備好被提交給 USB 核心來發送出到 USB 設備. 這通過調用函數 usb_submit_urb 實現:</p>
+<pre class="programlisting">
+int usb_submit_urb(struct urb *urb, int mem_flags);
+</pre>
+<p>urb 參數是一個指向 urb 的指針, 它要被發送到設備. mem_flags 參數等同於傳遞給 kmalloc 調用的同樣的參數, 並且用來告訴 USB 核心如何及時分配任何內存緩衝在這個時間.</p>
+<p>在 urb 被成功提交給 USB 核心之後, 應當從不試圖存取 urb 結構的任何成員直到完成函數被調用.</p>
+<p>因為函數 usb_submit_urb 可被在任何時候被調用(包括從一個中斷上下文), mem_flags 變量的指定必須正確. 真正只有 3 個有效值可用, 根據何時 usb_submit_urb 被調用:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>GFP_ATOMIC </span></span></dt>
+<dd>
+<p>這個值應當被使用無論何時下面的是真:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>調用者處於一個 urb 完成處理者, 一個中斷, 一個後半部, 一個 tasklet, 或者一個時鐘回調.</p></li>
+<li><p>調用者持有一個自旋鎖或者讀寫鎖. 注意如果正持有一個旗標, 這個值不必要.</p></li>
+<li><p>current-&gt;state 不是 TASK_RUNNING. 狀態一直是 TASK_RUNNING 除非驅動已自己改變 current 狀態.</p></li>
+</ul></div>
+</dd>
+<dt><span class="term"><span>GFP_NOIO </span></span></dt>
+<dd><p>這個值應當被使用, 如果驅動在塊 I/O 補丁中. 它還應當用在所有的存儲類型的錯誤處理補丁中.</p></dd>
+<dt><span class="term"><span>GFP_KERNEL </span></span></dt>
+<dd><p>這應當用在所有其他的情況中, 不屬於之前提到的類別.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="CompletingUrbsTheCompletionCallbackHandler.sect2"></a>13.3.4.&#160;完成 urb: 完成回調處理者</h3></div></div></div>
+<p>如果對 usb_submit_urb 的調用成功, 傳遞對 urb 的控制給 USB 核心, 這個函數返回 0; 否則, 一個負錯誤值被返回. 如果函數成功, urb 的完成處理者(如同被完成函數指針指定的)被確切地調用一次, 當 urb 被完成. 當這個函數被調用, USB 核心完成這個 urb, 並且對它的控制現在返回給設備驅動.</p>
+<p>只有 3 個方法, 一個urb 可被結束並且使完成函數被調用:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>urb 被成功發送給設備, 並且設備返回正確的確認. 對於一個 OUT urb, 數據被成功發送, 對於一個 IN urb, 請求的數據被成功收到. 如果發生這個, urb 中的狀態變量被設置為 0.</p></li>
+<li><p>一些錯誤連續發生, 當發送或者接受數據從設備中. 被 urb 結構中的 status 變量中的錯誤值所記錄.</p></li>
+<li><p>這個 urb 被從 USB 核心去鏈. 這發生在要麼當驅動告知 USB 核心取消一個已提交的 urb 通過調用 usb_unlink_urb 或者 usb_kill_urb, 要麼當設備從系統中去除, 以及一個 urb 已經被提交給它.</p></li>
+</ul></div>
+<p>一個如何測試在一個 urb 完成調用中不同返回值的例子在本章稍後展示.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="CancelingUrbs.sect2"></a>13.3.5.&#160;取消 urb</h3></div></div></div>
+<p>為停止一個已經提交給 USB 核心的 urb, 函數 usb_kill_urb 或者 usb_unlink_urb 應當被調用:</p>
+<pre class="programlisting">
+int usb_kill_urb(struct urb *urb); 
+int usb_unlink_urb(struct urb *urb);
+</pre>
+The urb parameter for both of these functions is a pointer to the urb that is to be canceled. 
+<p></p>
+<p>當函數是 usb_kill_urb, 這個 urb 的生命循環就停止了. 這個函數常常在設備從系統去除時被使用, 在去連接回調中.</p>
+<p>對一些驅動, 應當用 usb_unlink_urb 函數來告知 USB 核心去停止 urb. 這個函數在返回到調用者之前不等待這個 urb 完全停止. 這對於在中斷處理或者持有一個自旋鎖時停止 urb 時是有用的, 因為等待一個 urb 完全停止需要 USB 核心有能力使調用進程睡眠. 為了正確工作這個函數要求 URB_ASYNC_UNLINK 標誌值被設置在正被要求停止的 urb 中.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch13s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch13.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch13s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">13.2.&#160;USB 和 sysfs&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;13.4.&#160;編寫一個 USB 驅動</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch13s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

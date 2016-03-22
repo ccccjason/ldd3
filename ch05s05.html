@@ -1,0 +1,157 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>5.5.&#160;自旋鎖-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch05.html" title="第&#160;5&#160;章&#160;並發和競爭情況">
+<link rel="prev" href="ch05s04.html" title="5.4.&#160;Completions 機制">
+<link rel="next" href="ch05s06.html" title="5.6.&#160;鎖陷阱">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">5.5.&#160;自旋鎖</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch05s04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;5&#160;章&#160;並發和競爭情況</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch05s06.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="Spinlocks.sect"></a>5.5.&#160;自旋鎖</h2></div></div></div>
+<p>對於互斥, 旗標是一個有用的工具, 但是它們不是內核提供的唯一這樣的工具. 相反, 大部分加鎖是由一種稱為自旋鎖的機制來實現. 不像旗標, 自旋鎖可用在不能睡眠的代碼中, 例如中斷處理. 當正確地使用了, 通常自旋鎖提供了比旗標更高的性能. 然而, 它們確實帶來對它們用法的一套不同的限制.</p>
+<p>自旋鎖概念上簡單. 一個自旋鎖是一個互斥設備, 只能有 2 個值:"上鎖"和"解鎖". 它常常實現為一個整數值中的一個單個位. 想獲取一個特殊鎖的代碼測試相關的位. 如果鎖是可用的, 這個"上鎖"位被置位並且代碼繼續進入臨界區. 相反, 如果這個鎖已經被別人獲得, 代碼進入一個緊湊的循環中反覆檢查這個鎖, 直到它變為可用. 這個循環就是自旋鎖的"自旋"部分.</p>
+<p>當然, 一個自旋鎖的真實實現比上面描述的複雜一點. 這個"測試並置位"操作必須以原子方式進行, 以便只有一個線程能夠獲得鎖, 就算如果有多個進程在任何給定時間自旋. 必須小心以避免在超線程處理器上死鎖 -- 實現多個虛擬 CPU 以共享一個單個處理器核心和緩存的芯片. 因此實際的自旋鎖實現在每個 Linux 支持的體繫上都不同. 核心的概念在所有系統上相同, 然而, 當有對自旋鎖的競爭, 等待的處理器在一個緊湊循環中執行並且不作有用的工作.</p>
+<p>它們的特性上, 自旋鎖是打算用在多處理器系統上, 儘管一個運行一個搶佔式內核的單處理器工作站的行為如同 SMP, 如果只考慮到並發. 如果一個非搶佔的單處理器系統進入一個鎖上的自旋, 它將永遠自旋; 沒有其他的線程再能夠獲得 CPU 來釋放這個鎖. 因此, 自旋鎖在沒有打開搶佔的單處理器系統上的操作被優化為什麼不作, 除了改變 IRQ 屏蔽狀態的那些. 由於搶佔, 甚至如果你從不希望你的代碼在一個 SMP 系統上運行, 你仍然需要實現正確的加鎖.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="IntroductiontotheSpinlockAPI.sect"></a>5.5.1.&#160;自旋鎖 API 簡介</h3></div></div></div>
+<p>自旋鎖原語要求的包含文件是 &lt;linux/spinlock.h&gt;. 一個實際的鎖有類型 spinlock_t. 象任何其他數據結構, 一個 自旋鎖必須初始化. 這個初始化可以在編譯時完成, 如下:</p>
+<pre class="programlisting">
+spinlock_t my_lock = SPIN_LOCK_UNLOCKED; 
+</pre>
+<p>或者在運行時使用:</p>
+<pre class="programlisting">
+void spin_lock_init(spinlock_t *lock); 
+</pre>
+<p>在進入一個臨界區前, 你的代碼必須獲得需要的 lock , 用:</p>
+<pre class="programlisting">
+void spin_lock(spinlock_t *lock); 
+</pre>
+<p>注意所有的自旋鎖等待是, 由於它們的特性, 不可中斷的. 一旦你調用 spin_lock, 你將自旋直到鎖變為可用.</p>
+<p>為釋放一個你已獲得的鎖, 傳遞它給:</p>
+<pre class="programlisting">
+void spin_unlock(spinlock_t *lock); 
+</pre>
+<p>有很多其他的自旋鎖函數, 我們將很快都看到. 但是沒有一個背離上面列出的函數所展示的核心概念. 除了加鎖和釋放, 沒有什麼可對一個鎖所作的. 但是, 有幾個規則關於你必須如何使用自旋鎖. 我們將用一點時間來看這些, 在進入完整的自旋鎖接口之前.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="SpinlocksandAtomicContext.sect"></a>5.5.2.&#160;自旋鎖和原子上下文</h3></div></div></div>
+<p>想像一會兒你的驅動請求一個自旋鎖並且在它的臨界區裡做它的事情. 在中間某處, 你的驅動失去了處理器. 或許它已調用了一個函數( copy_from_user, 假設) 使進程進入睡眠. 或者, 也許, 內核搶佔發威, 一個更高優先級的進程將你的代碼推到一邊. 你的代碼現在持有一個鎖, 在可見的將來的如何時間不會釋放這個鎖. 如果某個別的線程想獲得同一個鎖, 它會, 在最好的情況下, 等待( 在處理器中自旋 )很長時間. 最壞的情況, 系統可能完全死鎖.</p>
+<p>大部分讀者會同意這個場景最好是避免. 因此, 應用到自旋鎖的核心規則是任何代碼必須, 在持有自旋鎖時, 是原子性的. 它不能睡眠; 事實上, 它不能因為任何原因放棄處理器, 除了服務中斷(並且有時即便此時也不行)</p>
+<p>內核搶佔的情況由自旋鎖代碼自己處理. 內核代碼持有一個自旋鎖的任何時間, 搶佔在相關處理器上被禁止. 即便單處理器系統必須以這種方式禁止搶佔以避免競爭情況. 這就是為什麼需要正確的加鎖, 即便你從不期望你的代碼在多處理器機器上運行.</p>
+<p>在持有一個鎖時避免睡眠是更加困難; 很多內核函數可能睡眠, 並且這個行為不是都被明確記錄了. 拷貝數據到或從用戶空間是一個明顯的例子: 請求的用戶空間頁可能需要在拷貝進行前從磁盤上換入, 這個操作顯然需要一個睡眠. 必須分配內存的任何操作都可能睡眠. kmalloc 能夠決定放棄處理器, 並且等待更多內存可用除非它被明確告知不這樣做. 睡眠可能發生在令人驚訝的地方; 編寫會在自旋鎖下執行的代碼需要注意你調用的每個函數.</p>
+<p>這有另一個場景: 你的驅動在執行並且已經獲取了一個鎖來控制對它的設備的存取. 當持有這個鎖時, 設備發出一個中斷, 使得你的中斷處理運行. 中斷處理, 在存取設備之前, 必須獲得鎖. 在一個中斷處理中獲取一個自旋鎖是一個要做的合法的事情; 這是自旋鎖操作不能睡眠的其中一個理由. 但是如果中斷處理和起初獲得鎖的代碼在同一個處理器上會發生什麼? 當中斷處理在自旋, 非中斷代碼不能運行來釋放鎖. 這個處理器將永遠自旋.</p>
+<p>避免這個陷阱需要在持有自旋鎖時禁止中斷( 只在本地 CPU ). 有各種自旋鎖函數會為你禁止中斷( 我們將在下一節見到它們 ). 但是, 一個完整的中斷討論必須等到第 10 章了.</p>
+<p>關於自旋鎖使用的最後一個重要規則是自旋鎖必須一直是盡可能短時間的持有. 你持有一個鎖越長, 另一個進程可能不得不自旋等待你釋放它的時間越長, 它不得不完全自旋的機會越大. 長時間持有鎖也阻止了當前處理器調度, 意味著高優先級進程 -- 真正應當能獲得 CPU 的 -- 可能不得不等待. 內核開發者盡了很大努力來減少內核反應時間( 一個進程可能不得不等待調度的時間 )在 2.5 開發系列. 一個寫的很差的驅動會摧毀所有的進程, 僅僅通過持有一個鎖太長時間. 為避免產生這類問題, 重視使你的鎖持有時間短.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheSpinlockFunctions.sect"></a>5.5.3.&#160;自旋鎖函數</h3></div></div></div>
+<p>我們已經看到 2 個函數, spin_lock 和 spin_unlock, 可以操作自旋鎖. 有其他幾個函數, 然而, 有類似的名子和用途. 我們現在會展示全套. 這個討論將帶我們到一個我們無法在幾章內適當涵蓋的地方; 自旋鎖 API 的完整理解需要對中斷處理和相關概念的理解.</p>
+<p>實際上有 4 個函數可以加鎖一個自旋鎖:</p>
+<pre class="programlisting">
+void spin_lock(spinlock_t *lock);
+void spin_lock_irqsave(spinlock_t *lock, unsigned long flags);
+void spin_lock_irq(spinlock_t *lock);
+void spin_lock_bh(spinlock_t *lock)
+</pre>
+<p>我們已經看到自旋鎖如何工作. spin_loc_irqsave 禁止中斷(只在本地處理器)在獲得自旋鎖之前; 之前的中斷狀態保存在 flags 裡. 如果你絕對確定在你的處理器上沒有禁止中斷的(或者, 換句話說, 你確信你應當在你釋放你的自旋鎖時打開中斷), 你可以使用 spin_lock_irq 代替, 並且不必保持跟蹤 flags. 最後, spin_lock_bh 在獲取鎖之前禁止軟件中斷, 但是硬件中斷留作打開的.</p>
+<p>如果你有一個可能被在(硬件或軟件)中斷上下文運行的代碼獲得的自旋鎖, 你必須使用一種 spin_lock 形式來禁止中斷. 其他做法可能死鎖系統, 遲早. 如果你不在硬件中斷處理裡存取你的鎖, 但是你通過軟件中斷(例如, 在一個 tasklet 運行的代碼, 在第 7 章涉及的主題 ), 你可以使用 spin_lock_bh 來安全地避免死鎖, 而仍然允許硬件中斷被服務.</p>
+<p>也有 4 個方法來釋放一個自旋鎖; 你用的那個必須對應你用來獲取鎖的函數.</p>
+<pre class="programlisting">
+void spin_unlock(spinlock_t *lock);
+void spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags);
+void spin_unlock_irq(spinlock_t *lock);
+void spin_unlock_bh(spinlock_t *lock);
+</pre>
+<p>每個 spin_unlock 變體恢復由對應的 spin_lock 函數鎖做的工作. 傳遞給 spin_unlock_irqrestore 的 flags 參數必須是傳遞給 spin_lock_irqsave 的同一個變量. 你必須也調用 spin_lock_irqsave 和 spin_unlock_irqrestore 在同一個函數里. 否則, 你的代碼可能破壞某些體系.</p>
+<p>還有一套非阻塞的自旋鎖操作:</p>
+<pre class="programlisting">
+int spin_trylock(spinlock_t *lock);
+int spin_trylock_bh(spinlock_t *lock);
+</pre>
+<p>這些函數成功時返回非零( 獲得了鎖 ), 否則 0. 沒有"try"版本來禁止中斷.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ReaderWriterSpinlocks.sect"></a>5.5.4.&#160;讀者/寫者自旋鎖</h3></div></div></div>
+<p>內核提供了一個自旋鎖的讀者/寫者形式, 直接模仿我們在本章前面見到的讀者/寫者旗標. 這些鎖允許任何數目的讀者同時進入臨界區, 但是寫者必須是排他的存取. 讀者寫者鎖有一個類型 rwlock_t, 在 &lt;linux/spinlokc.h&gt; 中定義. 它們可以以 2 種方式被聲明和被初始化:</p>
+<pre class="programlisting">
+rwlock_t my_rwlock = RW_LOCK_UNLOCKED; /* Static way */ 
+rwlock_t my_rwlock;
+rwlock_init(&amp;my_rwlock); /* Dynamic way */
+</pre>
+<p>可用函數的列表現在應當看來相當類似. 對於讀者, 下列函數是可用的:</p>
+<pre class="programlisting">
+void read_lock(rwlock_t *lock);
+void read_lock_irqsave(rwlock_t *lock, unsigned long flags);
+void read_lock_irq(rwlock_t *lock);
+void read_lock_bh(rwlock_t *lock);
+
+void read_unlock(rwlock_t *lock);
+void read_unlock_irqrestore(rwlock_t *lock, unsigned long flags);
+void read_unlock_irq(rwlock_t *lock);
+void read_unlock_bh(rwlock_t *lock);
+</pre>
+<p>有趣地, 沒有 read_trylock. 對於寫存取的函數是類似的:</p>
+<pre class="programlisting">
+void write_lock(rwlock_t *lock);
+void write_lock_irqsave(rwlock_t *lock, unsigned long flags);
+void write_lock_irq(rwlock_t *lock);
+void write_lock_bh(rwlock_t *lock);
+int write_trylock(rwlock_t *lock);
+
+void write_unlock(rwlock_t *lock);
+void write_unlock_irqrestore(rwlock_t *lock, unsigned long flags);
+void write_unlock_irq(rwlock_t *lock);
+void write_unlock_bh(rwlock_t *lock);
+</pre>
+<p>讀者/寫者鎖能夠餓壞讀者, 就像 rwsem 一樣. 這個行為很少是一個問題; 然而, 如果有足夠的鎖競爭來引起飢餓, 性能無論如何都不行.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch05s04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch05.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch05s06.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">5.4.&#160;Completions 機制&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;5.6.&#160;鎖陷阱</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch05s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

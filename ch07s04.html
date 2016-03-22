@@ -1,0 +1,170 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch07s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>7.4.&#160;內核定時器-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch07.html" title="第&#160;7&#160;章&#160;時間, 延時, 和延後工作">
+<link rel="prev" href="ch07s03.html" title="7.3.&#160;延後執行">
+<link rel="next" href="ch07s05.html" title="7.5.&#160;Tasklets 機制">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">7.4.&#160;內核定時器</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch07s03.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;7&#160;章&#160;時間, 延時, 和延後工作</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch07s05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="KernelTimers.sect"></a>7.4.&#160;內核定時器</h2></div></div></div>
+<p>無論何時你需要調度一個動作以後發生, 而不阻塞當前進程直到到時, 內核定時器是給你的工具. 這些定時器用來調度一個函數在將來一個特定的時間執行, 基於時鐘嘀噠, 並且可用作各類任務; 例如, 當硬件無法發出中斷時, 查詢一個設備通過在定期的間隔內檢查它的狀態. 其他的內核定時器的典型應用是關閉軟驅馬達或者結束另一個長期終止的操作. 在這種情況下, 延後來自 close 的返回將強加一個不必要(並且嚇人的)開銷在應用程序上. 最後, 內核自身使用定時器在幾個情況下, 包括實現 schedule_timeout.</p>
+<p>一個內核定時器是一個數據結構, 它指導內核執行一個用戶定義的函數使用一個用戶定義的參數在一個用戶定義的時間. 這個實現位於 &lt;linux/timer.h&gt; 和 kernel/timer.c 並且在"內核定時器"一節中詳細介紹.</p>
+<p>被調度運行的函數幾乎確定不會在註冊它們的進程在運行時運行. 它們是, 相反, 異步運行. 直到現在, 我們在我們的例子驅動中已經做的任何事情已經在執行系統調用的進程上下文中運行. 當一個定時器運行時, 但是, 這個調度進程可能睡眠, 可能在不同的一個處理器上運行, 或者很可能已經一起退出.</p>
+<p>這個異步執行類似當發生一個硬件中斷時所發生的( 這在第 10 章詳細討論 ). 實際上, 內核定時器被作為一個"軟件中斷"的結果而實現. 當在這種原子上下文運行時, 你的代碼易受到多個限制. 定時器函數必須是原子的以所有的我們在第 1 章"自旋鎖和原子上下文"一節中曾討論過的方式, 但是有幾個附加的問題由於缺少一個進程上下文而引起的. 我們將介紹這些限制; 在後續章節的幾個地方將再次看到它們. 循環被調用因為原子上下文的規則必須認真遵守, 否則系統會發現自己陷入大麻煩中.</p>
+<p>為能夠被執行, 多個動作需要進程上下文. 當你在進程上下文之外(即, 在中斷上下文), 你必須遵守下列規則:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>沒有允許存取用戶空間. 因為沒有進程上下文, 沒有和任何特定進程相關聯的到用戶空間的途徑.</p></li>
+<li><p>這個 current 指針在原子態沒有意義, 並且不能使用因為相關的代碼沒有和已被中斷的進程的聯繫.</p></li>
+<li><p>不能進行睡眠或者調度. 原子代碼不能調用 schedule 或者某種 wait_event, 也不能調用任何其他可能睡眠的函數. 例如, 調用 kmalloc(..., GFP_KERNEL) 是違犯規則的. 旗標也必須不能使用因為它們可能睡眠.</p></li>
+</ul></div>
+<p>內核代碼能夠告知是否它在中斷上下文中運行, 通過調用函數 in_interrupt(), 它不要參數並且如果處理器當前在中斷上下文運行就返回非零, 要麼硬件中斷要麼軟件中斷.</p>
+<p>一個和 in_interrupt() 相關的函數是 in_atomic(). 它的返回值是非零無論何時調度被禁止; 這包含硬件和軟件中斷上下文以及任何持有自旋鎖的時候. 在後一種情況, current 可能是有效的, 但是存取用戶空間被禁止, 因為它能導致調度發生. 無論何時你使用 in_interrupt(), 你應當真正考慮是否 in_atomic 是你實際想要的. 2 個函數都在 &lt;asm/hardirq.h&gt; 中聲明.</p>
+<p>內核定時器的另一個重要特性是一個任務可以註冊它本身在後面時間重新運行. 這是可能的, 因為每個 timer_list 結構在運行前從激活的定時器鏈表中去連接, 並且因此能夠馬上在其他地方被重新連接. 儘管反覆重新調度相同的任務可能表現為一個無意義的操作, 有時它是有用的. 例如, 它可用作實現對設備的查詢.</p>
+<p>也值得瞭解在一個 SMP 系統, 定時器函數被註冊時相同的 CPU 來執行, 為在任何可能的時候獲得更好的緩存局部特性. 因此, 一個重新註冊它自己的定時器一直運行在同一個 CPU.</p>
+<p>不應當被忘記的定時器的一個重要特性是, 它們是一個潛在的競爭條件的源, 即便在一個單處理器系統. 這是它們與其他代碼異步運行的一個直接結果. 因此, 任何被定時器函數存取的數據結構應當保護避免並發存取, 要麼通過原子類型( 在第 1 章的"原子變量"一節) 要麼使用自旋鎖( 在第 9 章討論 ).</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheTimerAPI.sect"></a>7.4.1.&#160;定時器 API</h3></div></div></div>
+<p>內核提供給驅動許多函數來聲明, 註冊, 以及去除內核定時器. 下列的引用展示了基本的代碼塊:</p>
+<pre class="programlisting">
+#include &lt;linux/timer.h&gt;
+struct timer_list
+{
+        /* ... */
+        unsigned long expires;
+        void (*function)(unsigned long);
+        unsigned long data;
+};
+void init_timer(struct timer_list *timer);
+struct timer_list TIMER_INITIALIZER(_function, _expires, _data);
+
+void add_timer(struct timer_list * timer);
+int del_timer(struct timer_list * timer);
+</pre>
+<p>這個數據結構包含比曾展示過的更多的字段, 但是這 3 個是打算從定時器代碼自身以外被存取的. 這個 expires 字段表示定時器期望運行的 jiffies 值; 在那個時間, 這個 function 函數被調用使用 data 作為一個參數. 如果你需要在參數中傳遞多項, 你可以捆綁它們作為一個單個數據結構並且傳遞一個轉換為 unsiged long 的指針, 在所有支持的體繫上的一個安全做法並且在內存管理中相當普遍( 如同 15 章中討論的 ). expires 值不是一個 jiffies_64 項因為定時器不被期望在將來很久到時, 並且 64-位操作在 32-位平台上慢.</p>
+<p>這個結構必須在使用前初始化. 這個步驟保證所有的成員被正確建立, 包括那些對調用者不透明的. 初始化可以通過調用 init_timer 或者 安排 TIMER_INITIALIZER 給一個靜態結構, 根據你的需要. 在初始化後, 你可以改變 3 個公共成員在調用 add_timer 前. 為在到時前禁止一個已註冊的定時器, 調用 del_timer.</p>
+<p>jit 模塊包括一個例子文件, /proc/jitimer ( 為 "just in timer"), 它返回一個頭文件行以及 6 個數據行. 這些數據行表示當前代碼運行的環境; 第一個由讀文件操作產生並且其他的由定時器. 下列的輸出在編譯內核時被記錄:</p>
+<pre class="screen">
+phon% cat /proc/jitimer
+ time delta  inirq  pid  cpu command 
+ 33565837  0  0  1269  0  cat 
+ 33565847  10  1  1271  0  sh 
+ 33565857  10  1  1273  0  cpp0 
+ 33565867  10  1  1273  0  cpp0 
+ 33565877  10  1  1274  0  cc1 
+ 33565887  10  1  1274  0  cc1  
+</pre>
+<p>在這個輸出, time 字段是代碼運行時的 jiffies 值, delta 是自前一行的 jiffies 改變值, inirq 是由 in_interrupt 返回的布爾值, pid 和 command 指的是當前進程, 以及 cpu 是在使用的 CPU 的數目( 在單處理器系統上一直為 0).</p>
+<p>如果你讀 /proc/jitimer 當系統無負載時, 你會發現定時器的上下文是進程 0, 空閒任務, 它被稱為"對換進程"只要由於歷史原因.</p>
+<p>用來產生 /proc/jitimer 數據的定時器是缺省每 10 jiffies 運行一次, 但是你可以在加載模塊時改變這個值通過設置 tdelay ( timer delay ) 參數.</p>
+<p>下面的代碼引用展示了 jit 關於 jitimer 定時器的部分. 當一個進程試圖讀取我們的文件, 我們建立這個定時器如下:</p>
+<pre class="programlisting">
+unsigned long j = jiffies;
+/* fill the data for our timer function */
+data-&gt;prevjiffies = j;
+
+data-&gt;buf = buf2;
+data-&gt;loops = JIT_ASYNC_LOOPS;
+
+/* register the timer */
+data-&gt;timer.data = (unsigned long)data;
+data-&gt;timer.function = jit_timer_fn;
+data-&gt;timer.expires = j + tdelay; /* parameter */
+add_timer(&amp;data-&gt;timer);
+
+/* wait for the buffer to fill */
+wait_event_interruptible(data-&gt;wait, !data-&gt;loops);
+
+The actual timer function looks like this:
+void jit_timer_fn(unsigned long arg)
+{
+        struct jit_data *data = (struct jit_data *)arg;
+        unsigned long j = jiffies;
+        data-&gt;buf += sprintf(data-&gt;buf, "%9li %3li %i %6i %i %s\n",
+                             j, j - data-&gt;prevjiffies, in_interrupt() ? 1 : 0,
+                             current-&gt;pid, smp_processor_id(), current-&gt;comm);
+        if (--data-&gt;loops) {
+                data-&gt;timer.expires += tdelay;
+                data-&gt;prevjiffies = j;
+                add_timer(&amp;data-&gt;timer);
+
+        } else {
+                wake_up_interruptible(&amp;data-&gt;wait);
+        }
+}
+</pre>
+<p>定時器 API 包括幾個比上面介紹的那些更多的功能. 下面的集合是完整的核提供的函數列表:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int mod_timer(struct timer_list *timer, unsigned long expires);</span></span></dt>
+<dd><p>更新一個定時器的超時時間, 使用一個超時定時器的一個普通的任務(再一次, 關馬達軟驅定時器是一個典型例子). mod_timer 也可被調用於非激活定時器, 那裡你正常地使用 add_timer.</p></dd>
+<dt><span class="term"><span>int del_timer_sync(struct timer_list *timer);</span></span></dt>
+<dd><p>如同 del_timer 一樣工作, 但是還保證當它返回時, 定時器函數不在任何 CPU 上運行. del_timer_sync 用來避免競爭情況在 SMP 系統上, 並且在 UP 內核中和 del_timer 相同. 這個函數應當在大部分情況下比 del_timer 更首先使用. 這個函數可能睡眠如果它被從非原子上下文調用, 但是在其他情況下會忙等待. 要十分小心調用 del_timer_sync 當持有鎖時; 如果這個定時器函數試圖獲得同一個鎖, 系統會死鎖. 如果定時器函數重新註冊自己, 調用者必須首先確保這個重新註冊不會發生; 這常常同設置一個" 關閉 "標誌來實現, 這個標誌被定時器函數檢查.</p></dd>
+<dt><span class="term"><span>int timer_pending(const struct timer_list * timer);</span></span></dt>
+<dd><p>返回真或假來指示是否定時器當前被調度來運行, 通過調用結構的其中一個不透明的成員.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheImplementaionofKernelTimers.sect"></a>7.4.2.&#160;內核定時器的實現</h3></div></div></div>
+<p>為了使用它們, 儘管你不會需要知道內核定時器如何實現, 這個實現是有趣的, 並且值得看一下它們的內部.</p>
+<p>定時器的實現被設計來符合下列要求和假設:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>定時器管理必須盡可能簡化.</p></li>
+<li><p>設計應當隨著激活的定時器數目上升而很好地適應.</p></li>
+<li><p>大部分定時器在幾秒或最多幾分鐘內到時, 而帶有長延時的定時器是相當少見.</p></li>
+<li><p>一個定時器應當在註冊它的同一個 CPU 上運行.</p></li>
+</ul></div>
+<p>由內核開發者想出的解決方法是基於一個每-CPU 數據結構. 這個 timer_list 結構包括一個指針指向這個的數據結構在它的 base 成員. 如果 base 是 NULL, 這個定時器沒有被調用運行; 否則, 這個指針告知哪個數據結構(並且, 因此, 哪個 CPU )運行它. 每-CPU 數據項在第 8 章的"每-CPU變量"一節中描述. </p>
+<p>無論何時內核代碼註冊一個定時器( 通過 add_timer 或者 mod_timer), 操作最終由 internal_add_timer 進行( 在kernel/timer.c), 它依次添加新定時器到一個雙向定時器鏈表在一個關聯到當前 CPU 的"層疊表" 中.</p>
+<p>這個層疊表象這樣工作: 如果定時器在下一個 0 到 255 jiffies 內到時, 它被添加到專供短時定時器 256 列表中的一個上, 使用 expires 成員的最低有效位. 如果它在將來更久時間到時( 但是在 16,384 jiffies 之前 ), 它被添加到基於 expires 成員的 9 - 14 位的 64 個列表中一個. 對於更長的定時器, 同樣的技巧用在 15 - 20 位, 21 - 26 位, 和 27 - 31 位. 帶有一個指向將來還長時間的 expires 成員的定時器( 一些只可能發生在 64-位 平台上的事情 ) 被使用一個延時值 0xffffffff 進行哈希處理, 並且帶有在過去到時的定時器被調度來在下一個時鐘嘀噠運行. (一個已經到時的定時器模擬有時在高負載情況下被註冊, 特別的是如果你運行一個可搶佔內核).</p>
+<p>當觸發 __run_timers, 它為當前定時器嘀噠執行所有掛起的定時器. 如果 jiffies 當前是 256 的倍數, 這個函數還重新哈希處理一個下一級別的定時器列表到 256 短期列表, 可能地層疊一個或多個別的級別, 根據jiffies 的位表示.</p>
+<p>這個方法, 雖然第一眼看去相當複雜, 在幾個和大量定時器的時候都工作得很好. 用來管理每個激活定時器的時間獨立於已經註冊的定時器數目並且限制在幾個對於它的 expires 成員的二進製表示的邏輯操作上. 關聯到這個實現的唯一的開銷是給 512 鏈表頭的內存( 256 短期鏈表和 4 組 64 更長時間的列表) -- 即 4 KB 的容量.</p>
+<p>函數 __run_timers, 如同 /proc/jitimer 所示, 在原子上下文運行. 除了我們已經描述過的限制, 這個帶來一個有趣的特性: 定時器剛好在合適的時間到時, 甚至你沒有運行一個可搶佔內核, 並且 CPU 在內核空間忙. 你可以見到發生了什麼當你在後台讀 /proc/jitbusy 時以及在前台 /proc/jitimer. 儘管系統看來牢固地被鎖住被這個忙等待系統調用, 內核定時器照樣工作地不錯.</p>
+<p></p>但是, 記住, 一個內核定時器還遠未完善, 因為它受累於 jitter 和 其他由硬件中斷引起怪物, 還有其他定時器和其他異步任務. 雖然一個關聯到簡單數字 I/O 的定時器對於一個如同運行一個步進馬達或者其他業餘電子設備等簡單任務是足夠的, 它常常是不合適在工業環境中的生產系統. 對於這樣的任務, 你將最可能需要依賴一個實時內核擴展.</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch07s03.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch07.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch07s05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">7.3.&#160;延後執行&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;7.5.&#160;Tasklets 機制</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch07s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

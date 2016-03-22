@@ -1,0 +1,96 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch07s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>7.2.&#160;獲知當前時間-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch07.html" title="第&#160;7&#160;章&#160;時間, 延時, 和延後工作">
+<link rel="prev" href="ch07.html" title="第&#160;7&#160;章&#160;時間, 延時, 和延後工作">
+<link rel="next" href="ch07s03.html" title="7.3.&#160;延後執行">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">7.2.&#160;獲知當前時間</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch07.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;7&#160;章&#160;時間, 延時, 和延後工作</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch07s03.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="KnowingtheCurrentTime.sect"></a>7.2.&#160;獲知當前時間</h2></div></div></div>
+<p>內核代碼能一直獲取一個當前時間的表示, 通過查看 jifies 的值. 常常地, 這個值只代表從最後一次啟動以來的時間, 這個事實對驅動來說無關, 因為它的生命週期受限於系統的 uptime. 如所示, 驅動可以使用 jiffies 的當前值來計算事件之間的時間間隔(例如, 在輸入驅動中從單擊中區分雙擊或者計算超時). 簡單地講, 查看 jiffies 幾乎一直是足夠的, 當你需要測量時間間隔. 如果你需要對短時間流失的非常精確的測量, 處理器特定的寄存器來幫忙了( 儘管它們帶來嚴重的移植性問題 ).</p>
+<p>它是非常不可能一個驅動會需要知道牆上時鐘時間, 以月, 天, 和小時來表達的; 這個信息常常只對用戶程序需要, 例如 cron 和 syslogd. 處理真實世界的時間常常最好留給用戶空間, 那裡的 C 庫提供了更好的支持; 另外, 這樣的代碼常常太策略相關以至於不屬於內核. 有一個內核函數轉變一個牆上時鐘時間到一個 jiffies 值, 但是:</p>
+<pre class="programlisting">
+#include &lt;linux/time.h&gt; 
+unsigned long mktime (unsigned int year, unsigned int mon,
+ unsigned int day, unsigned int hour,
+ unsigned int min, unsigned int sec); 
+</pre>
+<p>重複:直接在驅動中處理牆上時鐘時間往往是一個在實現策略的信號, 並且應當因此而被置疑.</p>
+<p>雖然你不會一定處理人可讀的時間表示, 有時你需要甚至在內核空間中處理絕對時間. 為此, &lt;linux/time.h&gt; 輸出了 do_gettimeofday 函數. 當被調用時, 它填充一個 struct timeval 指針 --  和在 gettimeofday 系統調用中使用的相同 -- 使用類似的秒和毫秒值. do_gettimeofday 的原型是:</p>
+<pre class="programlisting">
+ #include &lt;linux/time.h&gt;
+ void do_gettimeofday(struct timeval *tv);
+</pre>
+<p>這段源代碼聲明 do_gettimeofday 有" 接近毫秒的精度", 因為它詢問時間硬件當前 jiffy 多大比例已經流失. 這個精度每個體系都不同, 但是, 因為它依賴實際使用中的硬件機制. 例如, 一些 m68knommu 處理器, Sun3 系統, 和其他 m68k 系統不能提供大於 jiffy 的精度. Pentium 系統, 另一方面, 提供了非常快速和精確的小於嘀噠的測量, 通過讀取本章前面描述的時戳計數器.</p>
+<p>當前時間也可用( 儘管使用 jiffy 的粒度 )來自 xtime 變量, 一個 struct timespec 值. 不鼓勵這個變量的直接使用, 因為難以原子地同時存取這 2 個字段. 因此, 內核提供了實用函數 current_kernel_time:</p>
+<pre class="programlisting">
+#include &lt;linux/time.h&gt;
+struct timespec current_kernel_time(void);
+</pre>
+<p>用來以各種方式獲取當前時間的代碼, 可以從由 O' Reilly 提供的 FTP 網站上的源碼文件的 jit ("just in time") 模塊獲得. jit 創建了一個文件稱為 /proc/currentime, 當讀取時, 它以 ASCII 碼返回下列項:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>當前的 jiffies 和 jiffies_64 值, 以 16 進制數的形式.</p></li>
+<li><p>如同 do_gettimeofday 返回的相同的當前時間.</p></li>
+<li><p>由 current_kernel_time 返回的 timespec.</p></li>
+</ul></div>
+<p>我們選擇使用一個動態的 /proc 文件來保持樣板代碼為最小 -- 它不值得創建一整個設備只是返回一點兒文本信息.</p>
+<p>這個文件連續返回文本行只要這個模塊加載著; 每次 read 系統調用收集和返回一套數據, 為更好閱讀而組織為 2 行. 無論何時你在少於一個時鐘嘀噠內讀多個數據集, 你將看到 do_gettimeofday 之間的差別, 它詢問硬件, 並且其他值僅在時鐘嘀噠時被更新.</p>
+<pre class="screen">
+phon% head -8 /proc/currentime
+0x00bdbc1f 0x0000000100bdbc1f 1062370899.630126
+ 1062370899.629161488
+0x00bdbc1f 0x0000000100bdbc1f 1062370899.630150
+ 1062370899.629161488
+0x00bdbc20 0x0000000100bdbc20 1062370899.630208
+ 1062370899.630161336
+0x00bdbc20 0x0000000100bdbc20 1062370899.630233
+ 1062370899.630161336
+</pre>
+<p>在上面的屏幕快照中, 由 2 件有趣的事情要注意. 首先, 這個 current_kernel_time 值, 儘管以納秒來表示, 只有時鐘嘀噠的粒度; do_gettimeofday 持續報告一個稍晚的時間但是不晚於下一個時鐘嘀噠. 第二, 這個 64-位的 jiffies 計數器有 高 32-位字集合的最低有效位. 這是由於 INITIAL_JIFFIES 的缺省值, 在啟動時間用來初始化計數器, 在啟動時間後幾分鐘內強加一個低字溢出來幫助探測與這個剛好溢出相關的問題. 這個在計數器中的初始化偏好沒有效果, 因為 jiffies 與牆上時鐘時間無關. 在 /proc/uptime 中, 這裡內核從計數器中抽取 uptime, 初始化偏好在轉換前被去除.</p>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch07.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch07.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch07s03.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">第&#160;7&#160;章&#160;時間, 延時, 和延後工作&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;7.3.&#160;延後執行</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch07s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

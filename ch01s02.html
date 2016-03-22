@@ -1,0 +1,79 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch01s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:30 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>1.2.&#160;劃分內核-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch01.html" title="第&#160;1&#160;章&#160;第一章 設備驅動簡介">
+<link rel="prev" href="ch01.html" title="第&#160;1&#160;章&#160;第一章 設備驅動簡介">
+<link rel="next" href="ch01s03.html" title="1.3.&#160;設備和模塊的分類">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">1.2.&#160;劃分內核</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch01.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;1&#160;章&#160;第一章 設備驅動簡介</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch01s03.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="SplittingtheKernel.sect1"></a>1.2.&#160;劃分內核</h2></div></div></div>
+<p>在 Unix 系統中, 幾個並發的進程專注於不同的任務. 每個進程請求系統資源, 象計算能力, 內存, 網絡連接, 或者一些別的資源. 內核是個大塊的可執行文件, 負責處理所有這樣的請求. 儘管不同內核任務間的區別常常不是能清楚劃分, 內核的角色可以劃分(如同圖<a href="ch01s02.html#ldd3-1-1.fig" title="圖&#160;1.1.&#160;內核的劃分">內核的劃分</a>)成下列幾個部分:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>進程管理</span></span></dt>
+<dd><p>內核負責創建和銷毀進程, 並處理它們與外部世界的聯繫(輸入和輸出). 不同進程間通訊(通過信號, 管道, 或者進程間通訊原語)對整個系統功能來說是基本的, 也由內核處理. 另外, 調度器, 控制進程如何共享 CPU, 是進程管理的一部分. 更通常地, 內核的進程管理活動實現了多個進程在一個單個或者幾個 CPU 之上的抽像.</p></dd>
+<dt><span class="term"><span>內存管理 </span></span></dt>
+<dd><p>計算機的內存是主要的資源, 處理它所用的策略對系統性能是至關重要的. 內核為所有進程的每一個都在有限的可用資源上建立了一個虛擬地址空間. 內核的不同部分與內存管理子系統通過一套函數調用交互, 從簡單的 malloc/free 對到更多更複雜的功能.</p></dd>
+<dt><span class="term"><span>文件系統 </span></span></dt>
+<dd><p>Unix 在很大程度上基於文件系統的概念; 幾乎 Unix 中的任何東西都可看作一個文件. 內核在非結構化的硬件之上建立了一個結構化的文件系統, 結果是文件的抽像非常多地在整個系統中應用. 另外, Linux 支持多個文件系統類型, 就是說, 物理介質上不同的數據組織方式. 例如, 磁盤可被格式化成標準 Linux 的 ext3 文件系統, 普遍使用的 FAT 文件系統, 或者其他幾個文件系統.</p></dd>
+<dt><span class="term"><span>設備控制 </span></span></dt>
+<dd><p>幾乎每個系統操作最終都映射到一個物理設備上. 除了處理器, 內存和非常少的別的實體之外, 全部中的任何設備控制操作都由特定於要尋址的設備相關的代碼來進行. 這些代碼稱為設備驅動. 內核中必須嵌入系統中出現的每個外設的驅動, 從硬盤驅動到鍵盤和磁帶驅動器. 內核功能的這個方面是本書中的我們主要感興趣的地方.</p></dd>
+<dt><span class="term"><span>網絡 </span></span></dt>
+<dd><p>網絡必須由操作系統來管理, 因為大部分網絡操作不是特定於某一個進程: 進入系統的報文是異步事件. 報文在某一個進程接手之前必須被收集, 識別, 分發. 系統負責在程序和網絡接口之間遞送數據報文, 它必須根據程序的網絡活動來控制程序的執行. 另外, 所有的路由和地址解析問題都在內核中實現.</p></dd>
+</dl></div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="LoadableModules.sect2"></a>1.2.1.&#160;可加載模塊</h3></div></div></div>
+<p>Linux 的眾多優良特性之一就是可以在運行時擴展由內核提供的特性的能力. 這意味著你可以在系統正在運行著的時候增加內核的功能( 也可以去除 ).</p>
+<p>每塊可以在運行時添加到內核的代碼, 被稱為一個模塊. Linux 內核提供了對許多模塊類型的支持, 包括但不限於, 設備驅動. 每個模塊由目標代碼組成( 沒有連接成一個完整可執行文件 ), 可以動態連接到運行中的內核中, 通過 insmod 程序, 以及通過 rmmod 程序去連接.</p>
+<p>圖 <a href="ch01s02.html#ldd3-1-1.fig" title="圖&#160;1.1.&#160;內核的劃分">內核的劃分</a> 表示了負責特定任務的不同類別的模塊, 一個模塊是根據它提供的功能來說它屬於一個特別類別的. 圖 <a href="ch01s02.html#ldd3-1-1.fig" title="圖&#160;1.1.&#160;內核的劃分">內核的劃分</a> 中模塊的安排涵蓋了最重要的類別, 但是遠未完整, 因為在 Linux 中越來越多的功能被模塊化了.</p>
+<div class="figure">
+<a name="ldd3-1-1.fig"></a><p class="title"><b>圖&#160;1.1.&#160;內核的劃分</b></p>
+<div><img src="images/snagitldd3/ldd3-1-1.png" alt="內核的劃分"></div>
+</div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch01.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch01.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch01s03.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">第&#160;1&#160;章&#160;第一章 設備驅動簡介&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;1.3.&#160;設備和模塊的分類</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch01s02.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:31 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

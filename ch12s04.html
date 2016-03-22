@@ -1,0 +1,76 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch12s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>12.4.&#160;其他的 PC 總線-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch12.html" title="第&#160;12&#160;章&#160;PCI 驅動">
+<link rel="prev" href="ch12s03.html" title="12.3.&#160;PC/104 和 PC/104+">
+<link rel="next" href="ch12s05.html" title="12.5.&#160;SBus">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">12.4.&#160;其他的 PC 總線</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch12s03.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;12&#160;章&#160;PCI 驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch12s05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="OtherPCBuses.sect1"></a>12.4.&#160;其他的 PC 總線</h2></div></div></div>
+<p>PCI 和 ISA 是在 PC 世界中最常用的外設接口, 但是它們不是唯一的. 這裡是對在 PC 市場上的其他總線的特性的總結.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="MCA.sect2"></a>12.4.1.&#160;MCA 總線</h3></div></div></div>
+<p>微通道體系(MCA)是一個 IBM 標準, 用在 PS/2 計算機和一些筆記本電腦. 在硬件級別, 微通道比 ISA 有更多特性. 它支持多主 DMA, 32-位地址和數據線, 共享中斷線, 和地理式尋址來存取每塊板的配置寄存器. 這樣的寄存器被稱為可編程選項選擇(POS), 但是它們沒有 PCI 寄存器的全部特點. Linux 對 微通道的支持包括輸出給模塊的函數.</p>
+<p>一個設備驅動可讀整數值 MCA_bus 來看是否它在一個微通道計算機上運行. 如果這個符號是一個預處理宏, 宏 MCA_bus__is_a_ 宏也被定義. 如果 MCA_bus__is_a_ 宏被取消定義, 那麼 MCA_bus 是一個被輸出給模塊化代碼的整數值. MCA_BUS 和 MCA_bus__is_a_macro 也定義在 &lt;asm/processor.h&gt;. </p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="EISA.sect2"></a>12.4.2.&#160;EISA 總線</h3></div></div></div>
+<p>擴展 ISA (EISA) 總線是一個對 ISA 的 32-位 擴展, 帶有一個兼容的接口連接器; ISA 設備板可被插入一個 EISA 連接器. 增加的線在 ISA 接觸之下被連接.</p>
+<p>如同 PCI 和 MCA, EISA 總線被設計給無跳線的設備, 並且它有和 MCA 相同的特性: 32-位地址和數據線, 多主 DMA, 和共享中斷線.  EISA 設備被軟件配置, 但是它們不需要任何特殊的操作系統支持. EISA 驅動已經存在於 Linux 內核給以太網驅動和 SCSI 控制器.</p>
+<p>一個 EISA 驅動檢查值 EISA_bus 來決定是否主機有一個 EISA 總線. 象 MCA_bus, EISA_bus 或者是一個宏定義或者是一個變量, 依賴是否 EISA_bus__is_a_macro 被定義. 2 個符號都定義在 &lt;asm/processor.h&gt;</p>
+<p>內核對有 sysfs 和資源管理能力的設備有完整的 EISA 支持. 這位於 driver/eisa 目錄.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="VLB.sect2"></a>12.4.3.&#160;VLB 總線</h3></div></div></div>
+<p>另一個對 ISA 的擴展是 VESA Local Bus(VLB)	接口總線, 它擴展了 ISA 連接器, 通過添加第 3 個知道長度的槽位. 一個設備可只插入這個額外的連接器(不用插入 2 個關聯的 ISA 連接器), 因為 VLB 槽位從 ISA 連接器複製了所有的重要信號. 這樣"獨立"的 VLB 外設不使用 ISA 槽位是少見的, 因為大部分設備需要伸到後面板, 使它們的外部連接器是可用的.</p>
+<p>VESA 總線比 EISA , MCA, 和 PCI 總線在它的能力方面更加限制, 並且正在從市場上消失. 沒有特殊的內核支持位 VLB 而存在. 但是, 在 Linux 2.0 中的 Lance 以太網驅動和 IDA 磁盤驅動可處理 VLB 版本的設備.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch12s03.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch12.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch12s05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">12.3.&#160;PC/104 和 PC/104+&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;12.5.&#160;SBus</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch12s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:38 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

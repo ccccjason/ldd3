@@ -1,0 +1,223 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch14s09.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>14.9.&#160;快速參考-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="author" content="" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch14.html" title="第&#160;14&#160;章&#160;Linux 設備模型">
+<link rel="prev" href="ch14s08.html" title="14.8.&#160;處理固件">
+<link rel="next" href="ch15.html" title="第&#160;15&#160;章&#160;內存映射和 DMA ">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">14.9.&#160;快速參考</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch14s08.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;14&#160;章&#160;Linux 設備模型</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch15.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="TheLinuxDeviceModelqr.sect1"></a>14.9.&#160;快速參考</h2></div></div></div>
+<p>許多函數在本章中已經被介紹過; 這是它們全部的一個快速總結.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Kobjects.sect2"></a>14.9.1.&#160;Kobjects結構</h3></div></div></div>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>#include &lt;linux/kobject.h&gt;</span></span></dt>
+<dd><p>包含文件, 包含 kobject 的定義, 相關結構, 和函數.</p></dd>
+<dt><span class="term"><span>void kobject_init(struct kobject *kobj);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int kobject_set_name(struct kobject *kobj, const char *format, ...);</span></span></dt>
+<dd><p>用作 kobject 初始化的函數</p></dd>
+<dt><span class="term"><span>struct kobject *kobject_get(struct kobject *kobj);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void kobject_put(struct kobject *kobj);</span></span></dt>
+<dd><p>為 kobjects 管理引用計數的函數.</p></dd>
+<dt><span class="term"><span>struct kobj_type;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct kobj_type *get_ktype(struct kobject *kobj);</span></span></dt>
+<dd><p>表示一個kobjct 被嵌入的結構類型. 使用 get_ktype 來獲得關聯到一個給定 kobject 的 kobj_type.</p></dd>
+<dt><span class="term"><span>int kobject_add(struct kobject *kobj);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>extern int kobject_register(struct kobject *kobj);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void kobject_del(struct kobject *kobj);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void kobject_unregister(struct kobject *kobj);</span></span></dt>
+<dd><p>kobject_add 添加一個 kobject 到系統, 處理 kset 成員關係, sysfs 表示, 以及熱插拔事件產生. kobject_register 是一個方便函數, 它結合 kobject_init 和 kobject_add. 使用 kobject_del 來去除一個 kobject 或者 kobject_unregister, 它結合了 kobject_del 和 kobject_put.</p></dd>
+<dt><span class="term"><span>void kset_init(struct kset *kset);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int kset_add(struct kset *kset);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int kset_register(struct kset *kset);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void kset_unregister(struct kset *kset);</span></span></dt>
+<dd><p>為 ksets 初始化和註冊的函數.</p></dd>
+<dt><span class="term"><span>decl_subsys(name, type, hotplug_ops);</span></span></dt>
+<dd><p>易於聲明子系統的一個宏.</p></dd>
+<dt><span class="term"><span>void subsystem_init(struct subsystem *subsys);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int subsystem_register(struct subsystem *subsys);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void subsystem_unregister(struct subsystem *subsys);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct subsystem *subsys_get(struct subsystem *subsys);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void subsys_put(struct subsystem *subsys);</span></span></dt>
+<dd><p>對子系統的操作.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="SysfsOperations.sect2"></a>14.9.2.&#160;sysfs 操作</h3></div></div></div>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>#include &lt;linux/sysfs.h&gt;</span></span></dt>
+<dd><p>包含 sysfs 聲明的包含文件.</p></dd>
+<dt><span class="term"><span>int sysfs_create_file(struct kobject *kobj, struct attribute *attr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int sysfs_remove_file(struct kobject *kobj, struct attribute *attr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int sysfs_create_bin_file(struct kobject *kobj, struct bin_attribute *attr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int sysfs_remove_bin_file(struct kobject *kobj, struct bin_attribute *attr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int sysfs_create_link(struct kobject *kobj, struct kobject *target, char
+ *name);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void sysfs_remove_link(struct kobject *kobj, char *name);</span></span></dt>
+<dd><p>創建和去除和一個 kobject 關聯的屬性文件的函數.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="BusesDevicesandDrivers.sect2"></a>14.9.3.&#160;總線, 設備, 和驅動</h3></div></div></div>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>int bus_register(struct bus_type *bus);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void bus_unregister(struct bus_type *bus);</span></span></dt>
+<dd><p>在設備模型中進行註冊和註銷總線的函數.</p></dd>
+<dt><span class="term"><span>int bus_for_each_dev(struct bus_type *bus, struct device *start, void *data, int (*fn)(struct device *, void *));</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int bus_for_each_drv(struct bus_type *bus, struct device_driver *start, void *data, int (*fn)(struct device_driver *, void *));</span></span></dt>
+<dd>
+<p></p>列舉每個設備和驅動的函數, 特別地, 綁定到給定總線的設備.</dd>
+<dt><span class="term"><span>BUS_ATTR(name, mode, show, store);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int bus_create_file(struct bus_type *bus, struct bus_attribute *attr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void bus_remove_file(struct bus_type *bus, struct bus_attribute *attr);</span></span></dt>
+<dd><p>BUS_ATTR 宏可能用來聲明一個 bus_attribute 結構, 它可能接著被添加和去除, 使用上面 2 個函數.</p></dd>
+<dt><span class="term"><span>int device_register(struct device *dev);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void device_unregister(struct device *dev);</span></span></dt>
+<dd><p>處理設備註冊的函數.</p></dd>
+<dt><span class="term"><span>DEVICE_ATTR(name, mode, show, store);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int device_create_file(struct device *device, struct device_attribute *entry);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void device_remove_file(struct device *dev, struct device_attribute *attr);</span></span></dt>
+<dd><p>處理設備屬性的宏和函數.</p></dd>
+<dt><span class="term"><span>int driver_register(struct device_driver *drv);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void driver_unregister(struct device_driver *drv);</span></span></dt>
+<dd><p>註冊和註銷一個設備驅動的函數.</p></dd>
+<dt><span class="term"><span>DRIVER_ATTR(name, mode, show, store);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int driver_create_file(struct device_driver *drv, struct driver_attribute *attr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void driver_remove_file(struct device_driver *drv, struct driver_attribute *attr);</span></span></dt>
+<dd><p>關聯驅動屬性的宏和函數.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Classes.sect2"></a>14.9.4.&#160;類</h3></div></div></div>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct class_simple *class_simple_create(struct module *owner, char *name);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void class_simple_destroy(struct class_simple *cs);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct class_device *class_simple_device_add(struct class_simple *cs, dev_t devnum, struct device *device, const char *fmt, ...);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void class_simple_device_remove(dev_t dev);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int class_simple_set_hotplug(struct class_simple *cs, int (*hotplug)(struct
+ class_device *dev, char **envp, int num_envp, char *buffer, int
+ buffer_size));</span></span></dt>
+<dd><p>實現 class_simple 接口的函數; 它們管理包含一個 dev 屬性和很少其他屬性的簡單的類入口</p></dd>
+<dt><span class="term"><span>int class_register(struct class *cls);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void class_unregister(struct class *cls);</span></span></dt>
+<dd><p>註冊和註銷類.</p></dd>
+<dt><span class="term"><span>CLASS_ATTR(name, mode, show, store);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int class_create_file(struct class *cls, const struct class_attribute *attr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void class_remove_file(struct class *cls, const struct class_attribute *attr);</span></span></dt>
+<dd><p>處理類屬性的常用宏和函數.</p></dd>
+<dt><span class="term"><span>int class_device_register(struct class_device *cd);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void class_device_unregister(struct class_device *cd);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int class_device_rename(struct class_device *cd, char *new_name);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>CLASS_DEVICE_ATTR(name, mode, show, store);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int class_device_create_file(struct class_device *cls, const struct class_device_attribute *attr);</span></span></dt>
+<dd><p>屬性類設備接口的函數和宏.</p></dd>
+<dt><span class="term"><span>int class_interface_register(struct class_interface *intf);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void class_interface_unregister(struct class_interface *intf);</span></span></dt>
+<dd><p>添加一個接口到一個類(或去除它)的函數.</p></dd>
+</dl></div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="Firmware.sect2"></a>14.9.5.&#160;固件</h3></div></div></div>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>#include &lt;linux/firmware.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int request_firmware(const struct firmware **fw, char *name, struct device *device);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int request_firmware_nowait(struct module *module, char *name, struct device *device, void *context, void (*cont)(const struct firmware *fw, void *context));</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void release_firmware(struct firmware *fw);</span></span></dt>
+<dd><p>屬性內核固件加載接口的函數.</p></dd>
+</dl></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch14s08.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch14.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch15.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">14.8.&#160;處理固件&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;第&#160;15&#160;章&#160;內存映射和 DMA </td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch14s09.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

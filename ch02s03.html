@@ -1,0 +1,109 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:31 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>2.3.&#160;內核模塊相比於應用程序-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch02.html" title="第&#160;2&#160;章&#160;建立和運行模塊">
+<link rel="prev" href="ch02s02.html" title="2.2.&#160;Hello World 模塊">
+<link rel="next" href="ch02s04.html" title="2.4.&#160;編譯和加載">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">2.3.&#160;內核模塊相比於應用程序</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch02s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;2&#160;章&#160;建立和運行模塊</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch02s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="KernelModulesVersusApplications.sect1"></a>2.3.&#160;內核模塊相比於應用程序</h2></div></div></div>
+<p> 在我們深入之前, 有必要強調一下內核模塊和應用程序之間的各種不同.  </p>
+<p> 不同於大部分的小的和中型的應用程序從頭至尾處理一個單個任務, 每個內核模塊只註冊自己以便來服務將來的請求, 並且它的初始化函數立刻終止. 換句話說, 模塊初始化函數的任務是為以後調用模塊的函數做準備; 好像是模塊說, " 我在這裡, 這是我能做的."模塊的退出函數( 例子裡是 hello_exit )就在模塊被卸載時調用. 它好像告訴內核, "我不再在那裡了, 不要要求我做任何事了."這種編程的方法類似於事件驅動的編程, 但是雖然不是所有的應用程序都是事件驅動的, 每個內核模塊都是. 另外一個主要的不同, 在事件驅動的應用程序和內核代碼之間, 是退出函數: 一個終止的應用程序可以在釋放資源方面懶惰, 或者完全不做清理工作, 但是模塊的退出函數必須小心恢復每個由初始化函數建立的東西, 否則會保留一些東西直到系統重啟.  </p>
+<p> 偶然地, 卸載模塊的能力是你將最欣賞的模塊化的其中一個特色, 因為它有助於減少開發時間; 你可測試你的新驅動的連續的版本, 而不用每次經歷漫長的關機/重啟週期.  </p>
+<p>作為一個程序員, 你知道一個應用程序可以調用它沒有定義的函數: 連接階段使用合適的函數庫解決了外部引用. printf 是一個這種可調用的函數並且在 libc 裡面定義. 一個模塊, 在另一方面, 只連接到內核, 它能夠調用的唯一的函數是內核輸出的那些; 沒有庫來連接.在 hello.c 中使用的 printk 函數, 例如, 是在內核中定義的 printf 版本並且輸出給模塊. 它表現類似於原始的函數, 只有幾個小的不同, 首要的一個是缺乏浮點的支持.  </p>
+<p> 圖 <a href="ch02s03.html#ldd3-2-1.fig" title="圖&#160;2.1.&#160;連接一個模塊到內核">連接一個模塊到內核</a> 展示了函數調用和函數指針在模塊中如何使用來增加新功能到一個運行中的內核.  </p>
+<div class="figure">
+<a name="ldd3-2-1.fig"></a><p class="title"><b>圖&#160;2.1.&#160;連接一個模塊到內核</b></p>
+<div><img src="images/snagitldd3/ldd3-2-1.png" alt="連接一個模塊到內核"></div>
+</div>
+<p> 因為沒有庫連接到模塊中, 源文件不應當包含通常的頭文件, &lt;stdarg.h&gt;和非常特殊的情況是僅有的例外. 只有實際上是內核的一部分的函數才可以在內核模塊裡使用. 內核相關的任何東西都在頭文件裡聲明, 這些頭文件在你已建立和配置的內核源碼樹裡; 大部分相關的頭文件位於 include/linux 和 include/asm, 但是別的 include 的子目錄已經添加到關聯特定內核子系統的材料裡了.  </p>
+<p> 單個內核頭文件的作用在書中需要它們的時候進行介紹.  </p>
+<p> 另外一個在內核編程和應用程序編程之間的重要不同是每一個環境是如何處理錯誤: 在應用程序開發中段錯誤是無害的, 一個調試器常常用來追蹤錯誤到源碼中的問題, 而一個內核錯誤至少會殺掉當前進程, 如果不終止整個系統. 我們會在第 4 章看到如何跟蹤內核錯誤.  </p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="UserSpaceandKernelSpace.sect2"></a>2.3.1.&#160;用戶空間和內核空間</h3></div></div></div>
+
+A module runs in kernel space, whereas applications run in user space. This concept is at the base of operating systems theory. 
+一個模塊在內核空間運行, 而應用程序在用戶空間運行. 這個概念是操作系統理論的基礎.
+<p> 操作系統的角色, 實際上, 是給程序提供一個一致的計算機硬件的視角. 另外, 操作系統必須承擔程序的獨立操作和保護對於非授權的資源存取. 這一不平凡的任務只有 CPU 增強系統軟件對應用程序的保護才有可能.  
+</p>
+<p> 每種現代處理器都能夠加強這種行為. 選中的方法是 CPU 自己實現不同的操作形態(或者級別). 這些級別有不同的角色, 一些操作在低些級別中不允許; 程序代碼只能通過有限的幾個門從一種級別切換到另一個. Unix 系統設計成利用了這種硬件特性, 使用了兩個這樣的級別. 所有當今的處理器至少有兩個保護級別, 並且某些, 例如 x86 家族, 有更多級別; 當幾個級別存在時, 使用最高和最低級別. 在 Unix 下, 內核在最高級運行( 也稱之為超級模式 ), 這裡任何事情都允許, 而應用程序在最低級運行(所謂的用戶模式), 這裡處理器控制了對硬件的直接存取以及對內存的非法存取.  </p>
+<p> 我們常常提到運行模式作為內核空間和用戶空間. 這些術語不僅包含存在於這兩個模式中不同特權級別, 還包含有這樣的事實, 即每個模式有它自己的內存映射 -- 它自己的地址空間.  </p>
+<p> Unix 從用戶空間轉換執行到內核空間, 無論何時一個應用程序發出一個系統調用或者被硬件中斷掛起時. 執行系統調用的內核代碼在進程的上下文中工作 -- 它代表調用進程並且可以存取該進程的地址空間. 換句話說, 處理中斷的代碼對進程來說是異步的, 不和任何特別的進程有關.  </p>
+<p> 模塊的角色是擴展內核的功能; 模塊化的代碼在內核空間運行. 經常地一個驅動進行之前提到的兩種任務: 模塊中一些的函數作為系統調用的一部分執行, 一些負責中斷處理.  
+</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ConcurrencyintheKernel.sect2"></a>2.3.2.&#160;內核的並發</h3></div></div></div>
+<p> 內核編程與傳統應用程序編程方式很大不同的是並發問題. 大部分應用程序, 多線程的應用程序是一個明顯的例外, 典型地是順序運行的, 從頭至尾, 不必要擔心其他事情會發生而改變它們的環境. 內核代碼沒有運行在這樣的簡單世界中, 即便最簡單的內核模塊必須在這樣的概念下編寫, 很多事情可能馬上發生.</p>
+<p> 內核編程中有幾個並發的來源. 自然的, Linux 系統運行多個進程, 在同一時間, 不止一個進程能夠試圖使用你的驅動. 大部分設備能夠中斷處理器; 中斷處理異步運行, 並且可能在你的驅動試圖做其他事情的同一時間被調用. 幾個軟件抽像( 例如內核定時器, 第 7 章介紹 )也異步運行. 而且, 當然, Linux 可以在對稱多處理器系統( SMP )上運行, 結果是你的驅動可能在多個 CPU 上並發執行. 最後, 在 2.6, 內核代碼已經是可搶佔的了; 這個變化使得即便是單處理器會有許多與多處理器系統同樣的並發問題.</p>
+<p> 結果, Linux 內核代碼, 包括驅動代碼, 必須是可重入的 -- 它必須能夠同時在多個上下文中運行. 數據結構必須小心設計以保持多個執行線程分開, 並且代碼必須小心存取共享數據, 避免數據的破壞. 編寫處理並發和避免競爭情況( 一個不幸的執行順序導致不希望的行為的情形 )的代碼需要仔細考慮並可能是微妙的. 正確的並發管理在編寫正確的內核代碼時是必須的; 由於這個理由, 本書的每一個例子驅動都是考慮了並發下編寫的. 用到的技術在我們遇到它們時再講解; 第 5 章也專門講述這個問題, 以及並發管理的可用的內核原語.  </p>
+<p> 驅動程序員的一個通常的錯誤是假定並發不是一個問題, 只要一段特別的代碼沒有進入睡眠( 或者 "阻塞" ). 即便在之前的內核( 不可搶佔), 這種假設在多處理器系統中也不成立. 在 2.6, 內核代碼不能(極少)假定它能在一段給定代碼上持有處理器. 如果你不考慮並發來編寫你的代碼, 就極有可能導致嚴重失效, 以至於非常難於調試.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheCurrentProcess.sect2"></a>2.3.3.&#160;當前進程</h3></div></div></div>
+<p> 儘管內核模塊不像應用程序一樣順序執行, 內核做的大部分動作是代表一個特定進程的. 內核代碼可以引用當前進程, 通過存取全局項 current, 它在 &lt;asm/current.h&gt; 中定義, 它產生一個指針指向結構 task_struct, 在 &lt;linux/sched.h&gt; 定義. current 指針指向當前在運行的進程. 在一個系統調用執行期間, 例如 open 或者 read, 當前進程是發出調用的進程. 內核代碼可以通過使用 current 來使用進程特定的信息, 如果它需要這樣. 這種技術的一個例子在第 6 章展示.  </p>
+<p> 實際上, current 不真正地是一個全局變量. 支持 SMP 系統的需要強迫內核開發者去開發一種機制, 在相關的 CPU 上來找到當前進程. 這種機制也必須快速, 因為對 current 的引用非常頻繁地發生. 結果就是一個依賴體系的機制, 常常, 隱藏了一個指向 task_struct 的指針在內核堆棧內. 實現的細節對別的內核子系統保持隱藏, 一個設備驅動可以只包含 &lt;linux/sched.h&gt; 並且引用當前進程. 例如, 下面的語句打印了當前進程的進程 ID 和命令名稱, 通過存取結構 task_struct 中的某些字段.  </p>
+<pre class="programlisting">
+printk(KERN_INFO "The process is \"%s\" (pid %i)\n", current-&gt;comm, current-&gt;pid);
+</pre>
+<p> 存於 current-&gt;comm 的命令名稱是由當前進程執行的程序文件的基本名稱( 截短到 15 個字符, 如果需要 ).  
+</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AFewOtherDetails.sect2"></a>2.3.4.&#160;幾個別的細節</h3></div></div></div>
+<p> 內核編程與用戶空間編程在許多方面不同. 我們將在本書的過程中指出它們, 但是有幾個基礎性的問題, 儘管沒有保證它們自己有一節內容, 也值得一提. 因此, 當你深入內核時, 下面的事項應當牢記.  </p>
+<p> 應用程序存在於虛擬內存中, 有一個非常大的堆棧區. 堆棧, 當然, 是用來保存函數調用歷史以及所有的由當前活躍的函數創建的自動變量. 內核, 相反, 有一個非常小的堆棧; 它可能小到一個, 4096 字節的頁. 你的函數必須與這個內核空間調用鏈共享這個堆棧. 因此, 聲明一個巨大的自動變量從來就不是一個好主意; 如果你需要大的結構, 你應當在調用時間內動態分配.  </p>
+<p> 常常, 當你查看內核 API 時, 你會遇到以雙下劃線(__)開始的函數名. 這樣標誌的函數名通常是一個低層的接口組件, 應當小心使用. 本質上講, 雙下劃線告訴程序員:" 如果你調用這個函數, 確信你知道你在做什麼." </p>
+<p> 內核代碼不能做浮點算術. 使能浮點將要求內核在每次進出內核空間的時候保存和恢復浮點處理器的狀態 -- 至少, 在某些體繫上. 在這種情況下, 內核代碼真的沒有必要包含浮點, 額外的負擔不值得.  
+</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch02s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch02.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch02s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">2.2.&#160;Hello World 模塊&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;2.4.&#160;編譯和加載</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

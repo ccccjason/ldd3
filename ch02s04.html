@@ -1,0 +1,149 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>2.4.&#160;編譯和加載-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch02.html" title="第&#160;2&#160;章&#160;建立和運行模塊">
+<link rel="prev" href="ch02s03.html" title="2.3.&#160;內核模塊相比於應用程序">
+<link rel="next" href="ch02s05.html" title="2.5.&#160;內核符號表">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">2.4.&#160;編譯和加載</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch02s03.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;2&#160;章&#160;建立和運行模塊</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch02s05.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="CompilingandLoading.sect1"></a>2.4.&#160;編譯和加載</h2></div></div></div>
+<p> 本章開頭的 "hello world" 例子包含了一個簡短的建立並加載模塊到系統中去的演示. 當然, 整個過程比我們目前看到的多. 本節提供了更多細節關於一個模塊作者如何將源碼轉換成內核中的運行的子系統.  
+</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="CompilingModules.sect2"></a>2.4.1.&#160;編譯模塊</h3></div></div></div>
+<p> 第一步, 我們需要看一下模塊如何必須被建立. 模塊的建立過程與用戶空間的應用程序的建立過程有顯著不同; 內核是一個大的, 獨立的程序, 對於它的各個部分如何組合在一起有詳細的明確的要求. 建立過程也與以前版本的內核的過程不同; 新的建立系統用起來更簡單並且產生更正確的結果, 但是它看起來與以前非常不同. 內核建立系統是一頭負責的野獸, 我們就看它一小部分. 在內核源碼的 Document/kbuild 目錄下發現的文件, 任何想理解表面之下的真實情況的人都要閱讀一下.  </p>
+<p> 有幾個前提, 你必須在能建立內核模塊前解決. 第一個是保證你有版本足夠新的編譯器, 模塊工具, 以及其他必要工具. 在內核文檔目錄下的文件 Documentation/Changes 一直列出了需要的工具版本; 你應當在向前走之前參考一下它. 試圖建立一個內核(包括它的模塊), 用錯誤的工具版本, 可能導致不盡的奇怪的難題. 注意, 偶爾地, 編譯器的版本太新可能會引起和太老的版本引起的一樣的問題. 內核源碼對於編譯器做了很大的假設, 新的發行版本有時會一時地破壞東西.  </p>
+<p> 如果你仍然沒有一個內核樹在手邊, 或者還沒有配置和建立內核, 現在是時間去做了. 沒有源碼樹在你的文件系統上, 你無法為 2.6 內核建立可加載的模塊. 實際運行為其而建立的內核也是有幫助的( 儘管不是必要的 ).  </p>
+<p> 一旦你已建立起所有東西, 給你的模塊創建一個 makefile 就是直截了當的. 實際上, 對於本章前面展示的" hello world" 例子, 單行就夠了: </p>
+<pre class="screen">
+obj-m := hello.o 
+</pre>
+<p> 熟悉 make , 但是對 2.6 內核建立系統不熟悉的讀者, 可能奇怪這個 makefile 如何工作. 畢竟上面的這一行不是一個傳統的 makefile 的樣子. 答案, 當然, 是內核建立系統處理了餘下的工作. 上面的安排( 它利用了由 GNU make 提供的擴展語法 )表明有一個模塊要從目標文件 hello.o 建立. 在從目標文件建立後結果模塊命名為 hello.ko.  </p>
+<p> 反之, 如果你有一個模塊名為 module.ko, 是來自 2 個源文件( 姑且稱之為, file1.c 和 file2.c ), 正確的書寫應當是: </p>
+<pre class="screen">
+obj-m := module.o
+module-objs := file1.o file2.o
+</pre>
+<p> 對於一個象上面展示的要工作的 makefile, 它必須在更大的內核建立系統的上下文被調用. 如果你的內核源碼數位於, 假設, 你的 ~/kernel-2.6 目錄, 用來建立你的模塊的 make 命令( 在包含模塊源碼和 makefile 的目錄下鍵入 )會是: </p>
+<pre class="screen">
+make -C ~/kernel-2.6 M=`pwd` modules
+</pre>
+<p> 這個命令開始是改變它的目錄到用 -C 選項提供的目錄下( 就是說, 你的內核源碼目錄 ). 它在那裡會發現內核的頂層 makefile. 這個 M= 選項使 makefile 在試圖建立模塊目標前, 回到你的模塊源碼目錄. 這個目標, 依次地, 是指在 obj-m 變量中發現的模塊列表, 在我們的例子裡設成了 module.o.  </p>
+<p> 鍵入前面的 make 命令一會兒之後就會感覺煩, 所以內核開發者就開發了一種 makefile 方式, 使得生活容易些對於那些在內核樹之外建立模塊的人. 這個竅門是如下書寫你的 makefile: </p>
+<pre class="screen">
+# If KERNELRELEASE is defined, we've been invoked from the
+# kernel build system and can use its language.
+ifneq ($(KERNELRELEASE),)
+
+ obj-m := hello.o 
+# Otherwise we were called directly from the command
+# line; invoke the kernel build system.
+else
+
+ KERNELDIR ?= /lib/modules/$(shell uname -r)/build
+ PWD := $(shell pwd) 
+default:
+ $(MAKE) -C $(KERNELDIR) M=$(PWD) modules
+
+endif 
+</pre>
+<p> 再一次, 我們看到了擴展的 GNU make 語法在起作用. 這個 makefile 在一次典型的建立中要被讀 2 次. 當從命令行中調用這個 makefile , 它注意到 KERNELRELEASE 變量沒有設置. 它利用這樣一個事實來定位內核源碼目錄, 即已安裝模塊目錄中的符號連接指回內核建立樹. 如果你實際上沒有運行你在為其而建立的內核, 你可以在命令行提供一個 KERNELDIR= 選項, 設置 KERNELDIR 環境變量, 或者重寫 makefile 中設置 KERNELDIR 的那一行. 一旦發現內核源碼樹, makefile 調用 default: 目標, 來運行第 2 個 make 命令( 在 makefile 裡參數化成 $(MAKE))象前面描述過的一樣來調用內核建立系統. 在第 2 次讀, makefile 設置 obj-m, 並且內核的 makefile 文件完成實際的建立模塊工作.  </p>
+<p> 這種建立模塊的機制你可能感覺笨拙模糊. 一旦你習慣了它, 但是, 你很可能會欣賞這種已經編排進內核建立系統的能力. 注意, 上面的不是一個完整的 makefile; 一個真正的 makefile 包含通常的目標類型來清除不要的文件, 安裝模塊等等. 一個完整的例子可以參考例子代碼目錄的 makefile.  
+</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="LoadingandUnloadingModules.sect2"></a>2.4.2.&#160;加載和卸載模塊</h3></div></div></div>
+<p> 模塊建立之後, 下一步是加載到內核. 如我們已指出的, insmod 為你完成這個工作. 這個程序加載模塊的代碼段和數據段到內核, 接著, 執行一個類似 ld 的函數, 它連接模塊中任何未解決的符號連接到內核的符號表上. 但是不像連接器, 內核不修改模塊的磁盤文件, 而是內存內的拷貝. insmod 接收許多命令行選項(詳情見 manpage), 它能夠安排值給你模塊中的參數, 在連接到當前內核之前. 因此, 如果一個模塊正確設計了, 它能夠在加載時配置; 加載時配置比編譯時配置給了用戶更多的靈活性, 有時仍然在用. 加載時配置在本章後面的 "模塊參數" 一節講解.  </p>
+<p> 感興趣的讀者可能想看看內核如何支持 insmod: 它依賴一個在 kernel/module.c 中定義的系統調用. 函數 sys_init_module 分配內核內存來存放模塊 ( 這個內存用 vmalloc 分配; 看第 8 章的 "vmalloc 和其友" ); 它接著拷貝模塊的代碼段到這塊內存區, 借助內核符號表解決模塊中的內核引用, 並且調用模塊的初始化函數來啟動所有東西.  </p>
+<p> 如果你真正看了內核代碼, 你會發現系統調用的名子以 sys_ 為前綴. 這對所有系統調用都是成立的, 並且沒有別的函數. 記住這個有助於在源碼中查找系統調用.  </p>
+<p> modprobe 工具值得快速提及一下. modprobe, 如同 insmod, 加載一個模塊到內核. 它的不同在於它會查看要加載的模塊, 看是否它引用了當前內核沒有定義的符號. 如果發現有, modprobe 在定義相關符號的當前模塊搜索路徑中尋找其他模塊. 當 modprobe 找到這些模塊( 要加載模塊需要的 ), 它也把它們加載到內核. 如果你在這種情況下代替以使用 insmod , 命令會失敗, 在系統日誌文件中留下一條 " unresolved symbols "消息.  </p>
+<p> 如前面提到, 模塊可以用 rmmod 工具從內核去除. 注意, 如果內核認為模塊還在用( 就是說, 一個程序仍然有一個打開文件對應模塊輸出的設備 ), 或者內核被配置成不允許模塊去除, 模塊去除會失敗. 可以配置內核允許"強行"去除模塊, 甚至在它們看來是忙的. 如果你到了需要這選項的地步, 但是, 事情可能已經錯的太嚴重以至於最好的動作就是重啟了.  
+</p>
+<p> lsmod 程序生成一個內核中當前加載的模塊的列表. 一些其他信息, 例如使用了一個特定模塊的其他模塊, 也提供了. lsmod 通過讀取 /proc/modules 虛擬文件工作. 當前加載的模塊的信息也可在位於 /sys/module 的 sysfs 虛擬文件系統找到.  
+</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="VersionDependency.sect2"></a>2.4.3.&#160;版本依賴</h3></div></div></div>
+<p> 記住, 你的模塊代碼一定要為每個它要連接的內核版本重新編譯 -- 至少, 在缺乏 modversions 時, 這裡不涉及因為它們更多的是給內核發佈製作者, 而不是開發者. 模塊是緊密結合到一個特殊內核版本的數據結構和函數原型上的; 模塊見到的接口可能一個內核版本與另一個有很大差別. 當然, 在開發中的內核更加是這樣.  </p>
+<p> 內核不只是認為一個給定模塊是針對一個正確的內核版本建立的. 建立過程的其中一步是對一個當前內核樹中的文件(稱為 vermagic.o)連接你的模塊; 這個東東含有相當多的有關要為其建立模塊的內核的信息, 包括目標內核版本, 編譯器版本, 以及許多重要配置變量的設置. 當嘗試加載一個模塊, 這些信息被檢查與運行內核的兼容性. 如果不匹配, 模塊不會加載; 代之的是你見到如下內容: </p>
+<pre class="screen">
+# insmod hello.ko
+Error inserting './hello.ko': -1 Invalid module format
+</pre>
+<p> 看一下系統日誌文件(/var/log/message 或者任何你的系統被配置來用的)將發現導致模塊無法加載特定的問題.</p>
+<p> 如果你需要編譯一個模塊給一個特定的內核版本, 你將需要使用這個特定版本的建立系統和源碼樹. 前面展示過的在例子 makefile 中簡單修改 KERNELDIR 變量, 就完成這個動作.  </p>
+<p> 內核接口在各個發行之間常常變化. 如果你編寫一個模塊想用來在多個內核版本上工作(特別地是如果它必須跨大的發行版本), 你可能只能使用宏定義和 #ifdef 來使你的代碼正確建立. 本書的這個版本只關心內核的一個主要版本, 因此不會在我們的例子代碼中經常見到版本檢查. 但是這種需要確實有時會有. 在這樣情況下, 你要利用在 linux/version.h 中發現的定義. 這個頭文件, 自動包含在 linux/module.h, 定義了下面的宏定義: </p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>UTS_RELEASE </span></span></dt>
+<dd><p> 這個宏定義擴展成字符串, 描述了這個內核樹的版本. 例如, "2.6.10".  </p></dd>
+<dt><span class="term"><span>LINUX_VERSION_CODE </span></span></dt>
+<dd><p>這個宏定義擴展成內核版本的二進制形式, 版本號發行號的每個部分用一個字節表示. 例如, 2.6.10 的編碼是 132618 ( 就是, 0x02060a ). <sup>[<a name="id409823" href="#ftn.id409823">4</a>]</sup>有了這個信息, 你可以(幾乎是)容易地決定你在處理的內核版本.  </p></dd>
+<dt><span class="term"><span>KERNEL_VERSION(major,minor,release)</span></span></dt>
+<dd><p>這個宏定義用來建立一個整型版本編碼, 從組成一個版本號的單個數字. 例如, KERNEL_VERSION(2.6.10) 擴展成 132618. 這個宏定義非常有用, 當你需要比較當前版本和一個已知的檢查點.  </p></dd>
+</dl></div>
+<p> 大部分的基於內核版本的依賴性可以使用預處理器條件解決, 通過利用 KERNEL_VERSION 和 LINUX_VERSION_VODE. 版本依賴不應當, 但是, 用繁多的 #ifdef 條件來搞亂驅動的代碼; 處理不兼容的最好的方式是把它們限制到特定的頭文件. 作為一個通用的原則, 明顯版本(或者平台)依賴的代碼應當隱藏在一個低級的宏定義或者函數後面. 高層的代碼就可以只調用這些函數, 而不必關心低層的細節. 這樣書寫的代碼易讀並且更健壯.  
+</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="PlatformDependency.sect2"></a>2.4.4.&#160;平台依賴性</h3></div></div></div>
+<p> 每個電腦平台有其自己的特點, 內核設計者可以自由使用所有的特性來獲得更好的性能. in the target object file ???  </p>
+<p> 不像應用程序開發者, 他們必須和預編譯的庫一起連接他們的代碼, 依附在參數傳遞的規定上, 內核開發者可以專用某些處理器寄存器給特別的用途, 他們確實這樣做了. 更多的, 內核代碼可以為一個 CPU 族裡的特定處理器優化, 以最好地利用目標平台; 不像應用程序那樣常常以二進制格式發佈, 一個定制的內核編譯可以為一個特定的計算機系列優化.  </p>
+<p> 例如, IA32 (x86) 結構分為幾個不同的處理器類型. 老式的 80386 處理器仍然被支持( 到現在 ), 儘管它的指令集, 以現代的標準看, 非常有限. 這個體系中更加現代的處理器已經引入了許多新特性, 包括進入內核的快速指令, 處理器間的加鎖, 拷貝數據, 等等. 更新的處理器也可採用 36 位( 或者更大 )的物理地址, 當在適當的模式下, 以允許他們尋址超過 4 GB 的物理內存. 其他的處理器家族也有類似的改進. 內核, 依賴不同的配置選項, 可以被建立來使用這些附加的特性.  </p>
+<p> 清楚地, 如果一個模塊與一個給定內核工作, 它必須以與內核相同的對目標處理器的理解來建立. 再一次, vermagic.o 目標文件登場. 當加載一個模塊, 內核為模塊檢查特定處理器的配置選項, 確認它們匹配運行的內核. 如果模塊用不同選項編譯, 它不會加載.  </p>
+<p> 如果你計劃為通用的發佈編寫驅動, 你可能很奇怪你怎麼可能支持所有這些不同的變體. 最好的答案, 當然, 是發行你的驅動在 GPL 兼容的許可之下, 並且貢獻它給主流內核. 如果沒有那樣, 以源碼形式和一套腳本發佈你的驅動, 以便在用戶系統上編譯可能是最好的答案. 一些供應商已發行了工具來簡化這個工作. 如果你必須發布你的驅動以二進制形式, 你需要查看由你的目標發佈所提供的不同的內核, 並且為每個提供一個模塊版本. 要確認考慮到了任何在產生發佈後可能發行的勘誤內核. 接著, 要考慮許可權的問題, 如同我們在第 1 章的" 許可條款" 一節中討論的. 作為一個通用的規則, 以源碼形式發佈東西是你行於世的易途.  
+</p>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id409823" href="#id409823">4</a>] </sup>這允許在穩定版本之間多達 256 個開發版本.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch02s03.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch02.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch02s05.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">2.3.&#160;內核模塊相比於應用程序&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;2.5.&#160;內核符號表</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch02s04.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:32 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

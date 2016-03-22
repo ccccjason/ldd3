@@ -1,0 +1,239 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch03s07.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>3.7.&#160;讀和寫-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch03.html" title="第&#160;3&#160;章&#160;字符驅動">
+<link rel="prev" href="ch03s06.html" title="3.6.&#160;scull 的內存使用">
+<link rel="next" href="ch03s08.html" title="3.8.&#160;使用新設備">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">3.7.&#160;讀和寫</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch03s06.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;3&#160;章&#160;字符驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch03s08.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="readandwrite.sect"></a>3.7.&#160;讀和寫</h2></div></div></div>
+<p>讀和寫方法都進行類似的任務, 就是, 從和到應用程序代碼拷貝數據. 因此, 它們的原型相當相似, 可以同時介紹它們:</p>
+<pre class="programlisting">
+ssize_t read(struct file *filp, char __user *buff, size_t count, loff_t *offp);
+ssize_t write(struct file *filp, const char __user *buff, size_t count, loff_t *offp);
+</pre>
+<p>對於 2 個方法, filp 是文件指針, count 是請求的傳輸數據大小. buff 參數指向持有被寫入數據的緩存, 或者放入新數據的空緩存. 最後, offp 是一個指針指向一個"long offset type"對像, 它指出用戶正在存取的文件位置. 返回值是一個"signed size type"; 它的使用在後面討論.</p>
+<p>讓我們重複一下, read 和 write 方法的 buff 參數是用戶空間指針. 因此, 它不能被內核代碼直接解引用. 這個限制有幾個理由:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>依賴於你的驅動運行的體系, 以及內核被如何配置的, 用戶空間指針當運行於內核模式可能根本是無效的. 可能沒有那個地址的映射, 或者它可能指向一些其他的隨機數據.</p></li>
+<li><p>就算這個指針在內核空間是同樣的東西, 用戶空間內存是分頁的, 在做系統調用時這個內存可能沒有在 RAM 中. 試圖直接引用用戶空間內存可能產生一個頁面錯, 這是內核代碼不允許做的事情. 結果可能是一個"oops", 導致進行系統調用的進程死亡.</p></li>
+<li><p>置疑中的指針由一個用戶程序提供, 它可能是錯誤的或者惡意的. 如果你的驅動盲目地解引用一個用戶提供的指針, 它提供了一個打開的門路使用戶空間程序存取或覆蓋系統任何地方的內存. 如果你不想負責你的用戶的系統的安全危險, 你就不能直接解引用用戶空間指針.</p></li>
+</ul></div>
+<p>顯然, 你的驅動必須能夠存取用戶空間緩存以完成它的工作. 但是, 為安全起見這個存取必須使用特殊的, 內核提供的函數. 我們介紹幾個這樣的函數(定義於 &lt;asm/uaccess.h&gt;), 剩下的在第一章"使用 ioctl 參數"一節中. 它們使用一些特殊的, 依賴體系的技巧來確保內核和用戶空間的數據傳輸安全和正確.</p>
+<p>scull 中的讀寫代碼需要拷貝一整段數據到或者從用戶地址空間. 這個能力由下列內核函數提供, 它們拷貝一個任意的字節數組, 並且位於大部分讀寫實現的核心中.</p>
+<pre class="programlisting">
+unsigned long copy_to_user(void __user *to,const void *from,unsigned long count); 
+unsigned long copy_from_user(void *to,const void __user *from,unsigned long count); 
+</pre>
+<p>儘管這些函數表現象正常的 memcpy 函數, 必須加一點小心在從內核代碼中存取用戶空間. 尋址的用戶也當前可能不在內存, 虛擬內存子系統會使進程睡眠在這個頁被傳送到位時. 例如, 這發生在必須從交換空間獲取頁的時候. 對於驅動編寫者來說, 最終結果是任何存取用戶空間的函數必須是可重入的, 必須能夠和其他驅動函數並行執行, 並且, 特別的, 必須在一個它能夠合法地睡眠的位置. 我們在第 5 章再回到這個主題.</p>
+<p>這 2 個函數的角色不限於拷貝數據到和從用戶空間: 它們還檢查用戶空間指針是否有效. 如果指針無效, 不進行拷貝; 如果在拷貝中遇到一個無效地址, 另一方面, 只拷貝部分數據. 在 2 種情況下, 返回值是還要拷貝的數據量. scull 代碼查看這個錯誤返回, 並且如果它不是 0 就返回 -EFAULT 給用戶.</p>
+<p>用戶空間存取和無效用戶空間指針的主題有些高級, 在第 6 章討論. 然而, 值得注意的是如果你不需要檢查用戶空間指針, 你可以調用 __copy_to_user 和 __copy_from_user 來代替. 這是有用處的, 例如, 如果你知道你已經檢查了這些參數. 但是, 要小心; 事實上, 如果你不檢查你傳遞給這些函數的用戶空間指針, 那麼你可能造成內核崩潰和/或安全漏洞.</p>
+<p>至於實際的設備方法, read 方法的任務是從設備拷貝數據到用戶空間(使用 copy_to_user), 而 write 方法必須從用戶空間拷貝數據到設備(使用 copy_from_user). 每個 read 或 write 系統調用請求一個特定數目字節的傳送, 但是驅動可自由傳送較少數據 -- 對讀和寫這確切的規則稍微不同, 在本章後面描述.</p>
+<p>不管這些方法傳送多少數據, 它們通常應當更新 *offp 中的文件位置來表示在系統調用成功完成後當前的文件位置. 內核接著在適當時候傳播文件位置的改變到文件結構. pread 和 pwrite 系統調用有不同的語義; 它們從一個給定的文件偏移操作, 並且不改變其他的系統調用看到的文件位置. 這些調用傳遞一個指向用戶提供的位置的指針, 並且放棄你的驅動所做的改變.</p>
+<p>圖<a href="ch03s07.html#ldd3-3-2.fig" title="圖&#160;3.2.&#160;給 read 的參數">給 read 的參數</a>表示了一個典型讀實現是如何使用它的參數.</p>
+<div class="figure">
+<a name="ldd3-3-2.fig"></a><p class="title"><b>圖&#160;3.2.&#160;給 read 的參數</b></p>
+<div><img src="images/snagitldd3/ldd3-3-2.png" alt="給 read 的參數"></div>
+</div>
+<p>read 和 write 方法都在發生錯誤時返回一個負值. 相反, 大於或等於 0 的返回值告知調用程序有多少字節已經成功傳送. 如果一些數據成功傳送接著發生錯誤, 返回值必須是成功傳送的字節數, 錯誤不報告直到函數下一次調用. 實現這個傳統, 當然, 要求你的驅動記住錯誤已經發生, 以便它們可以在以後返回錯誤狀態.</p>
+<p>儘管內核函數返回一個負數指示一個錯誤, 這個數的值指出所發生的錯誤類型( 如第 2 章介紹 ), 用戶空間運行的程序常常看到 -1 作為錯誤返回值. 它們需要存取 errno 變量來找出發生了什麼. 用戶空間的行為由 POSIX 標準來規定, 但是這個標準沒有規定內核內部如何操作.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ThereadMethod.sect"></a>3.7.1.&#160;read 方法</h3></div></div></div>
+<p>read 的返回值由調用的應用程序解釋:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>如果這個值等於傳遞給 read 系統調用的 count 參數, 請求的字節數已經被傳送. 這是最好的情況.</p></li>
+<li><p>如果是正數, 但是小於 count, 只有部分數據被傳送. 這可能由於幾個原因, 依賴於設備. 常常, 應用程序重新試著讀取. 例如, 如果你使用 fread 函數來讀取, 庫函數重新發出系統調用直到請求的數據傳送完成.</p></li>
+<li><p>如果值為 0, 到達了文件末尾(沒有讀取數據).</p></li>
+<li><p>一個負值表示有一個錯誤. 這個值指出了什麼錯誤, 根據 &lt;linux/errno.h&gt;. 出錯的典型返回值包括 -EINTR( 被打斷的系統調用) 或者 -EFAULT( 壞地址 ).</p></li>
+</ul></div>
+<p>前面列表中漏掉的是這種情況"沒有數據, 但是可能後來到達". 在這種情況下, read 系統調用應當阻塞. 我們將在第 6 章涉及阻塞.</p>
+<p>scull 代碼利用了這些規則. 特別地, 它利用了部分讀規則. 每個 scull_read 調用只處理單個數據量子, 不實現一個循環來收集所有的數據; 這使得代碼更短更易讀. 如果讀程序確實需要更多數據, 它重新調用. 如果標準 I/O 庫(例如, fread)用來讀取設備, 應用程序甚至不會注意到數據傳送的量子化.</p>
+<p>如果當前讀取位置大於設備大小, scull 的 read 方法返回 0 來表示沒有可用的數據(換句話說, 我們在文件尾). 這個情況發生在如果進程 A 在讀設備, 同時進程 B 打開它寫, 這樣將設備截短為 0. 進程 A 突然發現自己過了文件尾, 下一個讀調用返回 0.</p>
+<p>這是 read 的代碼( 忽略對 down_interruptible 的調用並且現在為 up; 我們在下一章中討論它們):</p>
+<pre class="programlisting">
+ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_pos)
+{
+        struct scull_dev *dev = filp-&gt;private_data;
+        struct scull_qset *dptr; /* the first listitem */
+        int quantum = dev-&gt;quantum, qset = dev-&gt;qset;
+        int itemsize = quantum * qset; /* how many bytes in the listitem */
+        int item, s_pos, q_pos, rest;
+        ssize_t retval = 0;
+
+        if (down_interruptible(&amp;dev-&gt;sem))
+                return -ERESTARTSYS;
+        if (*f_pos &gt;= dev-&gt;size)
+                goto out;
+        if (*f_pos + count &gt; dev-&gt;size)
+                count = dev-&gt;size - *f_pos;
+
+        /* find listitem, qset index, and offset in the quantum */
+        item = (long)*f_pos / itemsize;
+        rest = (long)*f_pos % itemsize;
+        s_pos = rest / quantum;
+        q_pos = rest % quantum;
+
+        /* follow the list up to the right position (defined elsewhere) */
+        dptr = scull_follow(dev, item);
+        if (dptr == NULL || !dptr-&gt;data || ! dptr-&gt;data[s_pos])
+                goto out; /* don't fill holes */
+
+        /* read only up to the end of this quantum */
+        if (count &gt; quantum - q_pos)
+                count = quantum - q_pos;
+
+        if (copy_to_user(buf, dptr-&gt;data[s_pos] + q_pos, count))
+        {
+                retval = -EFAULT;
+                goto out;
+
+        }
+        *f_pos += count;
+        retval = count;
+
+out:
+        up(&amp;dev-&gt;sem);
+        return retval;
+}
+</pre>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ThewriteMethod.sect"></a>3.7.2.&#160;write 方法</h3></div></div></div>
+<p>write, 象 read, 可以傳送少於要求的數據, 根據返回值的下列規則:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>如果值等於 count, 要求的字節數已被傳送.</p></li>
+<li><p>如果正值, 但是小於 count, 只有部分數據被傳送. 程序最可能重試寫入剩下的數據.</p></li>
+<li><p>如果值為 0, 什麼沒有寫. 這個結果不是一個錯誤, 沒有理由返回一個錯誤碼. 再一次, 標準庫重試寫調用. 我們將在第 6 章查看這種情況的確切含義, 那裡介紹了阻塞.</p></li>
+<li><p>一個負值表示發生一個錯誤; 如同對於讀, 有效的錯誤值是定義於 &lt;linux/errno.h&gt;中.</p></li>
+</ul></div>
+<p>不幸的是, 仍然可能有發出錯誤消息的不當行為程序, 它在進行了部分傳送時終止. 這是因為一些程序員習慣看寫調用要麼完全失敗要麼完全成功, 這實際上是大部分時間的情況, 應當也被設備支持. scull 實現的這個限制可以修改, 但是我們不想使代碼不必要地複雜.</p>
+<p>write 的 scull 代碼一次處理單個量子, 如 read 方法做的:</p>
+<pre class="programlisting">
+ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
+{
+        struct scull_dev *dev = filp-&gt;private_data;
+        struct scull_qset *dptr;
+        int quantum = dev-&gt;quantum, qset = dev-&gt;qset;
+        int itemsize = quantum * qset;
+        int item, s_pos, q_pos, rest;
+        ssize_t retval = -ENOMEM; /* value used in "goto out" statements */
+        if (down_interruptible(&amp;dev-&gt;sem))
+                return -ERESTARTSYS;
+
+        /* find listitem, qset index and offset in the quantum */
+        item = (long)*f_pos / itemsize;
+        rest = (long)*f_pos % itemsize;
+        s_pos = rest / quantum;
+        q_pos = rest % quantum;
+        /* follow the list up to the right position */
+        dptr = scull_follow(dev, item);
+        if (dptr == NULL)
+                goto out;
+        if (!dptr-&gt;data)
+        {
+                dptr-&gt;data = kmalloc(qset * sizeof(char *), GFP_KERNEL);
+                if (!dptr-&gt;data)
+                        goto out;
+                memset(dptr-&gt;data, 0, qset * sizeof(char *));
+        }
+        if (!dptr-&gt;data[s_pos])
+        {
+                dptr-&gt;data[s_pos] = kmalloc(quantum, GFP_KERNEL);
+                if (!dptr-&gt;data[s_pos])
+
+                        goto out;
+        }
+        /* write only up to the end of this quantum */
+        if (count &gt; quantum - q_pos)
+
+                count = quantum - q_pos;
+        if (copy_from_user(dptr-&gt;data[s_pos]+q_pos, buf, count))
+        {
+                retval = -EFAULT;
+                goto out;
+
+        }
+        *f_pos += count;
+        retval = count;
+
+        /* update the size */
+        if (dev-&gt;size &lt; *f_pos)
+                dev-&gt;size = *f_pos;
+
+out:
+        up(&amp;dev-&gt;sem);
+        return retval;
+
+}
+</pre>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="readvandwritev.sect"></a>3.7.3.&#160;readv 和 writev</h3></div></div></div>
+<p>Unix 系統已經長時間支持名為 readv 和 writev 的 2 個系統調用. 這些 read 和 write 的"矢量"版本使用一個結構數組, 每個包含一個緩存的指針和一個長度值. 一個 readv 調用被期望來輪流讀取指示的數量到每個緩存. 相反, writev 要收集每個緩存的內容到一起並且作為單個寫操作送出它們.</p>
+<p>如果你的驅動不提供方法來處理矢量操作, readv 和 writev 由多次調用你的 read 和 write 方法來實現. 在許多情況, 但是, 直接實現 readv 和 writev 能獲得更大的效率.</p>
+<p>矢量操作的原型是:</p>
+<pre class="programlisting">
+ssize_t (*readv) (struct file *filp, const struct iovec *iov, unsigned long count, loff_t *ppos);
+ssize_t (*writev) (struct file *filp, const struct iovec *iov, unsigned long count, loff_t *ppos);
+</pre>
+<p>這裡, filp 和 ppos 參數與 read 和 write 的相同. iovec 結構, 定義於 &lt;linux/uio.h&gt;, 如同:</p>
+<pre class="programlisting">
+struct iovec
+{
+    void __user *iov_base; __kernel_size_t iov_len;
+};
+</pre>
+<p>每個 iovec 描述了一塊要傳送的數據; 它開始於 iov_base (在用戶空間)並且有 iov_len 字節長. count 參數告訴有多少 iovec 結構. 這些結構由應用程序創建, 但是內核在調用驅動之前拷貝它們到內核空間.</p>
+<p>矢量操作的最簡單實現是一個直接的循環, 只是傳遞出去每個 iovec 的地址和長度給驅動的 read 和 write 函數. 然而, 有效的和正確的行為常常需要驅動更聰明. 例如, 一個磁帶驅動上的 writev 應當將全部 iovec 結構中的內容作為磁帶上的單個記錄.</p>
+<p>很多驅動, 但是, 沒有從自己實現這些方法中獲益. 因此, scull 省略它們. 內核使用 read 和 write 來模擬它們, 最終結果是相同的.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch03s06.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch03.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch03s08.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">3.6.&#160;scull 的內存使用&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;3.8.&#160;使用新設備</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch03s07.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:33 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

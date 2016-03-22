@@ -1,0 +1,204 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch10s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>10.5.&#160;中斷驅動 I/O-Linux設備驅動第三版（中文版）- - </title>
+<meta name="description" content="驅動開發- - " />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發, " />
+<meta name="author" content="  www.21cstar.com QQ:610061171" /> 
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch10.html" title="第&#160;10&#160;章&#160;中斷處理">
+<link rel="prev" href="ch10s04.html" title="10.4.&#160;中斷共享">
+<link rel="next" href="ch10s06.html" title="10.6.&#160;快速參考">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">10.5.&#160;中斷驅動 I/O</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch10s04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;10&#160;章&#160;中斷處理</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch10s06.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="InterruptDrivenIO.sect"></a>10.5.&#160;中斷驅動 I/O</h2></div></div></div>
+<p>無論何時一個數據傳送到或自被管理的硬件可能因為任何原因而延遲, 驅動編寫者應當實現緩存. 數據緩存幫助來分離數據傳送和接收從寫和讀系統調用, 並且整個系統性能受益.</p>
+<p>一個好的緩存機制產生了中斷驅動的 I/O, 一個輸入緩存在中斷時填充並且被讀取設備的進程清空; 一個輸出緩存由寫設備的進程填充並且在中斷時清空. 一個中斷驅動的輸出的例子是 /dev/shortprint 的實現.</p>
+<p>為使中斷驅動的數據傳送成功發生, 硬件應當能夠產生中斷, 使用下列語義:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>對於輸入, 設備中斷處理器, 當新數據到達時, 並且準備好被系統處理器獲取. 進行的實際動作依賴是否設備使用 I/O 端口, 內存映射, 或者 DMA.</p></li>
+<li>對於輸出, 設備遞交一個中斷, 或者當它準備好接受新數據, 或者確認一個成功的數據傳送. 內存映射的和能DMA的設備常常產生中斷來告訴系統它們完成了這個緩存.<p></p>
+</li>
+</ul></div>
+<p>在一個讀或寫與實際數據到達之間的時間關係在第 6 章的"阻塞和非阻塞操作"一節中介紹.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AWriteBufferingExample.sect"></a>10.5.1.&#160;一個寫緩存例子</h3></div></div></div>
+<p>我們已經幾次提及 shortprint 驅動; 現在是時候真正看看. 這個模塊為並口實現一個非常簡單, 面向輸出的驅動; 它是足夠的, 但是, 來使能文件打印. 如果你選擇來測試這個驅動, 但是, 記住你必須傳遞給打印機一個文件以它理解的格式; 不是所有的打印機在給一個任意數據的流時很好響應.</p>
+<p>shortprint 驅動維護一個一頁的環形輸出緩存. 當一個用戶空間進程寫數據到這個設備, 數據被填入緩存, 但是寫方法實際沒有進行任何 I/O. 相反, shortp_write 的核心看來如此:</p>
+<pre class="programlisting">
+while (written &lt; count)
+{
+        /* Hang out until some buffer space is available. */
+        space = shortp_out_space();
+        if (space &lt;= 0) {
+                if (wait_event_interruptible(shortp_out_queue,
+                                             (space = shortp_out_space()) &gt; 0))
+                        goto out;
+        }
+
+        /* Move data into the buffer. */
+        if ((space + written) &gt; count)
+                space = count - written;
+
+        if (copy_from_user((char *) shortp_out_head, buf, space)) {
+                up(&amp;shortp_out_sem);
+                return -EFAULT;
+        }
+        shortp_incr_out_bp(&amp;shortp_out_head, space);
+        buf += space;
+        written += space;
+
+        /* If no output is active, make it active. */
+        spin_lock_irqsave(&amp;shortp_out_lock, flags);
+        if (! shortp_output_active)
+                shortp_start_output();
+        spin_unlock_irqrestore(&amp;shortp_out_lock, flags);
+}
+
+out:
+*f_pos += written;
+</pre>
+<p>一個旗標 ( shortp_out_sem ) 控制對這個環形緩存的存取; shortp_write 就在上面的代碼片段之前獲得這個旗標. 當持有這個旗標, 它試圖輸入數據到這個環形緩存. 函數 shortp_out_space 返回可用的連續空間的數量(因此, 沒有必要擔心緩存迴繞); 如果這個量是 0, 驅動等到釋放一些空間. 它接著拷貝它能夠的數量的數據到緩存中.</p>
+<p>一旦有數據輸出, shortp_write 必須確保數據被寫到設備. 數據的寫是通過一個工作隊列函數完成的; shortp_write 必須啟動這個函數如果它還未在運行. 在獲取了一個單獨的, 控制存取輸出緩存的消費者一側(包括 shortp_output_active)的數據的自旋鎖後, 它調用 shortp_start_output 如果需要. 接著只是注意多少數據被寫到緩存並且返回.</p>
+<p>啟動輸出進程的函數看來如下:</p>
+<pre class="programlisting">
+static void shortp_start_output(void)
+{
+        if (shortp_output_active) /* Should never happen */
+                return;
+
+        /* Set up our 'missed interrupt' timer */
+        shortp_output_active = 1;
+        shortp_timer.expires = jiffies + TIMEOUT;
+        add_timer(&amp;shortp_timer);
+
+        /* And get the process going. */
+        queue_work(shortp_workqueue, &amp;shortp_work);
+}
+</pre>
+<p>處理硬件的事實是, 你可以, 偶爾, 丟失來自設備的中斷. 當發生這個, 你確實不想你的驅動一直停止直到系統重啟; 這不是一個用戶友好的做事方式. 最好是認識到一個中斷已經丟失, 收拾殘局, 繼續. 為此, shortprint 甚至一個內核定時器無論何時它輸出數據給設備. 如果時鐘超時, 我們可能丟失一個中斷. 我們很快會看到定時器函數, 但是, 暫時, 讓我們堅持在主輸出功能上. 那是在我們的工作隊列函數里實現的, 它, 如同你上面看到的, 在這裡被調度. 那個函數的核心看來如下:</p>
+<pre class="programlisting">
+spin_lock_irqsave(&amp;shortp_out_lock, flags);
+/* Have we written everything? */
+if (shortp_out_head == shortp_out_tail)
+{ /* empty */
+        shortp_output_active = 0;
+        wake_up_interruptible(&amp;shortp_empty_queue);
+        del_timer(&amp;shortp_timer);
+
+}
+/* Nope, write another byte */
+else
+        shortp_do_write();
+/* If somebody's waiting, maybe wake them up. */
+if (((PAGE_SIZE + shortp_out_tail -shortp_out_head) % PAGE_SIZE) &gt; SP_MIN_SPACE)
+{
+        wake_up_interruptible(&amp;shortp_out_queue);
+}
+spin_unlock_irqrestore(&amp;shortp_out_lock, flags);
+</pre>
+<p>因為我們在使用共享變量的輸出一側, 我們必須獲得自旋鎖. 接著我們看是否有更多的數據要發送; 如果無, 我們注意輸出不再激活, 刪除定時器, 並且喚醒任何在等待隊列全空的進程(這種等待當設備被關閉時結束). 如果, 相反, 有數據要寫, 我們調用 shortp_do_write 來實際發送一個字節到硬件.</p>
+<p>接著, 因為我們可能在輸出緩存中有空閒空間, 我們考慮喚醒任何等待增加更多數據給那個緩存的進程. 但是我們不是無條件進行喚醒; 相反, 我們等到有一個最低數量的空間. 每次我們從緩存拿出一個字節就喚醒一個寫者是無意義的; 喚醒進程的代價, 調度它運行, 並且使它重回睡眠, 太高了. 相反, 我們應當等到進程能夠立刻移動相當數量的數據到緩存. 這個技術在緩存的, 中斷驅動的驅動中是普通的.</p>
+<p>為完整起見, 這是實際寫數據到端口的代碼:</p>
+<pre class="programlisting">
+static void shortp_do_write(void)
+{
+        unsigned char cr = inb(shortp_base + SP_CONTROL);
+        /* Something happened; reset the timer */
+        mod_timer(&amp;shortp_timer, jiffies + TIMEOUT);
+        /* Strobe a byte out to the device */
+        outb_p(*shortp_out_tail, shortp_base+SP_DATA);
+        shortp_incr_out_bp(&amp;shortp_out_tail, 1);
+        if (shortp_delay)
+                udelay(shortp_delay);
+        outb_p(cr | SP_CR_STROBE, shortp_base+SP_CONTROL);
+        if (shortp_delay)
+                udelay(shortp_delay);
+        outb_p(cr &amp; ~SP_CR_STROBE, shortp_base+SP_CONTROL);
+}
+</pre>
+<p>這裡, 我們復位定時器來反映一個事實, 我們已經作了一些處理, 輸送字節到設備, 並且更新了環形緩存指針.</p>
+<p>工作隊列函數沒有直接重新提交它自己, 因此只有一個單個字節會被寫入設備. 在某一處, 打印機將, 以它的緩慢方式, 消耗這個字節並且準備好下一個; 它將接著中斷處理器. shortprint 中使用的中斷處理是簡短的:</p>
+<pre class="programlisting">
+static irqreturn_t shortp_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+        if (! shortp_output_active)
+                return IRQ_NONE;
+        /* Remember the time, and farm off the rest to the workqueue function */
+        do_gettimeofday(&amp;shortp_tv);
+        queue_work(shortp_workqueue, &amp;shortp_work);
+        return IRQ_HANDLED;
+}
+</pre>
+<p>因為並口不要求一個明顯的中斷確認, 中斷處理所有真正需要做的是告知內核來再次運行工作隊列函數.</p>
+<p>如果中斷永遠不來如何? 至此我們已見到的驅動代碼將簡單地停止. 為避免發生這個, 我們設置了一個定時器在幾頁前. 當定時器超時運行的函數是:</p>
+<pre class="programlisting">
+static void shortp_timeout(unsigned long unused) 
+{
+        unsigned long flags;
+        unsigned char status;
+        if (! shortp_output_active)
+                return;
+        spin_lock_irqsave(&amp;shortp_out_lock, flags);
+        status = inb(shortp_base + SP_STATUS);
+
+        /* If the printer is still busy we just reset the timer */
+        if ((status &amp; SP_SR_BUSY) == 0 || (status &amp; SP_SR_ACK)) {
+
+                shortp_timer.expires = jiffies + TIMEOUT;
+                add_timer(&amp;shortp_timer);
+                spin_unlock_irqrestore(&amp;shortp_out_lock, flags);
+                return;
+        }
+        /* Otherwise we must have dropped an interrupt. */
+        spin_unlock_irqrestore(&amp;shortp_out_lock, flags);
+        shortp_interrupt(shortp_irq, NULL, NULL);
+}
+</pre>
+<p>如果沒有輸出要被激活, 定時器函數簡單地返回. 這避免了定時器重新提交自己, 當事情在被關閉時. 接著, 在獲得了鎖之後, 我們查詢端口的狀態; 如果它聲稱忙, 它完全還沒有時間來中斷我們, 因此我們復位定時器並且返回. 打印機能夠, 有時, 花很長時間來使自己準備; 考慮一下缺紙的打印機, 而每個人在一個長週末都不在. 在這種情況下, 只有耐心等待直到事情改變.</p>
+<p>但是, 如果打印機聲稱準備好了, 我們一定丟失了它的中斷. 這個情況下, 我們簡單地手動調用我們的中斷處理來使輸出處理再動起來.</p>
+<p>shortpirnt 驅動不支持從端口讀數據; 相反, 它像 shortint 並且返回中斷時間信息. 但是一個中斷驅動的讀方法的實現可能非常類似我們已經見到的. 從設備來的數據可能被讀入驅動緩存; 它可能被拷貝到用戶空間只在緩存中已經累積了相當數量的數據, 完整的讀請求已被滿足, 或者某種超時發生.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch10s04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch10.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch10s06.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">10.4.&#160;中斷共享&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;10.6.&#160;快速參考</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch10s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:34 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

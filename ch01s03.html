@@ -1,0 +1,72 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch01s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:31 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>1.3.&#160;設備和模塊的分類-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch01.html" title="第&#160;1&#160;章&#160;第一章 設備驅動簡介">
+<link rel="prev" href="ch01s02.html" title="1.2.&#160;劃分內核">
+<link rel="next" href="ch01s04.html" title="1.4.&#160;安全問題">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">1.3.&#160;設備和模塊的分類</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch01s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;1&#160;章&#160;第一章 設備驅動簡介</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch01s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="ClassesofDevicesand.sect1"></a>1.3.&#160;設備和模塊的分類</h2></div></div></div>
+<p>以 LInux 的方式看待設備可區分為 3 種基本設備類型. 每個模塊常常實現 3 種類型中的 1 種, 因此可分類成字符模塊, 塊模塊, 或者一個網絡模塊. 這種將模塊分成不同類型或類別的方法並非是固定不變的; 程序員可以選擇建立在一個大塊代碼中實現了不同驅動的巨大模塊. 但是, 好的程序員, 常常創建一個不同的模塊給每個它們實現的新功能, 因為分解是可伸縮性和可擴張性的關鍵因素.</p>
+<p>3 類驅動如下:</p>
+<div class="variablelist">
+<p>既然不是一個面向流的設備, 一個網絡接口就不像 /dev/tty1 那麼容易映射到文件系統的一個結點上. Unix 的提供對接口的存取的方式仍然是通過分配一個名子給它們( 例如 eth0 ), 但是這個名子在文件系統中沒有對應的入口. 內核與網絡設備驅動間的通訊與字符和塊設備驅動所用的完全不同. 不用 read 和 write, 內核調用和報文傳遞相關的函數.</p>
+<dl>
+<dt><span class="term"><span>字符設備</span></span></dt>
+<dd><p>一個字符( char ) 設備是一種可以當作一個字節流來存取的設備( 如同一個文件 ); 一個字符驅動負責實現這種行為. 這樣的驅動常常至少實現 open, close, read, 和 write 系統調用. 文本控制台( /dev/console )和串口( /dev/ttyS0 及其友 )是字符設備的例子, 因為它們很好地展現了流的抽像. 字符設備通過文件系統結點來存取, 例如 /dev/tty1 和 /dev/lp0. 在一個字符設備和一個普通文件之間唯一有關的不同就是, 你經常可以在普通文件中移來移去, 但是大部分字符設備僅僅是數據通道, 你只能順序存取.然而, 存在看起來像數據區的字符設備, 你可以在裡面移來移去. 例如, frame grabber 經常這樣, 應用程序可以使用 mmap 或者 lseek 存取整個要求的圖像.</p></dd>
+<dt><span class="term"><span>塊設備</span></span></dt>
+<dd><p>如同字符設備, 塊設備通過位於 /dev 目錄的文件系統結點來存取. 一個塊設備(例如一個磁盤)應該是可以駐有一個文件系統的. 在大部分的 Unix 系統, 一個塊設備只能處理這樣的 I/O 操作, 傳送一個或多個長度經常是 512 字節( 或一個更大的 2 的冪的數 )的整塊. Linux, 相反, 允許應用程序讀寫一個塊設備像一個字符設備一樣 -- 它允許一次傳送任意數目的字節. 結果就是, 塊和字符設備的區別僅僅在內核在內部管理數據的方式上, 並且因此在內核/驅動的軟件接口上不同. 如同一個字符設備, 每個塊設備都通過一個文件系統結點被存取的, 它們之間的區別對用戶是透明的. 塊驅動和字符驅動相比, 與內核的接口完全不同.</p></dd>
+<dt><span class="term"><span>網絡接口</span></span></dt>
+<dd><p>任何網絡事務都通過一個接口來進行, 就是說, 一個能夠與其他主機交換數據的設備. 通常, 一個接口是一個硬件設備, 但是它也可能是一個純粹的軟件設備, 比如環回接口. 一個網絡接口負責發送和接收數據報文, 在內核網絡子系統的驅動下, 不必知道單個事務是如何映射到實際的被發送的報文上的. 很多網絡連接( 特別那些使用 TCP 的)是面向流的, 但是網絡設備卻常常設計成處理報文的發送和接收. 一個網絡驅動對單個連接一無所知; 它只處理報文.</p></dd>
+</dl>
+</div>
+<p>有其他的劃分驅動模塊的方式, 與上面的設備類型是正交的. 通常, 某些類型的驅動與給定類型設備的其他層的內核支持函數一起工作. 例如, 你可以說 USB 模塊, 串口模塊, SCSI 模塊, 等等. 每個 USB 設備由一個 USB 模塊驅動, 與 USB 子系統一起工作, 但是設備自身在系統中表現為一個字符設備( 比如一個 USB 串口 ), 一個塊設備( 一個 USB 內存讀卡器 ), 或者一個網絡設備( 一個 USB 以太網接口 ).</p>
+<p>另外的設備驅動類別近來已經添加到內核中, 包括 FireWire 驅動和 I2O 驅動. 以它們處理 USB 和 SCSI 驅動相同的方式, 內核開發者集合了類別範圍內的特性, 並把它們輸出給驅動實現者, 以避免重複工作和 bug, 因此簡化和加強了編寫類似驅動的過程.</p>
+<p>在設備驅動之外, 別的功能, 不論硬件和軟件, 在內核中都是模塊化的. 一個普通的例子是文件系統. 一個文件系統類型決定了在塊設備上信息是如何組織的, 以便能表示一棵目錄與文件的樹. 這樣的實體不是設備驅動, 因為沒有明確的設備與信息擺放方式相聯繫; 文件系統類型卻是一種軟件驅動, 因為它將低級數據結構映射為高級的數據結構. 文件系統決定一個文件名多長, 以及在一個目錄入口中存儲每個文件的什麼信息. 文件系統模塊必須實現最低級的系統調用, 來存取目錄和文件, 通過映射文件名和路徑( 以及其他信息, 例如存取模式 )到保存在數據塊中的數據結構. 這樣的一個接口是完全與數據被傳送來去磁盤( 或其他介質 )相互獨立, 這個傳送是由一個塊設備驅動完成的.</p>
+<p>如果你考慮一個 Unix 系統是多麼依賴下面的文件系統, 你會認識到這樣的一個軟件概念對系統操作是至關重要的. 解碼文件系統信息的能力處於內核層級中最低級, 並且是最重要的; 甚至如果你為你的新 CD-ROM 編寫塊驅動, 如果你對上面的數據不能運行 ls 或者 cp 就毫無用處. Linux 支持一個文件系統模塊的概念, 其軟件接口聲明了不同操作, 可以在一個文件系統節點, 目錄, 文件和超級塊上進行操作. 對一個程序員來說, 居然需要編寫一個文件系統模塊是非常不常見的, 因為官方內核已經包含了大部分重要的文件系統類型的代碼. </p>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch01s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch01.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch01s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">1.2.&#160;劃分內核&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;1.4.&#160;安全問題</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch01s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:31 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

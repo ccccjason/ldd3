@@ -1,0 +1,177 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch16s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:42 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>16.5.&#160;快速參考-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch16.html" title="第&#160;16&#160;章&#160;塊驅動">
+<link rel="prev" href="ch16s04.html" title="16.4.&#160;一些其他的細節">
+<link rel="next" href="ch17.html" title="第&#160;17&#160;章&#160;網絡驅動">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">16.5.&#160;快速參考</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch16s04.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;16&#160;章&#160;塊驅動</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch17.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="BlockDriversqr.sect1"></a>16.5.&#160;快速參考</h2></div></div></div>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>#include &lt;linux/fs.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int register_blkdev(unsigned int major, const char *name);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int unregister_blkdev(unsigned int major, const char *name);</span></span></dt>
+<dd><p>register_blkdev 註冊一個塊驅動到內核, 並且, 可選地, 獲得一個主編號. 一個驅動可被註銷, 使用 unregister_blkdev.</p></dd>
+<dt><span class="term"><span>struct block_device_operations </span></span></dt>
+<dd><p>持有大部分塊驅動的方法的結構.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/genhd.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct gendisk;</span></span></dt>
+<dd><p>描述內核中單個塊設備的結構.</p></dd>
+<dt><span class="term"><span>struct gendisk *alloc_disk(int minors);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void add_disk(struct gendisk *gd);</span></span></dt>
+<dd><p>分配 gendisk 結構的函數, 並且返回它們到系統. </p></dd>
+<dt><span class="term"><span>void set_capacity(struct gendisk *gd, sector_t sectors);</span></span></dt>
+<dd><p>存儲設備能力(以 512-字節)在 gendisk 結構中. </p></dd>
+<dt><span class="term"><span>void add_disk(struct gendisk *gd);</span></span></dt>
+<dd><p>添加一個磁盤到內核. 一旦調用這個函數, 你的磁盤的方法可被內核調用. </p></dd>
+<dt><span class="term"><span>int check_disk_change(struct block_device *bdev);</span></span></dt>
+<dd><p>一個內核函數, 檢查在給定磁盤驅動器中的介質改變, 並且採取要求的清理動作當檢測到這樣一個改變.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/blkdev.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>request_queue_t blk_init_queue(request_fn_proc *request, spinlock_t *lock);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_cleanup_queue(request_queue_t *);</span></span></dt>
+<dd><p>處理塊請求隊列的創建和刪除的函數.</p></dd>
+<dt><span class="term"><span>struct request *elv_next_request(request_queue_t *queue);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void end_request(struct request *req, int success);</span></span></dt>
+<dd><p>elv_next_request 從一個請求隊列中獲得下一個請求; end_request 可用在每個簡單驅動器中來標識一個(或部分)請求完成.</p></dd>
+<dt><span class="term"><span>void blkdev_dequeue_request(struct request *req);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void elv_requeue_request(request_queue_t *queue, struct request *req);</span></span></dt>
+<dd><p>從隊列中除去一個請求, 並且放回它的函數如果需要.</p></dd>
+<dt><span class="term"><span>void blk_stop_queue(request_queue_t *queue);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_start_queue(request_queue_t *queue);</span></span></dt>
+<dd><p>如果你需要阻止對你的請求函數的進一步調用, 調用 blk_stop_queue 來完成. 調用 blk_start_queue 來使你的請求方法被再次調用.</p></dd>
+<dt><span class="term"><span>void blk_queue_bounce_limit(request_queue_t *queue, u64 dma_addr);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_max_sectors(request_queue_t *queue, unsigned short max);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_max_phys_segments(request_queue_t *queue, unsigned short max);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_max_hw_segments(request_queue_t *queue, unsigned short max);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_max_segment_size(request_queue_t *queue, unsigned int max);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>blk_queue_segment_boundary(request_queue_t *queue, unsigned long mask);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_dma_alignment(request_queue_t *queue, int mask);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_hardsect_size(request_queue_t *queue, unsigned short max);</span></span></dt>
+<dd><p>設置各種隊列參數的函數, 來控制請求如何被創建給一個特殊設備; 這些參數在"隊列控制函數"一節中描述.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/bio.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct bio;</span></span></dt>
+<dd><p>低級函數, 表示一個塊 I/O 請求的一部分.</p></dd>
+<dt><span class="term"><span>bio_sectors(struct bio *bio);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>bio_data_dir(struct bio *bio);</span></span></dt>
+<dd><p>2 個宏定義, 表示一個由 bio 結構描述的傳送的大小和方向.</p></dd>
+<dt><span class="term"><span>bio_for_each_segment(bvec, bio, segno);</span></span></dt>
+<dd><p>一個偽控制結構, 用來循環組成一個 bio 結構的各個段.</p></dd>
+<dt><span class="term"><span>char *__bio_kmap_atomic(struct bio *bio, int i, enum km_type type);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void __bio_kunmap_atomic(char *buffer, enum km_type type);</span></span></dt>
+<dd><p>__bio_kmap_atomic 可用來創建一個內核虛擬地址給一個在 bio 結構中的給定的段. 映射必須使用 __bio_kunmap_atomic 來恢復.</p></dd>
+<dt><span class="term"><span>struct page *bio_page(struct bio *bio);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int bio_offset(struct bio *bio);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int bio_cur_sectors(struct bio *bio);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>char *bio_data(struct bio *bio);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>char *bio_kmap_irq(struct bio *bio, unsigned long *flags);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void bio_kunmap_irq(char *buffer, unsigned long *flags);</span></span></dt>
+<dd><p>一組存取者宏定義, 提供對一個 bio 結構中的"當前"段的存取.</p></dd>
+<dt><span class="term"><span>void blk_queue_ordered(request_queue_t *queue, int flag);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int blk_barrier_rq(struct request *req);</span></span></dt>
+<dd><p>如果你的驅動實現屏障請求, 調用 blk_queue_ordered -- 如同它應當做的. 宏 blk_barrier_rq 返回一個非零值如果當前請求是一個屏障請求.</p></dd>
+<dt><span class="term"><span>int blk_noretry_request(struct request *req);</span></span></dt>
+<dd><p>這個宏返回一個非零值, 如果給定的請求不應當在出錯時重新嘗試.</p></dd>
+<dt><span class="term"><span>int end_that_request_first(struct request *req, int success, int count);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void end_that_request_last(struct request *req);</span></span></dt>
+<dd><p>使用 end_that_request_firest 來指示一個塊 I/O 請求的一部分完成. 當那個函數返回 0, 請求完成並且應當被傳遞給 end_that_request_last.</p></dd>
+<dt><span class="term"><span>rq_for_each_bio(bio, request)</span></span></dt>
+<dd><p>另一個用宏定義來實現的控制結構; 它步入構成一個請求的每個 bio.</p></dd>
+<dt><span class="term"><span>int blk_rq_map_sg(request_queue_t *queue, struct request *req, struct scatterlist *list);</span></span></dt>
+<dd><p>為一次 DMA 傳送填充給定的散佈表, 用需要來映射給定請求中的緩衝的信息</p></dd>
+<dt><span class="term"><span>typedef int (make_request_fn) (request_queue_t *q, struct bio *bio);</span></span></dt>
+<dd><p>make_request 函數的原型.</p></dd>
+<dt><span class="term"><span>void bio_endio(struct bio *bio, unsigned int bytes, int error);</span></span></dt>
+<dd><p>指示一個給定 bio 的完成. 這個函數應當只用在你的驅動直接獲取 bio , 通過 make_request 函數從塊層.</p></dd>
+<dt><span class="term"><span>request_queue_t *blk_alloc_queue(int flags);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_make_request(request_queue_t *queue, make_request_fn *func);</span></span></dt>
+<dd><p>使用 blk_alloc_queue 來分配由定制的 make_request 函數使用的請求隊列, . 那個函數應當使用 blk_queue_make_request 來設置.</p></dd>
+<dt><span class="term"><span>typedef int (prep_rq_fn) (request_queue_t *queue, struct request *req);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_prep_rq(request_queue_t *queue, prep_rq_fn *func);</span></span></dt>
+<dd><p>一個命令準備函數的原型和設置函數, 它可用來準備必要的硬件命令, 在請求被傳遞給你的請求函數之前.</p></dd>
+<dt><span class="term"><span>int blk_queue_init_tags(request_queue_t *queue, int depth, struct blk_queue_tag *tags);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int blk_queue_resize_tags(request_queue_t *queue, int new_depth);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>int blk_queue_start_tag(request_queue_t *queue, struct request *req);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_end_tag(request_queue_t *queue, struct request *req);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>struct request *blk_queue_find_tag(request_queue_t *qeue, int tag);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void blk_queue_invalidate_tags(request_queue_t *queue);</span></span></dt>
+<dd><p>驅動使用被標記的命令隊列的支持函數.</p></dd>
+</dl></div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch16s04.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch16.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch17.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">16.4.&#160;一些其他的細節&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;第&#160;17&#160;章&#160;網絡驅動</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch16s05.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:42 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

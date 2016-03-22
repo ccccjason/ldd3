@@ -1,0 +1,303 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch15.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;15&#160;章&#160;內存映射和 DMA -Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch14s09.html" title="14.9.&#160;快速參考">
+<link rel="next" href="ch15s02.html" title="15.2.&#160;mmap 設備操作">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;15&#160;章&#160;內存映射和 DMA </th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch14s09.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch15s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="MemoryMappingandDMA.chap"></a>第&#160;15&#160;章&#160;內存映射和 DMA </h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch15.html#MemoryManagementinLinux.sect1">15.1. Linux 中的內存管理</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch15.html#AddressTypes.sect2">15.1.1. 地址類型</a></span></dt>
+<dt><span class="sect2"><a href="ch15.html#PhsicalAddressesandPages.sect2">15.1.2. 物理地址和頁</a></span></dt>
+<dt><span class="sect2"><a href="ch15.html#HighandLowMemory.sect2">15.1.3. 高和低內存</a></span></dt>
+<dt><span class="sect2"><a href="ch15.html#TheMemoryMapandStructPage.sect2">15.1.4. 內存映射和 struct page</a></span></dt>
+<dt><span class="sect2"><a href="ch15.html#PageTables.sect2">15.1.5. 頁表</a></span></dt>
+<dt><span class="sect2"><a href="ch15.html#VirtualMemoryAreas.sect2">15.1.6. 虛擬內存區</a></span></dt>
+<dt><span class="sect2"><a href="ch15.html#TheProcessMemoryMap.sect2">15.1.7. 進程內存映射</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch15s02.html">15.2. mmap 設備操作</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch15s02.html#Usingremap_pfn_range.sect2">15.2.1. 使用 remap_pfn_range</a></span></dt>
+<dt><span class="sect2"><a href="ch15s02.html#ASimpleImplementation.sect2">15.2.2. 一個簡單的實現</a></span></dt>
+<dt><span class="sect2"><a href="ch15s02.html#AddingVMAOperations.sect2">15.2.3. 添加 VMA 的操作</a></span></dt>
+<dt><span class="sect2"><a href="ch15s02.html#MappingMemorywithnopage.sect2">15.2.4. 使用 nopage 映射內存</a></span></dt>
+<dt><span class="sect2"><a href="ch15s02.html#RemappingSpecificIORegions.sect2">15.2.5. 重新映射特定 I/O 區</a></span></dt>
+<dt><span class="sect2"><a href="ch15s02.html#RemappingRAM.sect2">15.2.6. 重新映射 RAM</a></span></dt>
+<dt><span class="sect2"><a href="ch15s02.html#RemappingKernelVirtualAddresses.sect2">15.2.7. 重映射內核虛擬地址</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch15s03.html">15.3. 進行直接 I/O</a></span></dt>
+<dd><dl><dt><span class="sect2"><a href="ch15s03.html#AsynchronousIO.sect2">15.3.1. 異步 I/O</a></span></dt></dl></dd>
+<dt><span class="sect1"><a href="ch15s04.html">15.4. 直接內存存取</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch15s04.html#OverviewofDMADataTransfer.sect2">15.4.1. 一個 DMA 數據傳輸的概況</a></span></dt>
+<dt><span class="sect2"><a href="ch15s04.html#AllocationgtheDMABuffer.sect2">15.4.2. 分配 DMA 緩衝</a></span></dt>
+<dt><span class="sect2"><a href="ch15s04.html#BusAddresses.sect2">15.4.3. 總線地址</a></span></dt>
+<dt><span class="sect2"><a href="ch15s04.html#TheGenericDMALayer.sect2">15.4.4. 通用 DMA 層</a></span></dt>
+<dt><span class="sect2"><a href="ch15s04.html#DMAforISADevices.sect2">15.4.5. ISA 設備的 DMA</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch15s05.html">15.5. 快速參考</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch15s05.html#IntroductoryMaterial.sect2">15.5.1. 介紹性材料</a></span></dt>
+<dt><span class="sect2"><a href="ch15s05.html#Implementingmmap.sect2">15.5.2. 實現 mmap</a></span></dt>
+<dt><span class="sect2"><a href="ch15s05.html#ImplementingDirectIO.sect2">15.5.3. 實現直接 I/O</a></span></dt>
+<dt><span class="sect2"><a href="ch15s05.html#DirectMemoryAccess.sect2">15.5.4. 直接內存存取</a></span></dt>
+</dl></dd>
+</dl>
+</div>
+<p>本章研究 Linux 內存管理的部分, 重點在對於設備驅動作者有用的技術. 許多類型的驅動編程需要一些對於虛擬內存子系統如何工作的理解; 我們在本章涉及到的材料來自手頭, 而不是像我們曾進入更加複雜和性能關鍵的子系統一樣. 虛擬內存子系統也是 Linux 內核核心的非常有趣的部分, 並且因而, 值得一見.</p>
+<p>本章的材料分為 3 個部分:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>第一部分涉及 mmap 系統調用的實現, 它允許設備內存直接映射到一個用戶進程地址空間. 不是所有的設備需要 mmap 支持, 但是, 對一些, 映射設備內存可產生可觀的性能提高.</p></li>
+<li><p>我們接著看從其他的方向跨過邊界, 用對直接存取用戶空間的討論. 相對少驅動需要這個能力; 在大部分情況下, 內核做這種映射而驅動甚至不知道它. 但是瞭解如何映射用戶空間內存到內核(使用 get_user_pages)會有用.</p></li>
+<li><p>最後一節涵蓋直接內存存取( DMA ) I/O 操作, 它提供給外設對系統內存的直接存取.</p></li>
+</ul></div>
+<p>當然, 所有這些技術需要一個對 Linux 內存管理如何工作的理解, 因此我們從對這個子系統的總覽開始.</p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="MemoryManagementinLinux.sect1"></a>15.1.&#160;Linux 中的內存管理</h2></div></div></div>
+<p>不是描述操作系統的內存管理理論, 本節試圖指出 Linux 實現的主要特點. 儘管你不必是一位 Linux 虛擬內存專家來實現 mmap, 一個對事情如何工作的基本瞭解是有用的. 下面是一個相當長的對內核使用來管理內存的數據結構的描述. 一旦必要的背景已被覆蓋, 我們就進入使用這個結構.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AddressTypes.sect2"></a>15.1.1.&#160;地址類型</h3></div></div></div>
+<p>Linux 是, 當然, 一個虛擬內存系統, 意味著用戶程序見到的地址不直接對應於硬件使用的物理地址. 虛擬內存引入了一個間接層, 它允許了許多好事情. 有了虛擬內存, 系統重運行的程序可以分配遠多於物理上可用的內存; 確實, 即便一個單個進程可擁有一個虛擬地址空間大於系統的物理內存. 虛擬內存也允許程序對進程的地址空間運用多種技巧, 包括映射成員的內存到設備內存.</p>
+<p>至此, 我們已經討論了虛擬和物理地址, 但是許多細節被掩蓋過去了. Linux 系統處理幾種類型的地址, 每個有它自己的含義. 不幸的是, 內核代碼不是一直非常清楚確切地在每個情況下在使用什麼類型地地址, 因此程序員必須小心.</p>
+<p>下面是一個 Linux 中使用的地址類型列表. 圖 <a href="ch15.html#ldd3-15-1.fig" title="圖&#160;15.1.&#160;Linux 中使用的地址類型">Linux 中使用的地址類型</a>顯示了這個地址類型如何關聯到物理內存.</p>
+<div class="figure">
+<a name="ldd3-15-1.fig"></a><p class="title"><b>圖&#160;15.1.&#160;Linux 中使用的地址類型</b></p>
+<div><img src="images/snagitldd3/ldd3-15-1.png" alt="Linux 中使用的地址類型"></div>
+</div>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>User virtual addresses </span></span></dt>
+<dd><p>這是被用戶程序見到的常規地址. 用戶地址在長度上是 32 位或者 64 位, 依賴底層的硬件結構, 並且每個進程有它自己的虛擬地址空間.</p></dd>
+<dt><span class="term"><span>Physical addresses </span></span></dt>
+<dd><p>在處理器和系統內存之間使用的地址. 物理地址是 32- 或者 64-位的量; 甚至 32-位系統在某些情況下可使用更大的物理地址.</p></dd>
+<dt><span class="term"><span>Bus addresses </span></span></dt>
+<dd><p>在外設和內存之間使用的地址. 經常, 它們和被處理器使用的物理地址相同, 但是這不是必要的情況. 一些體系可提供一個 I/O 內存管理單元(IOMMU), 它在總線和主內存之間重映射地址. 一個 IOMMU 可用多種方法使事情簡單(例如, 使散佈在內存中的緩衝對設備看來是連續的, 例如), 但是當設定 DMA 操作時對 IOMMU 編程是一個必須做的額外的步驟. 總線地址是高度特性依賴的, 當然.</p></dd>
+<dt><span class="term"><span>Kernel logical addresses </span></span></dt>
+<dd><p>這些組成了正常的內核地址空間. 這些地址映射了部分(也許全部)主存並且常常被當作它們是物理內存來對待. 在大部分的體繫上, 邏輯地址和它們的相關物理地址只差一個常量偏移. 邏輯地址使用硬件的本地指針大小並且, 因此, 可能不能在重裝備的 32-位系統上尋址所有的物理內存. 邏輯地址常常存儲於 unsigned long 或者 void * 類型的變量中. 從 kmalloc 返回的內存有內核邏輯地址.</p></dd>
+<dt><span class="term"><span>Kernel virtual addresses </span></span></dt>
+<dd><p>內核虛擬地址類似於邏輯地址, 它們都是從內核空間地址到物理地址的映射. 內核虛擬地址不必有邏輯地址空間具備的線性的, 一對一到物理地址的映射, 但是. 所有的邏輯地址是內核虛擬地址, 但是許多內核虛擬地址不是邏輯地址. 例如, vmalloc 分配的內存有虛擬地址(但沒有直接物理映射). kmap 函數(本章稍後描述)也返回虛擬地址. 虛擬地址常常存儲於指針變量.</p></dd>
+</dl></div>
+<p>如果你有邏輯地址, 宏 __pa() ( 在 &lt;asm/page.h&gt; 中定義)返回它的關聯的物理地址. 物理地址可被映射回邏輯地址使用 __va(), 但是只給低內存頁.</p>
+<p>不同的內核函數需要不同類型地址. 如果有不同的 C 類型被定義可能不錯, 這樣請求的地址類型是明確的, 但是我們沒有這樣的好運. 在本章, 我們盡力對在哪裡使用哪種類型地址保持清晰.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="PhsicalAddressesandPages.sect2"></a>15.1.2.&#160;物理地址和頁</h3></div></div></div>
+<p>物理內存被劃分為離散的單元稱為頁. 系統的許多內部內存處理在按頁的基礎上完成. 頁大小一個體系不同於另一個, 儘管大部分系統當前使用 4096-字節的頁. 常量 PAGE_SIZE (定義在 &lt;asm/page.h&gt;) 給出了頁大小在任何給定的體繫上.</p>
+<p>如果你查看一個內存地址 - 虛擬或物理 - 它可分為一個頁號和一個頁內的偏移. 如果使用 4096-字節頁, 例如, 12 位低有效位是偏移, 並且剩下的, 高位指示頁號. 如果你丟棄偏移並且向右移動剩下的部分 offset 位, 結果被稱為一個頁幀號 (PFN). 移位來在頁幀號和地址之間轉換是一個相當普通的操作. 宏 PAGE_SHIFT 告訴必須移動多少位來進行這個轉換.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="HighandLowMemory.sect2"></a>15.1.3.&#160;高和低內存</h3></div></div></div>
+<p>邏輯和內核虛擬地址之間的不同在配備大量內存的 32-位系統中被突出. 用 32 位, 可能尋址 4 G 內存. 但是, 直到最近, 在 32-位 系統的 Linux 被限制比那個少很多的內存, 因為它建立虛擬地址的方式.</p>
+<p>內核( 在 x86 體繫上, 在缺省配置裡) 在用戶空間和內核之間劃分 4-G 虛擬地址; 在 2 個上下文中使用同一套映射. 一個典型的劃分分出 3 GB 給用戶空間, 和 1 GB 給內核空間. <sup>[<a name="id495351" href="#ftn.id495351">47</a>]</sup>內核的代碼和數據結構必須要適合這個空間, 但是內核地址空間最大的消費者是物理內存的虛擬映射. 內核不能直接操作沒有映射到內核的地址空間. 內核, 換句話說, 需要它自己的虛擬地址給任何它必須直接接觸的內存. 因此, 多年來, 能夠被內核處理的的最大量的物理內存是能夠映射到虛擬地址的內核部分的數量, 減去內核代碼自身需要的空間. 結果, 基於 x86 的 Linux 系統可以工作在最多稍小於 1 GB 物理內存.</p>
+<p>為應對更多內存的商業壓力而不破壞 32-位 應用和系統的兼容性, 處理器製造商已經增加了"地址擴展"特性到他們的產品中. 結果, 在許多情況下, 即便 32-位 處理器也能夠尋址多於 4GB 物理內存. 但是, 多少內存可被直接用邏輯地址映射的限制還存在. 這樣內存的最低部分(上到 1 或 2 GB, 根據硬件和內核配置)有邏輯地址; 剩下的(高內存)沒有. 在存取一個特定高地址頁之前, 內核必須建立一個明確的虛擬映射來使這個也在內核地址空間可用. 因此, 許多內核數據結構必須放在低內存; 高內存用作被保留為用戶進程頁.</p>
+<p>術語"高內存"對有些人可能是疑惑的, 特別因為它在 PC 世界裡有其他的含義. 因此, 為清晰起見, 我們將定義這些術語:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>Low memory </span></span></dt>
+<dd><p>邏輯地址在內核空間中存在的內存. 在大部分每個系統你可能會遇到, 所有的內存都是低內存.</p></dd>
+<dt><span class="term"><span>High memory </span></span></dt>
+<dd><p>邏輯地址不存在的內存, 因為它在為內核虛擬地址設置的地址範圍之外.</p></dd>
+</dl></div>
+<p>在 i386 系統上, 低和高內存之間的分界常常設置在剛剛在 1 GB 之下, 儘管那個邊界在內核配置時可被改變. 這個邊界和在原始 PC 中有的老的 640 KB 限制沒有任何關聯, 並且它的位置不是硬件規定的. 相反, 它是, 內核自身設置的一個限制當它在內核和用戶空間之間劃分 32-位地址空間時.</p>
+<p>我們將指出使用高內存的限制, 隨著我們在本章遇到它們時.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheMemoryMapandStructPage.sect2"></a>15.1.4.&#160;內存映射和 struct page</h3></div></div></div>
+<p>歷史上, 內核已使用邏輯地址來引用物理內存頁. 高內存支持的增加, 但是, 已暴露這個方法的一個明顯的問題 -- 邏輯地址對高內存不可用. 因此, 處理內存的內核函數更多在使用指向 struct page 的指針來代替(在 &lt;linux/mm.h&gt; 中定義). 這個數據結構只是用來跟蹤內核需要知道的關於物理內存的所有事情.</p>
+<p>2.6 內核(帶一個增加的補丁)可以支持一個 "4G/4G" 模式在 x86 硬件上, 它以微弱的性能代價換來更大的內核和用戶虛擬地址空間.</p>
+<p>系統中每一個物理頁有一個 struct page. 這個結構的一些成員包括下列:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>atomic_t count;</span></span></dt>
+<dd><p>這個頁的引用數. 當這個 count 掉到 0, 這頁被返回給空閒列表.</p></dd>
+<dt><span class="term"><span>void *virtual;</span></span></dt>
+<dd><p>這頁的內核虛擬地址, 如果它被映射; 否則, NULL. 低內存頁一直被映射; 高內存頁常常不是. 這個成員不是在所有體繫上出現; 它通常只在頁的內核虛擬地址無法輕易計算時被編譯. 如果你想查看這個成員, 正確的方法是使用 page_address 宏, 下面描述.</p></dd>
+<dt><span class="term"><span>unsigned long flags;</span></span></dt>
+<dd><p>一套描述頁狀態的一套位標誌. 這些包括 PG_locked, 它指示該頁在內存中已被加鎖, 以及 PG_reserved, 它防止內存管理系統使用該頁.</p></dd>
+</dl></div>
+<p>有很多的信息在 struct page 中, 但是它是內存管理的更深的黑魔法的一部分並且和驅動編寫者無關.</p>
+<p>內核維護一個或多個 struct page 項的數組來跟蹤系統中所有物理內存. 在某些系統, 有一個單個數組稱為 mem_map. 但是, 在某些系統, 情況更加複雜. 非一致內存存取( NUMA )系統和那些有很大不連續的物理內存的可能有多於一個內存映射數組, 因此打算是可移植的代碼在任何可能時候應當避免直接對數組存取. 幸運的是, 只是使用 struct page 指針常常是非常容易, 而不用擔心它們來自哪裡.</p>
+<p>有些函數和宏被定義來在 struct page 指針和虛擬地址之間轉換:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>struct page *virt_to_page(void *kaddr);</span></span></dt>
+<dd><p>這個宏, 定義在 &lt;asm/page.h&gt;, 採用一個內核邏輯地址並返回它的被關聯的 struct page 指針. 因為它需要一個邏輯地址, 它不使用來自 vmalloc 的內存或者高內存.</p></dd>
+<dt><span class="term"><span>struct page *pfn_to_page(int pfn);</span></span></dt>
+<dd><p>為給定的頁幀號返回 struct page 指針. 如果需要, 它在傳遞給 pfn_to_page 之前使用 pfn_valid 來檢查一個頁幀號的有效性.</p></dd>
+<dt><span class="term"><span>void *page_address(struct page *page);</span></span></dt>
+<dd><p>返回這個頁的內核虛擬地址, 如果這樣一個地址存在. 對於高內存, 那個地址僅當這個頁已被映射才存在. 這個函數在 &lt;linux/mm.h&gt; 中定義. 大部分情況下, 你想使用 kmap 的一個版本而不是 page_address.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/highmem.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void *kmap(struct page *page);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void kunmap(struct page *page);</span></span></dt>
+<dd><p>kmap 為系統中的任何頁返回一個內核虛擬地址. 對於低內存頁, 它只返回頁的邏輯地址; 對於高內存, kmap 在內核地址空間的一個專用部分中創建一個特殊的映射. 使用 kmap 創建的映射應當一直使用 kunmap 來釋放;一個有限數目的這樣的映射可用, 因此最好不要在它們上停留太長時間. kmap 調用維護一個計數器, 因此如果 2 個或 多個函數都在同一個頁上調用 kmap, 正確的事情發生了. 還要注意 kmap 可能睡眠當沒有映射可用時.</p></dd>
+<dt><span class="term"><span>#include &lt;linux/highmem.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>#include &lt;asm/kmap_types.h&gt;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void *kmap_atomic(struct page *page, enum km_type type);</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>void kunmap_atomic(void *addr, enum km_type type);</span></span></dt>
+<dd><p>kmap_atomic 是 kmap 的一種高性能形式. 每個體系都給原子的 kmaps 維護一小列插口( 專用的頁表項); 一個 kmap_atomic 的調用者必須在 type 參數中告知系統使用這些插口中的哪個. 對驅動有意義的唯一插口是 KM_USER0 和 KM_USER1 (對於直接從來自用戶空間的調用運行的代碼), 以及 KM_IRQ0 和 KM_IRQ1(對於中斷處理). 注意原子的 kmaps 必須被原子地處理; 你的代碼不能在持有一個時睡眠. 還要注意內核中沒有什麼可以阻止 2 個函數試圖使用同一個插口並且相互干擾( 儘管每個 CPU 有獨特的一套插口). 實際上, 對原子的 kmap 插口的競爭看來不是個問題.</p></dd>
+</dl></div>
+<p>在本章後面和後續章節中當我們進入例子代碼時, 我們看到這些函數的一些使用, </p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="PageTables.sect2"></a>15.1.5.&#160;頁表</h3></div></div></div>
+<p>在任何現代系統上, 處理器必須有一個機制來轉換虛擬地址到它的對應物理地址. 這個機制被稱為一個頁表; 它本質上是一個多級樹型結構數組, 包含了虛擬-到-物理的映射和幾個關聯的標誌. Linux 內核維護一套頁表即便在沒有直接使用這樣頁表的體繫上.</p>
+<p>設備驅動通常可以做的許多操作能涉及操作頁表. 幸運的是對於驅動作者, 2.6 內核已經去掉了任何直接使用頁表的需要. 結果是, 我們不描述它們的任何細節; 好奇的讀者可能想讀一下 Understanding The Linux Kernel 來瞭解完整的內容, 作者是 Daniel P. Bovet 和 Marco Cesati (O' Reilly).</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="VirtualMemoryAreas.sect2"></a>15.1.6.&#160;虛擬內存區</h3></div></div></div>
+<p>虛擬內存區( VMA )用來管理一個進程的地址空間的獨特區域的內核數據結構. 一個 VMA 代表一個進程的虛擬內存的一個同質區域: 一個有相同許可標誌和被相同對像(如, 一個文件或者交換空間)支持的連續虛擬地址範圍. 它鬆散地對應於一個"段"的概念, 儘管可以更好地描述為"一個有它自己特性的內存對像". 一個進程的內存映射有下列區組成:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>給程序的可執行代碼(常常稱為 text)的一個區.</p></li>
+<li><p>給數據的多個區, 包括初始化的數據(它有一個明確的被分配的值, 在執行開始), 未初始化數據(BBS), <sup>[<a name="id495847" href="#ftn.id495847">48</a>]</sup>以及程序堆棧.</p></li>
+<li><p>給每個激活的內存映射的一個區域.</p></li>
+</ul></div>
+<p>一個進程的內存區可看到通過 /proc/&lt;pid/maps&gt;(這裡 pid, 當然, 用一個進程的 ID 來替換). /proc/self 是一個 /proc/id 的特殊情況, 因為它常常指當前進程. 作為一個例子, 這裡是幾個內存映射(我們添加了簡短註釋)</p>
+<pre class="screen">
+# cat /proc/1/maps look at init
+08048000-0804e000 r-xp 00000000 03:01 64652 
+0804e000-0804f000 rw-p 00006000 03:01 64652 
+0804f000-08053000 rwxp 00000000 00:00 0
+40000000-40015000 r-xp 00000000 03:01 96278 
+40015000-40016000 rw-p 00014000 03:01 96278 
+40016000-40017000 rw-p 00000000 00:00 0
+42000000-4212e000 r-xp 00000000 03:01 80290 
+4212e000-42131000 rw-p 0012e000 03:01 80290 
+42131000-42133000 rw-p 00000000 00:00 0
+bffff000-c0000000 rwxp 00000000 00:00 0
+ffffe000-fffff000 ---p 00000000 00:00 0
+
+/sbin/init text /sbin/init data zero-mapped BSS /lib/ld-2.3.2.so text /lib/ld-2.3.2.so data BSS for ld.so /lib/tls/libc-2.3.2.so text /lib/tls/libc-2.3.2.so data BSS for libc Stack segment vsyscall page 
+# rsh wolf cat /proc/self/maps #### x86-64 (trimmed)
+00400000-00405000 r-xp 00000000 03:01 1596291 /bin/cat text
+00504000-00505000 rw-p 00004000 03:01 1596291 /bin/cat data
+00505000-00526000 rwxp 00505000 00:00 0 bss
+3252200000-3252214000 r-xp 00000000 03:01 1237890 /lib64/ld-2.3.3.so
+3252300000-3252301000 r--p 00100000 03:01 1237890 /lib64/ld-2.3.3.so
+3252301000-3252302000 rw-p 00101000 03:01 1237890 /lib64/ld-2.3.3.so
+7fbfffe000-7fc0000000 rw-p 7fbfffe000 00:00 0 stack
+ffffffffff600000-ffffffffffe00000 ---p 00000000 00:00 0 vsyscall
+</pre>
+<p>每行的字段是:</p>
+<pre class="screen">
+start-end perm offset major:minor inode image 
+</pre>
+<p>每個在 /proc/*/maps (出來映像的名子) 對應 struct vm_area_struct 中的一個成員:</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>start end </span></span></dt>
+<dd><p>這個內存區的開始和結束虛擬地址.</p></dd>
+<dt><span class="term"><span>perm </span></span></dt>
+<dd><p>帶有內存區的讀,寫和執行許可的位掩碼. 這個成員描述進程可以對屬於這個區的頁做什麼. 成員的最後一個字符要麼是給"私有"的 p 要麼是給"共享"的 s.</p></dd>
+<dt><span class="term"><span>offset </span></span></dt>
+<dd><p>內存區在它被映射到的文件中的起始位置. 0 偏移意味著內存區開始對應文件的開始.</p></dd>
+<dt><span class="term"><span>major minor </span></span></dt>
+<dd><p>持有已被映射文件的設備的主次編號. 易混淆地, 對於設備映射, 主次編號指的是持有被用戶打開的設備特殊文件的磁盤分區, 不是設備自身.</p></dd>
+<dt><span class="term"><span>inode </span></span></dt>
+<dd><p>被映射文件的 inode 號.</p></dd>
+<dt><span class="term"><span>image </span></span></dt>
+<dd><p>已被映射的文件名((常常在一個可執行映像中).</p></dd>
+</dl></div>
+<div class="sect3" lang="zh-cn">
+<div class="titlepage"><div><div><h4 class="title">
+<a name="Thevm_area_structstructure.sect3"></a>15.1.6.1.&#160;vm_area_struct 結構</h4></div></div></div>
+<p>當一個用戶空間進程調用 mmap 來映射設備內存到它的地址空間, 系統通過一個新 VMA 代表那個映射來響應. 一個支持 mmap 的驅動(並且, 因此, 實現 mmap 方法)需要來幫助那個進程來完成那個 VMA 的初始化. 驅動編寫者應當, 因此, 為支持 mmap 應至少有對 VMA 的最少的理解.</p>
+<p>讓我們看再 struct vm_area_struct 中最重要的成員( 在 &lt;linux/mm.h&gt; 中定義). 這些成員應當被設備驅動在它們的 mmap 實現中使用. 注意內核維護 VMA 的鏈表和樹來優化區查找, 並且 vm_area_struct 的幾個成員被用來維護這個組織. 因此, VMA 不是有一個驅動任意創建的, 否則這個結構破壞了. VMA 的主要成員是下面(注意在這些成員和我們剛看到的 /proc 輸出之間的相似)</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>unsigned long vm_start;</span></span></dt>
+<dd></dd>
+<dt><span class="term"><span>unsigned long vm_end;</span></span></dt>
+<dd><p>被這個 VMA 覆蓋的虛擬地址範圍. 這些成員是在 /proc/*/maps中出現的頭 2 個字段.</p></dd>
+<dt><span class="term"><span>struct file *vm_file;</span></span></dt>
+<dd><p>一個指向和這個區(如果有一個)關聯的 struct file 結構的指針.</p></dd>
+<dt><span class="term"><span>unsigned long vm_pgoff;</span></span></dt>
+<dd><p>文件中區的偏移, 以頁計. 當一個文件和設備被映射, 這是映射在這個區的第一頁的文件位置.</p></dd>
+<dt><span class="term"><span>unsigned long vm_flags;</span></span></dt>
+<dd><p>描述這個區的一套標誌. 對設備驅動編寫者最感興趣的標誌是 VM_IO 和 VM_RESERVUED. VM_IO 標誌一個 VMA 作為內存映射的 I/O 區. 在其他方面, VM_IO 標誌阻止這個區被包含在進程核轉儲中. VM_RESERVED 告知內存管理系統不要試圖交換出這個 VMA; 它應當在大部分設備映射中設置.</p></dd>
+<dt><span class="term"><span>struct vm_operations_struct *vm_ops;</span></span></dt>
+<dd><p>一套函數, 內核可能會調用來在這個內存區上操作. 它的存在指示內存區是一個內核"對像", 像我們已經在全書中使用的 struct file.</p></dd>
+<dt><span class="term"><span>void *vm_private_data;</span></span></dt>
+<dd><p>驅動可以用來存儲它的自身信息的成員.</p></dd>
+</dl></div>
+<p>象 struct vm_area_struct, vm_operations_struct 定義於 &lt;linux/mm.h&gt;; 它包括下面列出的操作. 這些操作是唯一需要來處理進程的內存需要的, 它們以被聲明的順序列出. 本章後面, 一些這些函數被實現.</p>
+<div class="variablelist"><dl>
+<dt><span class="term"><span>void (*open)(struct vm_area_struct *vma);</span></span></dt>
+<dd><p>open 方法被內核調用來允許實現 VMA 的子系統來初始化這個區. 這個方法被調用在任何時候有一個新的引用這個 VMA( 當生成一個新進程, 例如). 一個例外是當這個 VMA 第一次被 mmap 創建時; 在這個情況下, 驅動的 mmap 方法被調用來替代.</p></dd>
+<dt><span class="term"><span>void (*close)(struct vm_area_struct *vma);</span></span></dt>
+<dd><p>當一個區被銷毀, 內核調用它的關閉操作. 注意沒有使用計數關聯到 VMA; 這個區只被使用它的每個進程打開和關閉一次.</p></dd>
+<dt><span class="term"><span>struct page *(*nopage)(struct vm_area_struct *vma, unsigned long address, int *type);</span></span></dt>
+<dd><p>當一個進程試圖存取使用一個有效 VMA 的頁, 但是它當前不在內存中, nopage 方法被調用(如果它被定義)給相關的區. 這個方法返回 struct page 指針給物理頁, 也許在從第 2 級存儲中讀取它之後. 如果 nopage 方法沒有為這個區定義, 一個空頁由內核分配.</p></dd>
+<dt><span class="term"><span>int (*populate)(struct vm_area_struct *vm, unsigned long address, unsigned long len, pgprot_t prot, unsigned long pgoff, int nonblock);</span></span></dt>
+<dd><p>這個方法允許內核"預錯"頁到內存, 在它們被用戶空間存取之前. 對於驅動通常沒有必要來實現這個填充方法.</p></dd>
+</dl></div>
+</div>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="TheProcessMemoryMap.sect2"></a>15.1.7.&#160;進程內存映射</h3></div></div></div>
+<p>內存管理難題的最後部分是進程內存映射結構, 它保持所有其他數據結構在一起. 每個系統中的進程(除了幾個內核空間幫助線程)有一個 struct mm_struct ( 定義在 &lt;linux/sched.h&gt;), 它含有進程的虛擬內存區列表, 頁表, 和各種其他的內存管理管理信息, 包括一個旗標( mmap_sem )和一個自旋鎖( page_table_lock ). 這個結構的指針在任務結構中; 在很少的驅動需要存取它的情況下, 通常的方法是使用 current-&gt;mm. 注意內存關聯結構可在進程之間共享; Linux 線程的實現以這種方式工作, 例如.</p>
+<p>這總結了我們對 Linux 內存管理數據結構的總體. 有了這些, 我們現在可以繼續 mmap 系統調用的實現.</p>
+</div>
+</div>
+<div class="footnotes">
+<br><hr width="100" align="left">
+<div class="footnote"><p><sup>[<a name="ftn.id495351" href="#id495351">47</a>] </sup>許多非-x86體系可以有效工作在沒有這裡描述的內核/用戶空間的劃分, 因此它們可以在 32-位系統使用直到 4-GB 內核地址空間.  但是, 本節描述的限制仍然適用這樣的系統當安裝有多於 4GB 內存時.</p></div>
+<div class="footnote"><p><sup>[<a name="ftn.id495847" href="#id495847">48</a>] </sup>BSS 的名子是來自一個老的彙編操作符的歷史遺物, 意思是"由符號開始的塊". 可執行文件的 BSS 段不存儲在磁盤上, 並且內核映射零頁到 BSS 地址範圍.</p></div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch14s09.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch15s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">14.9.&#160;快速參考&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;15.2.&#160;mmap 設備操作</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch15.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

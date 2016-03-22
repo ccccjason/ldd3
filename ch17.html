@@ -1,0 +1,192 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch17.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:42 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>第&#160;17&#160;章&#160;網絡驅動-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="prev" href="ch16s05.html" title="16.5.&#160;快速參考">
+<link rel="next" href="ch17s02.html" title="17.2.&#160;連接到內核">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">第&#160;17&#160;章&#160;網絡驅動</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch16s05.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">&#160;</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch17s02.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="chapter" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title">
+<a name="NetworkDrivers"></a>第&#160;17&#160;章&#160;網絡驅動</h2></div></div></div>
+<div class="toc">
+<p><b>目錄</b></p>
+<dl>
+<dt><span class="sect1"><a href="ch17.html#HowsnullIsdesigned">17.1. snull 是如何設計的</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch17.html#AssigningIPNumbers">17.1.1. 分配 IP 號</a></span></dt>
+<dt><span class="sect2"><a href="ch17.html#ThePhysicalTransportofPacket">17.1.2. 報文的物理傳送</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch17s02.html">17.2. 連接到內核</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch17s02.html#DeviceRegistration">17.2.1. 設備註冊</a></span></dt>
+<dt><span class="sect2"><a href="ch17s02.html#InitializingEachDevice">17.2.2. 初始化每一個設備</a></span></dt>
+<dt><span class="sect2"><a href="ch17s02.html#ModuleUnloading">17.2.3. 模塊卸載</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch17s03.html">17.3. net_device 結構的詳情</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch17s03.html#GlobalInformation">17.3.1. 全局信息</a></span></dt>
+<dt><span class="sect2"><a href="ch17s03.html#HardwareInformation">17.3.2. 硬件信息</a></span></dt>
+<dt><span class="sect2"><a href="ch17s03.html#InterfaceInformation">17.3.3. 接口信息</a></span></dt>
+<dt><span class="sect2"><a href="ch17s03.html#TheDeviceMethods">17.3.4. 設備方法</a></span></dt>
+<dt><span class="sect2"><a href="ch17s03.html#UtilityFields">17.3.5. 公用成員</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch17s04.html">17.4. 打開與關閉</a></span></dt>
+<dt><span class="sect1"><a href="ch17s05.html">17.5. 報文傳送</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch17s05.html#ControllingTransmissionConcurrency">17.5.1. 控制發送並發</a></span></dt>
+<dt><span class="sect2"><a href="ch17s05.html#TransmissionTimeouts">17.5.2. 傳送超時</a></span></dt>
+<dt><span class="sect2"><a href="ch17s05.html#ScatterGathreIO">17.5.3. 發散/匯聚 I/O</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch17s06.html">17.6. 報文接收</a></span></dt>
+<dt><span class="sect1"><a href="ch17s07.html">17.7. 中斷處理</a></span></dt>
+<dt><span class="sect1"><a href="ch17s08.html">17.8. 接收中斷緩解</a></span></dt>
+<dt><span class="sect1"><a href="ch17s09.html">17.9. 連接狀態的改變</a></span></dt>
+<dt><span class="sect1"><a href="ch17s10.html">17.10. Socket 緩存</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch17s10.html#TheImportFields">17.10.1. 重要成員變量</a></span></dt>
+<dt><span class="sect2"><a href="ch17s10.html#FunctionsActingonSocketBuffers">17.10.2. 作用於 socket 緩存的函數</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch17s11.html">17.11. MAC 地址解析</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch17s11.html#UsingARPwithEthernet">17.11.1. 以太網使用 ARP</a></span></dt>
+<dt><span class="sect2"><a href="ch17s11.html#OverridingARP">17.11.2. 不考慮 ARP</a></span></dt>
+<dt><span class="sect2"><a href="ch17s11.html#NonEthernetHeader">17.11.3. 非以太網頭部</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch17s12.html">17.12. 定制 ioctl 命令</a></span></dt>
+<dt><span class="sect1"><a href="ch17s13.html">17.13. 統計信息</a></span></dt>
+<dt><span class="sect1"><a href="ch17s14.html">17.14. 多播</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch17s14.html#KernelSupportforMulticasting">17.14.1. 多播的內核支持</a></span></dt>
+<dt><span class="sect2"><a href="ch17s14.html#ATypicalImplementation">17.14.2. 典型實現</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch17s15.html">17.15. 幾個其他細節</a></span></dt>
+<dd><dl>
+<dt><span class="sect2"><a href="ch17s15.html#MediaIndependentInterfaceSupport">17.15.1. 獨立於媒介的接口支持</a></span></dt>
+<dt><span class="sect2"><a href="ch17s15.html#EthtoolSupport">17.15.2. ethtool 支持</a></span></dt>
+<dt><span class="sect2"><a href="ch17s15.html#Netpoll">17.15.3. netpoll</a></span></dt>
+</dl></dd>
+<dt><span class="sect1"><a href="ch17s16.html">17.16. 快速參考</a></span></dt>
+</dl>
+</div>
+<p>我們已經討論了字符和塊驅動, 現在準備好轉移到網絡世界裡. 網絡接口是第 3 類標準的 Linux 設備, 本章描述它們如何與內核其他部分交互.</p>
+<p>一個網絡接口的在系統內的角色與一個被加載的塊設備的角色類似. 一個塊設備註冊它的磁盤和工作方法到內核, 隨之通過它的請求函數按需求"發送"和"接收"塊. 類似的, 一個網絡接口必須註冊它自己到特定的內核數據結構中, 以便在與外部世界交換報文時被調用.</p>
+<p>在被加載的磁盤和報文遞送接口之間有幾個重要的區別. 首先, 磁盤作為一個特殊的文件存在於 /dev 目錄下, 然而一個網絡接口沒有這樣的入口點. 正常的文件操作( read, write, 等等 )對於網絡接口沒有意義, 因此不可能適用 Unix 的"一切皆文件"的方法給它們. 從而, 網絡接口存在於它們自己的名子空間裡, 並且對外輸出了一套不同的操作.</p>
+<p>儘管你可能會反駁說, 應用程序在使用 socket 時可以使用 read 和 write 系統調用, 這些系統調用作用於一個軟件對像上, 而它與接口是明顯不同的. 幾百個 socket 可以在同一個物理接口上復用.</p>
+<p>但是兩者最重要的不同在於, 塊驅動的運行只是響應來自內核的請求, 但是網絡驅動從外邊異步地接收報文. 因此, 不同於一個塊驅動被要求向內核發送一個緩存區, 網絡設備要求向內核推送進入的報文. 網絡驅動使用的內核接口為這個不同的操作模式而設計.</p>
+<p>網絡驅動也不得不準備支持很多的管理任務, 例如設置地址, 修改發送參數, 以及維護流量和錯誤統計. 網絡驅動使用的 API 反映了這種需要, 並且因此, 能看出一些與我們之前看到的接口的不同.</p>
+<p>Linux 內核的網絡子系統被設計成是完全獨立於協議的. 這適用於網絡協議( 互聯網協議 [IP], 相對於 IPX, 或者其他協議 )和硬件協議( 以太網, 相對的令牌環, 等等 ). 一個網絡驅動和內核互相作用在同一時間正確處理一個網絡報文; 這允許對驅動巧妙地隱藏了協議的信息, 以及對協議隱藏了物理發送.</p>
+<p>本章描述了網絡接口如何適用於 Linux 內核的其他部分, 並以一個基於內存模塊化網絡接口的形式提供了例子, 它稱做( 你猜一下 ) snull. 為簡化討論, 這個接口使用以太網硬件協議和發送 IP 報文.  你從測驗 snull 中獲得的知識已能夠應用到非 IP 的協議上, 並且編寫一個非以太網驅動只是有極小的與實際網絡協議相關的區別.</p>
+<p>本章不討論 IP 編號方案, 網絡協議, 以及其他通用的網絡概念. 這樣的話題不是( 常常地 )驅動編寫者所關心的, 並且不可能提供一個滿意的網絡技術的概述在不足幾百頁裡面. 建議感興趣的讀者去參考其他的描述網絡方面的書籍.</p>
+<p>在進入網絡設備之前, 提及一個技術方面的注意問題. 網絡世界使用術語 octet 來表示一個 8 個位的組, 它通常是網絡設備和協議能理解的最小單元. 術語 byte 在這個上下文中極少遇到. 為緊跟標準用法, 我們將使用 octet, 在談論網絡設備的時候.</p>
+<p>術語" header "也值得一提. 一個 header 是一組字節(錯了, 是 octet), 要安排到一個報文裡, 當它穿過網絡子系統的各層時. 當一個應用程序通過一個 TCP socket 發送了一個數據塊, 網絡子系統拆開數據, 填充到報文裡, 在報文開始安上一個 TCP header 來描述每個報文在流裡面的位置. 下面的協議層接著在 TCP header 之前安上一個 IP header, 用來路由這個報文到它的目的地. 如果這個報文在類似以太網的介質上移動, 一個以太網 header, 由硬件來解析的, 加在在餘下的前面. 網絡驅動(常常)不需要讓自己去理睬高層的 header, 但是它們經常必須參與硬件級別的 header 的創建.</p>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="HowsnullIsdesigned"></a>17.1.&#160;snull 是如何設計的</h2></div></div></div>
+<p>本節談論產生 snull 網絡接口的設計概念. 儘管這個信息可能看來是邊緣的使用, 不理解它在你運行例子代碼時可能會導致問題.</p>
+<p>首先, 也是最重要的, 設計的決定是例子接口應該保持獨立於真實的硬件, 就像本書使用的大部分例子. 這個限制導致了一些構成環回接口的東西. snull 不是一個環回接口; 但是, 它模擬了與真實的遠端主機間的對話, 以便更好演示編寫一個網絡驅動的任務. Linux 環回驅動實際是非常簡單的; 它可在 drivers/net/lookback.c 找到.</p>
+<p>snull 的另一個特性是它只支持 IP 通訊. 這是接口的內部工作的結果 -- snull 不得不查看裡面並且解析報文來正確模擬一對硬件接口. 實際的接口不依賴於被發送的協議, 並且 snull 的這種限制不影響本章展示的代碼片斷.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="AssigningIPNumbers"></a>17.1.1.&#160;分配 IP 號</h3></div></div></div>
+<p>snull 模塊創建了兩個接口. 這些接口與一個簡單的環回不同, 因為無論你通過其中一個接口發送什麼都環回到另外一個, 而不是它自己. 它看起來好像你有兩個外部連接, 但實際上是你的計算機在回答它自己.</p>
+<p>不幸的是, 這個效果不能僅僅通過 IP 號碼分配來完成, 因為內核不會通過接口 A 發送一個報文給它自己的接口 B, 它會利用環回通道而不是通過 snull. 為了能建立一個通過 snull 接口的通訊, 源和目的地址在實際傳送中需要修改. 換句話說, 通過其中一個接口發送的報文應該被另一個收到, 但是外出報文的接受者不應當被認做是本地主機. 同樣適用於接收到的報文的源地址.</p>
+<p>為獲得這種"隱藏的環回", snull 接口翻轉源地址和目的地址的第 3 個 octet 的最低有效位; 就是說, 它改變了 C 類 IP 編號的網絡編號和主機編號. 網絡方面的效果是發給網絡 A( 連接在 sn0 上, 第一個接口 )的報文作為屬於網絡 B 的報文出現在 sn1 接口.</p>
+<p>為避免處理太多編號, 我們分配符號名子給涉及到的 IP 編號:</p>
+<div class="itemizedlist"><ul type="disc">
+<li><p>snullnet0 是連接到 sn0 接口的網絡. 同樣, snullnet1 是連接到 sn1. 這些網絡的地址應當僅僅在第 3 個 octet 的最低有效位不同. 這些網絡必須有 24 位的子網掩碼.</p></li>
+<li><p>local0 是分配給 sn0 接口的 IP 地址; 它屬於 snullnet0. 陪伴 sn1 的地址是 local1. local0 和 local1 必須在它們的第 3 octet 的最低有效位和第 4 octet 上不同.</p></li>
+<li><p>remote0 是在 snullnet0 的主機, 並且它的第 4 octet 與 local1 的相同. 任何發送給 remote0 的報文到達 local1, 在它的網絡地址被接口代碼改變之後. 主機 remote1 屬於 snullnet1, 它的第 4 octet 與 local0 相同.</p></li>
+</ul></div>
+<p>snull 接口的操作在圖 <a href="ch17.html#ldd3-17-1.fig" title="圖&#160;17.1.&#160;主機如何看它的接口">主機如何看它的接口</a>中描述, 其中每個接口的關聯的主機名印在接口名的旁邊.</p>
+<div class="figure">
+<a name="ldd3-17-1.fig"></a><p class="title"><b>圖&#160;17.1.&#160;主機如何看它的接口</b></p>
+<div><img src="images/snagitldd3/ldd3-17-1.png" alt="主機如何看它的接口"></div>
+</div>
+<p>下面是網絡編號的可能值. 一旦你把這些行放進 /etc/networks, 你可以使用名子來調用你的網絡. 這些值選自保留做私人用途的編號範圍.</p>
+<pre class="screen">
+snullnet0 192.168.0.0
+snullnet1 192.168.1.0
+</pre>
+<p>下面的是一些可能的主機編號, 可放進 /etc/hosts 裡面:</p>
+<pre class="screen">
+192.168.0.1  local0  
+192.168.0.2  remote0  
+192.168.1.2  local1  
+192.168.1.1  remote1  
+</pre>
+<p>這些編號的重要特性是 local0 的主機部分與 remote1 的主機部分相同, local1 的主機部分和 remote0 的主機部分相同. 你可以使用完全不同的編號, 只要保持著這種關係.</p>
+<p>但是要小心, 如果你的計算機以及連接到一個網絡上. 你選擇的編號可能是真實的互聯網或者內聯網的編號, 把它們安排給你的接口會阻止和這些真實的主機間的通訊. 例如, 儘管剛剛展示的這些編號不是可以路由的互聯網編號, 它們也可能被你的私有網絡已經在使用.</p>
+<p>不管你選擇什麼編號, 你可以正確設置這些接口來操作, 通過發出下面的命令:</p>
+<pre class="screen">
+ifconfig sn0 local0 
+ifconfig sn1 local1 
+</pre>
+<p>你可能需要添加網絡掩碼 255.255.255.0 參數, 如果選擇的地址範圍不是 C 類範圍.</p>
+<p>在此, 接口的"遠程"端點能夠到達了. 下面的屏幕拷貝顯示了一個主機如何到達 remote0 和 remote1 的, 通過 snull 接口.</p>
+<pre class="screen">
+morgana% ping -c 2 remote0 
+64 bytes from 192.168.0.99: icmp_seq=0 ttl=64 time=1.6 ms 
+64 bytes from 192.168.0.99: icmp_seq=1 ttl=64 time=0.9 ms 
+2 packets transmitted, 2 packets received, 0% packet loss 
+morgana% ping -c 2 remote1
+64 bytes from 192.168.1.88: icmp_seq=0 ttl=64 time=1.8 ms
+64 bytes from 192.168.1.88: icmp_seq=1 ttl=64 time=0.9 ms
+2 packets transmitted, 2 packets received, 0% packet loss
+</pre>
+<p>注意, 你不能到達屬於這兩個網絡的任何其他主機, 因為報文被你的計算機丟棄了, 在地址被修改和收到報文之後. 例如, 一個發向 192.168.0.32 的報文將離開 sn0 並以 192.168.1.32 的目的地址出現在 sn1, 這並不是這台主機的本地地址.</p>
+</div>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="ThePhysicalTransportofPacket"></a>17.1.2.&#160;報文的物理傳送</h3></div></div></div>
+<p>只考慮數據傳送的話, snull 接口屬於以太網一類的.</p>
+<p>snull 模擬以太網是因為大量的現存網絡 -- 至少一個工作站所連接的網段 -- 是基於以太網技術的, 它可能是 10base-T, 100base-T, 或者 千兆網. 另外, 內核為以太網設備提供了一些通用的接口, 沒有理由不用它. 一個以太網設備的優勢是如此的強以至於 plip 接口( 使用打印機端口的接口 )都聲明自己是一個以太網設備.</p>
+<p>snull 使用以太網設置的最後一個優勢是你可以運行 tcpdump 在接口上來觀察過往的報文. 使用 tcpdump 來觀察接口是得知兩個接口如何工作的有用途徑.</p>
+<p>如同我們之前提到的, snull 只處理 IP 報文. 這個限制來自這樣的事實, snull 監聽報文並且甚至修改它們, 以便使代碼工作. 代碼修改了每個報文的源, 目的和 IP header 的校驗和, 並不檢查它是否實際承載著 IP 信息.</p>
+<p>這種快而髒的數據修改毀壞了非 IP 報文. 如果你想通過 snull 遞交其他協議, 你必須修改模塊的源代碼.</p>
+</div>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch16s05.html">上一頁</a>&#160;</td>
+<td width="20%" align="center">&#160;</td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch17s02.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">16.5.&#160;快速參考&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;17.2.&#160;連接到內核</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch17.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:43 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>

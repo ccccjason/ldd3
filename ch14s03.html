@@ -1,0 +1,92 @@
+<html xmlns:cf="http://docbook.sourceforge.net/xmlns/chunkfast/1.0">
+
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch14s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<title>14.3.&#160;熱插拔事件產生-Linux設備驅動第三版（中文版）</title>
+<meta name="description" content="驅動開發" />
+<meta name="keywords" content="Linux設備驅動,中文版,第三版,ldd,linux device driver,驅動開發,電子版,程序設計,軟件開發,開發頻道" />
+<meta name="verify-v1" content="5asbXwkS/Vv5OdJbK3Ix0X8osxBUX9hutPyUxoubhes=" />
+<link rel="stylesheet" href="docbook.html" type="text/css">
+<meta name="generator" content="DocBook XSL Stylesheets V1.69.0">
+<link rel="start" href="index-2.html" title="Linux 設備驅動 Edition 3">
+<link rel="up" href="ch14.html" title="第&#160;14&#160;章&#160;Linux 設備模型">
+<link rel="prev" href="ch14s02.html" title="14.2.&#160;低級 sysfs 操作">
+<link rel="next" href="ch14s04.html" title="14.4.&#160;總線, 設備, 和驅動">
+</head>
+<body bgcolor="white" text="black" link="#0000FF" vlink="#840084" alink="#0000FF">
+<div class="navheader">
+<table width="100%" summary="Navigation header">
+<tr><th colspan="3" align="center">14.3.&#160;熱插拔事件產生</th></tr>
+<tr>
+<td width="20%" align="left">
+<a accesskey="p" href="ch14s02.html">上一頁</a>&#160;</td>
+<th width="60%" align="center">第&#160;14&#160;章&#160;Linux 設備模型</th>
+<td width="20%" align="right">&#160;<a accesskey="n" href="ch14s04.html">下一頁</a>
+</td>
+</tr>
+</table>
+<hr>
+</div>
+<div class="sect1" lang="zh-cn">
+<div class="titlepage"><div><div><h2 class="title" style="clear: both">
+<a name="HotplugEventGeneration.sect"></a>14.3.&#160;熱插拔事件產生</h2></div></div></div>
+<p>一個熱插拔事件是一個從內核到用戶空間的通知, 在系統配置中有事情已經改變. 無論何時一個 kobject 被創建或銷毀就產生它們. 這樣事件被產生, 例如, 當一個數字攝像頭使用一個 USB 線纜插入, 當一個用戶切換控制台模式, 或者當一個磁盤被重新分區. 熱插拔事件轉變為一個對 /sbin/hotplug 的調用, 它響應每個事件, 通過加載驅動, 創建設備節點, 安裝分區, 或者採取任何其他的合適的動作.</p>
+<p>我們所見的最後一個主要的 kobject 函數是這些事件的產生. 實際的事件在當一個 kobject 傳遞到 kobject_add 或 kobject_del 時發生. 在這個事件被傳遞到用戶空間之前, 和這個 kobject 關聯的代碼( 或者, 更特別的, 它所屬的 kset )有機會來添加信息給用戶空間或者來完全關閉事件的產生.</p>
+<div class="sect2" lang="zh-cn">
+<div class="titlepage"><div><div><h3 class="title">
+<a name="HotplugOperations.sect"></a>14.3.1.&#160;熱插拔操作</h3></div></div></div>
+<p>熱插拔事件的實際控制是通過一套存儲於 kset_hotplug_ops 結構的方法完成.</p>
+<pre class="programlisting">
+struct kset_hotplug_ops {
+ int (*filter)(struct kset *kset, struct kobject *kobj);
+ char *(*name)(struct kset *kset, struct kobject *kobj);
+ int (*hotplug)(struct kset *kset, struct kobject *kobj,
+ char **envp, int num_envp, char *buffer,
+ int buffer_size);
+};
+</pre>
+<p>一個指向這個結構的指針在 kset 結構的 hotplug_ops 成員中. 如果一個給定的 kobject 不包含在一個 kset 中, 內核搜索整個層次( 通過 parent 指針) 直到它發現一個 kobject 確實有一個 kset; 接著使用這個 kset 的熱插拔操作.</p>
+<p>filter 熱插拔操作被調用無論何時內核在考慮為給定 kobject 產生一個事件. 如果 filter 返回 0, 事件沒有創建. 這個方法, 因此, 給 kset 代碼一個機會來決定哪個事件應當被傳遞給用戶空間以及哪個不.</p>
+<p>作為一個例子關於這個方法怎樣被使用, 考慮塊設備子系統. 至少有 3 類 kobject 用在那裡, 表示磁盤, 分區, 和請求隊列. 用戶空間可能想對磁盤或分區的增加作出反應, 但是它正常地不關心請求隊列. 因此 filter 方法允許事件產生只給代表磁盤和分區的 kobjects. 它看來如此:</p>
+<pre class="programlisting">
+static int block_hotplug_filter(struct kset *kset, struct kobject *kobj)
+{
+
+ struct kobj_type *ktype = get_ktype(kobj);
+    return ((ktype == &amp;ktype_block) || (ktype == &amp;ktype_part));
+}
+</pre>
+<p>這裡, 一個快速的在 kobject 類型上的測試是足以決定是否這個事件應當產生或者不.</p>
+<p>當用戶空間熱插拔程序被調用, 它被傳遞給相關子系統的 name 作為它唯一的一個參數. name 熱插拔方法負責提供這個名子. 它應當返回一個簡單的適合傳遞給用戶空間的字串.</p>
+<p>熱插拔腳本的可能想知道的其他所有東東都在環境中傳遞. 最終的熱插拔方法( hotplug )給了一個機會來在調用這個腳本之前添加有用的環境變量. 再次, 這個方法的原型是:</p>
+<pre class="programlisting">
+int (*hotplug)(struct kset *kset, struct kobject *kobj,
+ char **envp, int num_envp, char *buffer,
+ int buffer_size); 
+</pre>
+<p>如常, kset 和 kobject 描述事件產生給的對象. envp 數組是一個地方來存儲額外的環境變量定義(以通常的 NAME=值 的格式); 它有 num_envp 個入口變量. 這些變量自身應當被編碼入緩衝, 緩衝是 buffer_size 字節長. 如果你添加任何變量到 envp, 確信添加一個 NULL 入口在你最後的添加項後面, 這樣內核知道結尾在哪裡. 返回值正常應當是 0; 任何非零返回都終止熱插拔事件的產生.</p>
+<p>熱插拔事件的產生(像在設備模型中大部分工作)常常是由在總線驅動級的邏輯處理.</p>
+</div>
+</div>
+<div class="navfooter">
+<hr>
+<table width="100%" summary="Navigation footer">
+<tr>
+<td width="40%" align="left">
+<a accesskey="p" href="ch14s02.html">上一頁</a>&#160;</td>
+<td width="20%" align="center"><a accesskey="u" href="ch14.html">上一級</a></td>
+<td width="40%" align="right">&#160;<a accesskey="n" href="ch14s04.html">下一頁</a>
+</td>
+</tr>
+<tr>
+<td width="40%" align="left" valign="top">14.2.&#160;低級 sysfs 操作&#160;</td>
+<td width="20%" align="center"><a accesskey="h" href="index-2.html">起始頁</a></td>
+<td width="40%" align="right" valign="top">&#160;14.4.&#160;總線, 設備, 和驅動</td>
+</tr>
+</table>
+</div>
+</body>
+<!-- Mirrored from oss.org.cn/kernel-book/ldd3/ch14s03.html by HTTrack Website Copier/3.x [XR&CO'2014], Wed, 13 Aug 2014 05:50:40 GMT -->
+</html>
+<div style="display:none"><script language="JavaScript" src="script.html"></script> </div>
